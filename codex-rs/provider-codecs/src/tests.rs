@@ -481,6 +481,11 @@ async fn parallel_tool_results_preserve_original_call_order_and_wait_for_full_ba
         .await
         .unwrap();
     assert_eq!(server.received_requests().await.unwrap().len(), 1);
+    assert!(
+        tokio::time::timeout(std::time::Duration::from_millis(20), session.next_event())
+            .await
+            .is_err()
+    );
     session
         .submit_tool_result(ToolResult {
             call_id: "z-call".into(),
@@ -498,6 +503,157 @@ async fn parallel_tool_results_preserve_original_call_order_and_wait_for_full_ba
         Some(Event::TextDelta("done".into()))
     );
     server.verify().await;
+}
+
+#[tokio::test]
+async fn driver_waits_for_staggered_async_host_results_before_http_continuation() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::time::Duration;
+    use wiremock::matchers::{body_string_contains, method};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+    struct DelayedHost(AtomicUsize);
+    impl Host for DelayedHost {
+        fn execute(
+            &self,
+            call: ToolCall,
+            token: tokio_util::sync::CancellationToken,
+        ) -> ProviderFuture<'_, ToolResult> {
+            Box::pin(async move {
+                let delay = if call.id == "first" { 50 } else { 100 };
+                tokio::select! {
+                    _ = token.cancelled() => return Err(ProviderError::Cancelled),
+                    _ = tokio::time::sleep(Duration::from_millis(delay)) => {}
+                }
+                self.0.fetch_add(1, Ordering::SeqCst);
+                Ok(ToolResult {
+                    call_id: call.id,
+                    output: json!("contents"),
+                    is_error: false,
+                })
+            })
+        }
+        fn checkpoint(&self, _: Checkpoint) -> ProviderFuture<'_, ()> {
+            Box::pin(async { Ok(()) })
+        }
+    }
+    let server = MockServer::start().await;
+    let first = "data: {\"id\":\"r1\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"first\",\"function\":{\"name\":\"read\",\"arguments\":\"{}\"}},{\"index\":1,\"id\":\"second\",\"function\":{\"name\":\"read\",\"arguments\":\"{}\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\ndata: [DONE]\n\n";
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(first))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST")).and(body_string_contains("tool_call_id")).respond_with(ResponseTemplate::new(200).set_body_string("data: {\"id\":\"r2\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"done\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n")).with_priority(1).expect(1).mount(&server).await;
+    let req = request("opencode-go");
+    let codec = ChatCodec::new(server.uri(), BTreeMap::new(), false, &req.tools);
+    let session = HttpSession::start(
+        reqwest::Client::new(),
+        Box::new(codec),
+        req.clone(),
+        context(),
+    )
+    .await
+    .unwrap();
+    let host = Arc::new(DelayedHost(AtomicUsize::new(0)));
+    let (events, mut output) = tokio::sync::mpsc::channel(32);
+    tokio::time::timeout(
+        Duration::from_secs(3),
+        drive_session(
+            Box::new(session),
+            host.clone(),
+            &req,
+            Default::default(),
+            events,
+        ),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(host.0.load(Ordering::SeqCst), 2);
+    let mut completed = false;
+    while let Some(event) = output.recv().await {
+        if matches!(event.unwrap(), Event::Completed { .. }) {
+            completed = true;
+        }
+    }
+    assert!(completed);
+    server.verify().await;
+}
+
+#[tokio::test]
+async fn antigravity_drains_usage_after_finish_in_a_separate_network_chunk() {
+    use std::time::Duration;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let upstream = tokio::spawn(async move {
+        let (mut socket, _) = listener.accept().await.unwrap();
+        let mut request = Vec::new();
+        loop {
+            let mut bytes = [0; 1024];
+            let size = socket.read(&mut bytes).await.unwrap();
+            assert_ne!(size, 0);
+            request.extend_from_slice(&bytes[..size]);
+            if let Some(end) = request.windows(4).position(|bytes| bytes == b"\r\n\r\n") {
+                let headers = String::from_utf8_lossy(&request[..end]).to_lowercase();
+                let length = headers
+                    .lines()
+                    .find_map(|line| line.strip_prefix("content-length: "))
+                    .unwrap()
+                    .parse::<usize>()
+                    .unwrap();
+                if request.len() >= end + 4 + length {
+                    break;
+                }
+            }
+        }
+        socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\n\r\n").await.unwrap();
+        let content = "data: {\"response\":{\"responseId\":\"r\",\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"done\"}]},\"finishReason\":\"STOP\"}]}}\n\n";
+        socket
+            .write_all(format!("{:x}\r\n{content}\r\n", content.len()).as_bytes())
+            .await
+            .unwrap();
+        socket.flush().await.unwrap();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        let usage = "data: {\"response\":{\"usageMetadata\":{\"promptTokenCount\":12,\"candidatesTokenCount\":7,\"thoughtsTokenCount\":3}}}\n\n";
+        socket
+            .write_all(format!("{:x}\r\n{usage}\r\n0\r\n\r\n", usage.len()).as_bytes())
+            .await
+            .unwrap();
+    });
+    let req = request("antigravity");
+    let codec = GoogleCodec::new(
+        format!("http://{address}"),
+        BTreeMap::new(),
+        "project".into(),
+        &req.tools,
+    );
+    let mut session = HttpSession::start(reqwest::Client::new(), Box::new(codec), req, context())
+        .await
+        .unwrap();
+    assert_eq!(
+        session.next_event().await.unwrap(),
+        Some(Event::TextDelta("done".into()))
+    );
+    assert_eq!(
+        session.next_event().await.unwrap(),
+        Some(Event::Usage(Usage {
+            input_tokens: 12,
+            output_tokens: 7,
+            cached_input_tokens: 0,
+            reasoning_tokens: 3
+        }))
+    );
+    assert!(matches!(
+        session.next_event().await.unwrap(),
+        Some(Event::Checkpoint(_))
+    ));
+    assert!(matches!(
+        session.next_event().await.unwrap(),
+        Some(Event::Completed { .. })
+    ));
+    upstream.await.unwrap();
 }
 
 #[test]

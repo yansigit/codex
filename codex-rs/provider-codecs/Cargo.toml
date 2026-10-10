@@ -16,4 +16,4 @@ tokio-util = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }
 [dev-dependencies]
 wiremock = { workspace = true }
-tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "io-util"] }

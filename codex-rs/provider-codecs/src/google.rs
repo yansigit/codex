@@ -341,6 +341,9 @@ impl WireCodec for GoogleCodec {
     fn finished(&self) -> bool {
         self.done
     }
+    fn terminal_grace(&self) -> std::time::Duration {
+        std::time::Duration::from_millis(500)
+    }
     fn response_id(&self) -> String {
         self.id.clone()
     }

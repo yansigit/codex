@@ -8,6 +8,7 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 use std::collections::VecDeque;
 use std::time::Duration;
+use tokio::time::Instant;
 
 pub struct WireRequest {
     pub url: String,
@@ -21,6 +22,10 @@ pub trait WireCodec: Send {
     fn reset(&mut self);
     fn frame(&mut self, event: &str, data: &str) -> Result<Vec<Event>>;
     fn finished(&self) -> bool;
+    /// Some upstreams send usage after the generation's terminal content frame.
+    fn terminal_grace(&self) -> Duration {
+        Duration::ZERO
+    }
     fn assistant(&self, namespace: &Namespace) -> Result<Message>;
     fn response_id(&self) -> String;
 }
@@ -37,6 +42,7 @@ pub struct HttpSession {
     completed: bool,
     pending_order: Vec<String>,
     round_bytes: usize,
+    terminal_deadline: Option<Instant>,
 }
 impl HttpSession {
     pub async fn start(
@@ -66,6 +72,7 @@ impl HttpSession {
             completed: false,
             pending_order: Vec::new(),
             round_bytes: 0,
+            terminal_deadline: None,
         };
         session.send().await?;
         Ok(session)
@@ -99,6 +106,7 @@ impl HttpSession {
         }
         self.codec.reset();
         self.round_bytes = 0;
+        self.terminal_deadline = None;
         self.decoder = SseDecoder::default();
         self.response = Some(response);
         Ok(())
@@ -145,11 +153,29 @@ impl HttpSession {
                 return Ok(None);
             }
             let Some(response) = self.response.as_mut() else {
-                return Err(protocol("provider awaits outstanding tool results"));
+                if self.pending.is_empty() {
+                    return Err(protocol("provider has no response or outstanding tools"));
+                }
+                // The driver polls this future alongside asynchronous host work.
+                // It drops this borrow when a result is ready, then submits it.
+                self.context.cancellation.cancelled().await;
+                return Err(ProviderError::Cancelled);
             };
+            let terminal_deadline = self.terminal_deadline;
             let chunk = tokio::select! {
                 biased;
                 _ = self.context.cancellation.cancelled() => { self.response = None; return Err(ProviderError::Cancelled); },
+                _ = async {
+                    if let Some(deadline) = terminal_deadline {
+                        tokio::time::sleep_until(deadline).await;
+                    } else {
+                        std::future::pending::<()>().await;
+                    }
+                } => {
+                    self.decoder.finish()?;
+                    self.finish_round()?;
+                    continue;
+                },
                 chunk = tokio::time::timeout(Duration::from_secs(90), response.chunk()) => chunk.map_err(|_| ProviderError::Transport("provider stream idle timeout".into()))?.map_err(|_| ProviderError::Transport("provider stream failed".into()))?,
             };
             match chunk {
@@ -162,12 +188,21 @@ impl HttpSession {
                         self.events.extend(self.codec.frame(&event, &data)?);
                     }
                     if self.codec.finished() {
-                        self.finish_round()?;
+                        if self.codec.terminal_grace().is_zero() {
+                            self.finish_round()?;
+                        } else if self.terminal_deadline.is_none() {
+                            self.terminal_deadline =
+                                Some(Instant::now() + self.codec.terminal_grace());
+                        }
                     }
                 }
                 None => {
                     self.decoder.finish()?;
-                    return Err(protocol("provider stream ended without a terminal event"));
+                    if self.codec.finished() {
+                        self.finish_round()?;
+                    } else {
+                        return Err(protocol("provider stream ended without a terminal event"));
+                    }
                 }
             }
         }

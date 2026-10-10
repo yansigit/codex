@@ -179,32 +179,33 @@ impl WireCodec for MessagesCodec {
             body["tool_choice"] =
                 json!({"type":"auto","disable_parallel_tool_use":!request.parallel_tool_calls});
         }
-        if let Some(effort) = &request.reasoning_effort {
-            if effort != "none" && effort != "off" {
-                if request.metadata["anthropic_adaptive_thinking"] == true {
-                    body["thinking"] = json!({"type":"adaptive"});
-                    body["output_config"] = json!({"effort":effort});
-                } else {
-                    let budget = match effort.as_str() {
-                        "low" => 1024,
-                        "medium" => 4096,
-                        "high" => 8192,
-                        "xhigh" | "max" => 16384,
-                        _ => {
-                            return Err(ProviderError::Unsupported(
-                                "Messages reasoning effort".into(),
-                            ));
-                        }
-                    };
-                    let max = request.max_output_tokens.unwrap_or(32768);
-                    if max <= budget {
-                        return Err(protocol(
-                            "thinking budget must be smaller than max output tokens",
+        if let Some(effort) = &request.reasoning_effort
+            && effort != "none"
+            && effort != "off"
+        {
+            if request.metadata["anthropic_adaptive_thinking"] == true {
+                body["thinking"] = json!({"type":"adaptive"});
+                body["output_config"] = json!({"effort":effort});
+            } else {
+                let budget = match effort.as_str() {
+                    "low" => 1024,
+                    "medium" => 4096,
+                    "high" => 8192,
+                    "xhigh" | "max" => 16384,
+                    _ => {
+                        return Err(ProviderError::Unsupported(
+                            "Messages reasoning effort".into(),
                         ));
                     }
-                    body["max_tokens"] = json!(max);
-                    body["thinking"] = json!({"type":"enabled","budget_tokens":budget});
+                };
+                let max = request.max_output_tokens.unwrap_or(32768);
+                if max <= budget {
+                    return Err(protocol(
+                        "thinking budget must be smaller than max output tokens",
+                    ));
                 }
+                body["max_tokens"] = json!(max);
+                body["thinking"] = json!({"type":"enabled","budget_tokens":budget});
             }
         }
         if let Some(schema) = &request.output_schema {
