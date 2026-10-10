@@ -1,17 +1,28 @@
 //! Codex-facing native backend. Provider transport and authentication live in the registry.
 use codex_model_provider_info::ModelProviderInfo;
-use codex_models_manager::manager::{
-    ModelsEndpointClient, ModelsEndpointFuture, ModelsEndpointResponse, OpenAiModelsManager,
-    SharedModelsManager, StaticModelsManager,
-};
+use codex_models_manager::manager::ModelsEndpointClient;
+use codex_models_manager::manager::ModelsEndpointFuture;
+use codex_models_manager::manager::ModelsEndpointResponse;
+use codex_models_manager::manager::OpenAiModelsManager;
+use codex_models_manager::manager::SharedModelsManager;
+use codex_models_manager::manager::StaticModelsManager;
 use codex_protocol::error::CodexErr;
 use codex_protocol::openai_models::ModelsResponse;
-use codex_provider_api::{Context, Credentials, Provider, ProviderError, ProviderFuture};
-use codex_provider_auth::{AccountInfo, AuthStore, TokenRecord};
+use codex_provider_api::Context;
+use codex_provider_api::Credentials;
+use codex_provider_api::Provider;
+use codex_provider_api::ProviderError;
+use codex_provider_api::ProviderFuture;
+use codex_provider_auth::AccountInfo;
+use codex_provider_auth::AuthStore;
+use codex_provider_auth::TokenRecord;
+use codex_provider_registry::Descriptor;
 pub use codex_provider_registry::NativeLogin;
-use codex_provider_registry::{Descriptor, TransportOptions, registry};
+use codex_provider_registry::TransportOptions;
+use codex_provider_registry::registry;
 use std::path::PathBuf;
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
+use std::sync::OnceLock;
 use tokio_util::sync::CancellationToken;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -328,7 +339,8 @@ impl ModelsEndpointClient for NativeBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use codex_provider_api::{Checkpoint, Namespace};
+    use codex_provider_api::Checkpoint;
+    use codex_provider_api::Namespace;
     use codex_provider_auth::SessionStore;
     use serde_json::json;
     #[tokio::test]

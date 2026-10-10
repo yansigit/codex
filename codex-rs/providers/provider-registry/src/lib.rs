@@ -2,13 +2,20 @@
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
+use codex_provider_api::ProviderError;
 pub use codex_provider_api::RecoveryPolicy;
-use codex_provider_api::{ProviderError, Result};
+use codex_provider_api::Result;
 
 #[cfg(feature = "runtime")]
 mod runtime;
 #[cfg(feature = "runtime")]
-pub use runtime::{AuthDriver, NativeLogin, TransportFactory, TransportOptions};
+pub use runtime::AuthDriver;
+#[cfg(feature = "runtime")]
+pub use runtime::NativeLogin;
+#[cfg(feature = "runtime")]
+pub use runtime::TransportFactory;
+#[cfg(feature = "runtime")]
+pub use runtime::TransportOptions;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Authentication {
@@ -216,5 +223,21 @@ mod tests {
             );
         }
         assert!(registry().get("unknown").is_none());
+    }
+    #[cfg(feature = "runtime")]
+    #[test]
+    fn registered_disabled_transports_report_not_compiled() {
+        for descriptor in descriptors().filter(|descriptor| descriptor.factory.is_none()) {
+            let error = match descriptor.provider(TransportOptions {
+                base_url: None,
+                state_home: None,
+            }) {
+                Ok(_) => panic!("disabled provider unexpectedly constructed a transport"),
+                Err(error) => error,
+            };
+            assert!(error.to_string().contains("was not compiled"));
+            assert!(get(descriptor.id).is_some());
+        }
+        assert!(get("unknown-native-provider").is_none());
     }
 }
