@@ -463,6 +463,42 @@ fn checkpoint_restores_signed_empty_blocks_when_host_omits_public_empty_fragment
     assert_eq!(req.messages[1], assistant);
 }
 #[test]
+fn checkpoint_accepts_parallel_tool_completion_order_but_rejects_changed_results() {
+    let mut req = request("claude");
+    let results = vec![
+        Content::ToolResult(ToolResult {
+            call_id: "z".into(),
+            output: json!("first"),
+            is_error: false,
+        }),
+        Content::ToolResult(ToolResult {
+            call_id: "a".into(),
+            output: json!("second"),
+            is_error: false,
+        }),
+    ];
+    req.messages.push(Message {
+        role: Role::Tool,
+        content: results,
+    });
+    let assistant = Message {
+        role: Role::Assistant,
+        content: vec![Content::Text {
+            text: "done".into(),
+        }],
+    };
+    req.checkpoint = Some(crate::replay::checkpoint(&req, &assistant).unwrap());
+    req.messages[1].content.reverse();
+    req.messages.push(assistant.clone());
+    let mut changed = req.clone();
+    restore_checkpoint(&mut req).unwrap();
+    assert_eq!(req.messages[2], assistant);
+    if let Content::ToolResult(result) = &mut changed.messages[1].content[0] {
+        result.output = json!("changed");
+    }
+    assert!(restore_checkpoint(&mut changed).is_err());
+}
+#[test]
 fn chat_assistant_history_uses_plain_text_and_deepseek_thinking_enablement() {
     let mut req = request("opencode-go");
     req.reasoning_effort = Some("high".into());
