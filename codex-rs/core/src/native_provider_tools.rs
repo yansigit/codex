@@ -282,7 +282,7 @@ pub(super) fn result(name: &str, args: &Value, structured: &Value) -> Result<Val
             }
             let content = decode_read(lines.next().unwrap_or_default())?;
             Ok(
-                json!({"truncated":content.len() as u64 < size,"content":content,"total_lines":count,"file_size":size,"range_applied":true}),
+                json!({"truncated":(content.len() as u64) < size,"content":content,"total_lines":count,"file_size":size,"range_applied":true}),
             )
         }
         "cursor_delete_file" => Ok(json!({})),
@@ -408,6 +408,23 @@ mod tests {
     use base64::Engine;
     use base64::engine::general_purpose::STANDARD;
     use serde_json::{Value, json};
+    use std::process::Command;
+
+    fn run_generated(name: &str, args: &Value, cwd: &std::path::Path) -> Value {
+        let generated = command(name, args).expect("operation command generation");
+        let output = Command::new("/bin/bash")
+            .arg("-c")
+            .arg(generated["cmd"].as_str().expect("generated shell command"))
+            .current_dir(cwd)
+            .output()
+            .expect("run known operation against temp fixture");
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        json!({"exit_code":output.status.code(),"output":String::from_utf8(output.stdout).expect("command output is UTF-8")})
+    }
 
     #[test]
     fn command_shell_quotes_arguments_and_validates_options() {
@@ -484,7 +501,7 @@ mod tests {
         let structured = json!({"output":format!("{MARKER}grep\n{records}\n")});
         let parsed = result(
             "cursor_grep",
-            &json!({"offset":1,"head_limit":1}),
+            &json!({"offset":1,"head_limit":1,"sort":"none"}),
             &structured,
         )
         .unwrap();
@@ -542,5 +559,85 @@ mod tests {
         let structured =
             json!({"output":format!("{MARKER}1 65536\n{}\n", STANDARD.encode(malformed_at_cap))});
         assert!(result("cursor_read_file", &json!({}), &structured).is_err());
+    }
+
+    #[test]
+    fn generated_read_and_write_commands_work_on_quoted_temp_paths() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let path = temp.path().join("file'quoted.txt");
+        std::fs::write(&path, b"one\nlast").expect("fixture");
+        let args = json!({"path":path.to_string_lossy(), "offset":1, "limit":10});
+        let structured = run_generated("cursor_read_file", &args, temp.path());
+        let parsed = result("cursor_read_file", &args, &structured).expect("read result");
+        assert_eq!(parsed["content"], "one\nlast");
+        assert_eq!(parsed["total_lines"], 2);
+        assert_eq!(parsed["file_size"], 8);
+
+        let content = "written\nlast without newline";
+        let write_args = json!({"path":path.to_string_lossy(), "content":content});
+        let structured = run_generated("cursor_write_file", &write_args, temp.path());
+        let parsed = result("cursor_write_file", &write_args, &structured).expect("write result");
+        assert_eq!(
+            std::fs::read_to_string(path).expect("written fixture"),
+            content
+        );
+        assert_eq!(parsed["lines_created"], 2);
+    }
+
+    #[test]
+    fn generated_read_handles_utf8_cap_and_rejects_binary_fixture() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let path = temp.path().join("unicode.txt");
+        let mut bytes = vec![b'a'; 65_535];
+        bytes.extend_from_slice("é".as_bytes());
+        std::fs::write(&path, &bytes).expect("unicode fixture");
+        let args = json!({"path":path.to_string_lossy()});
+        let structured = run_generated("cursor_read_file", &args, temp.path());
+        let parsed = result("cursor_read_file", &args, &structured).expect("bounded utf8 read");
+        assert_eq!(parsed["content"].as_str().unwrap().len(), 65_535);
+        assert_eq!(parsed["truncated"], true);
+
+        std::fs::write(&path, [b'a', 0xff, b'b']).expect("binary fixture");
+        let structured = run_generated("cursor_read_file", &args, temp.path());
+        assert!(result("cursor_read_file", &args, &structured).is_err());
+    }
+
+    #[test]
+    fn generated_grep_and_ls_apply_options_on_temp_fixtures() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let source = temp.path().join("one.rs");
+        std::fs::write(&source, "before\nNeedle\nafter\n").expect("source fixture");
+        std::fs::write(temp.path().join("ignored.txt"), "needle\n").expect("other fixture");
+        let grep_args = json!({
+            "pattern":"needle", "path":temp.path().to_string_lossy(), "glob":"*.rs",
+            "context_before":1, "context_after":1, "case_insensitive":true, "type":"rust",
+            "head_limit":10, "multiline":false, "sort":"path", "output_mode":"content"
+        });
+        let structured = run_generated("cursor_grep", &grep_args, temp.path());
+        let parsed = result("cursor_grep", &grep_args, &structured).expect("grep result");
+        assert_eq!(
+            parsed["matches"][0]["file"],
+            source.to_string_lossy().as_ref()
+        );
+        let rows = parsed["matches"][0]["lines"].as_array().unwrap();
+        assert_eq!(rows.len(), 3);
+        assert_eq!(rows[1]["is_context_line"], false);
+
+        let count_args = json!({"pattern":"needle", "path":temp.path().to_string_lossy(), "glob":"*.rs", "context":1, "case_insensitive":true, "type":"rust", "output_mode":"count"});
+        let structured = run_generated("cursor_grep", &count_args, temp.path());
+        let parsed = result("cursor_grep", &count_args, &structured).expect("count result");
+        assert_eq!(parsed["counts"][0]["count"], 1);
+
+        std::fs::create_dir(temp.path().join("child")).expect("child directory");
+        let ls_args = json!({"path":temp.path().to_string_lossy(), "ignore":["ignored.txt"]});
+        let structured = run_generated("cursor_ls", &ls_args, temp.path());
+        let parsed = result("cursor_ls", &ls_args, &structured).expect("ls result");
+        assert!(
+            !parsed["files"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("ignored.txt"))
+        );
+        assert!(parsed["directories"][0].as_str().unwrap().starts_with('/'));
     }
 }
