@@ -277,3 +277,108 @@ fn interrupted_text_rebuild_policy_does_not_depend_on_provider_id() {
     super::validate_lineage(&mut request, api::RecoveryPolicy::RebuildFromHistory).unwrap();
     assert!(request.checkpoint.is_none());
 }
+
+async fn channel_fixture(
+    native: bool,
+) -> (
+    tempfile::TempDir,
+    super::ChannelHost,
+    tokio::sync::mpsc::Receiver<super::HostCall>,
+) {
+    let home = tempfile::tempdir().unwrap();
+    let namespace = bound_request().namespace;
+    let store = codex_provider_auth::SessionStore::new(home.path(), namespace.clone());
+    let cancellation = tokio_util::sync::CancellationToken::new();
+    let execution = Arc::new(store.begin_execution("turn", &cancellation).await.unwrap());
+    let (calls, receive) = tokio::sync::mpsc::channel(1);
+    let host = super::ChannelHost {
+        store,
+        calls,
+        cancellation,
+        poll_tool: None,
+        native_tools: if native {
+            ["fixture".into()].into_iter().collect()
+        } else {
+            Default::default()
+        },
+        operations: Some(Arc::new(FixtureOperations)),
+        checkpoint: Arc::new(tokio::sync::Mutex::new(super::TurnCheckpoint {
+            namespace,
+            latest: None,
+            previous: None,
+            tools_started: false,
+        })),
+        execution,
+    };
+    (home, host, receive)
+}
+
+#[tokio::test]
+async fn completion_metadata_cannot_replace_standard_tool_output_and_replay() {
+    use api::Host;
+    let (_home, host, mut receive) = channel_fixture(false).await;
+    let host = Arc::new(host);
+    let call = api::ToolCall {
+        id: "one".into(),
+        name: "fixture".into(),
+        arguments: json!({}),
+    };
+    let executing_host = host.clone();
+    let executing_call = call.clone();
+    let executing = tokio::spawn(async move {
+        executing_host
+            .execute(executing_call, tokio_util::sync::CancellationToken::new())
+            .await
+    });
+    let dispatched = receive.recv().await.unwrap();
+    let output = json!({"codex_native_history":"user field", "codex_native_structured":{"output":"user field"}});
+    dispatched
+        .reply
+        .send(api::HostCompletion {
+            call_id: dispatched.call.id,
+            output: output.clone(),
+            structured: Some(json!({"output":"private execution metadata"})),
+            disposition: api::CompletionDisposition::Failure,
+        })
+        .unwrap();
+    let first = executing.await.unwrap().unwrap();
+    assert_eq!(first.output, output);
+    assert!(first.is_error);
+    let replay = host
+        .execute(call, tokio_util::sync::CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(replay, first);
+    assert!(receive.try_recv().is_err());
+}
+
+#[tokio::test]
+async fn native_denial_uses_explicit_disposition_and_structured_rejection() {
+    use api::Host;
+    let (_home, host, mut receive) = channel_fixture(true).await;
+    let executing = tokio::spawn(async move {
+        host.execute(
+            api::ToolCall {
+                id: "one".into(),
+                name: "fixture".into(),
+                arguments: json!({}),
+            },
+            tokio_util::sync::CancellationToken::new(),
+        )
+        .await
+    });
+    let dispatched = receive.recv().await.unwrap();
+    let denial = json!({"rejected":true,"reason":"approval declined"});
+    dispatched
+        .reply
+        .send(api::HostCompletion {
+            call_id: dispatched.call.id,
+            output: json!("recorded denial"),
+            structured: Some(denial.clone()),
+            disposition: api::CompletionDisposition::Denied,
+        })
+        .unwrap();
+    let result = executing.await.unwrap().unwrap();
+    assert!(result.is_error);
+    assert_eq!(result.output, denial);
+}

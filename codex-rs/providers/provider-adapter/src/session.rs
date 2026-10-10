@@ -308,21 +308,30 @@ fn message(id: &str, text: String, thinking: bool) -> ResponseItem {
     }
 }
 
-async fn emit(tx: &mpsc::Sender<Result<ResponseEvent>>, event: ResponseEvent) -> Result<()> {
-    tx.send(Ok(event)).await.map_err(|_| CodexErr::TurnAborted)
+async fn emit(
+    tx: &mpsc::Sender<Result<ResponseEvent>>,
+    event: ResponseEvent,
+    cancellation: &CancellationToken,
+) -> Result<()> {
+    tokio::select! {
+        biased;
+        _ = cancellation.cancelled() => Err(CodexErr::TurnAborted),
+        sent = tx.send(Ok(event)) => sent.map_err(|_| CodexErr::TurnAborted),
+    }
 }
 
 async fn finish_item(
     tx: &mpsc::Sender<Result<ResponseEvent>>,
     active: &mut Option<(String, String, bool)>,
     history: &mut Vec<api::Message>,
+    cancellation: &CancellationToken,
 ) -> Result<()> {
     if let Some((id, text, thinking)) = active.take() {
         let item = message(&id, text, thinking);
         for entry in messages(std::slice::from_ref(&item))? {
             push(history, entry.role, entry.content);
         }
-        emit(tx, ResponseEvent::OutputItemDone(item)).await?;
+        emit(tx, ResponseEvent::OutputItemDone(item), cancellation).await?;
     }
     Ok(())
 }
@@ -451,7 +460,7 @@ pub async fn stream(
             let mut counter = 0u64;
             let response_id = uuid::Uuid::new_v4();
             let mut usage = None;
-            emit(&tx, ResponseEvent::Created { response_id: None }).await?;
+            emit(&tx, ResponseEvent::Created { response_id: None }, &cancellation).await?;
             loop {
                 tokio::select! {
                     biased;
@@ -467,30 +476,30 @@ pub async fn stream(
                             event @ (api::Event::TextDelta(_) | api::Event::ThinkingDelta(_)) => {
                                 let thinking = matches!(event, api::Event::ThinkingDelta(_));
                                 let text = match event { api::Event::TextDelta(text) | api::Event::ThinkingDelta(text) => text, _ => unreachable!() };
-                                if active.as_ref().is_some_and(|(_, _, kind)| *kind != thinking) { finish_item(&tx, &mut active, &mut history).await?; }
+                                if active.as_ref().is_some_and(|(_, _, kind)| *kind != thinking) { finish_item(&tx, &mut active, &mut history, &cancellation).await?; }
                                 if active.is_none() {
                                     counter += 1;
                                     let id = format!("native-{response_id}-{counter}");
-                                    emit(&tx, ResponseEvent::OutputItemAdded(message(&id, String::new(), thinking))).await?;
+                                    emit(&tx, ResponseEvent::OutputItemAdded(message(&id, String::new(), thinking)), &cancellation).await?;
                                     active = Some((id, String::new(), thinking));
                                 }
                                 active.as_mut().ok_or_else(|| error("native message state missing"))?.1.push_str(&text);
-                                emit(&tx, if thinking { ResponseEvent::ReasoningSummaryDelta { delta: text, summary_index: 0 } } else { ResponseEvent::OutputTextDelta(text) }).await?;
+                                emit(&tx, if thinking { ResponseEvent::ReasoningSummaryDelta { delta: text, summary_index: 0 } } else { ResponseEvent::OutputTextDelta(text) }, &cancellation).await?;
                             }
-                            api::Event::ToolCall(_) => { finish_item(&tx, &mut active, &mut history).await?; }
+                            api::Event::ToolCall(_) => { finish_item(&tx, &mut active, &mut history, &cancellation).await?; }
                             api::Event::Checkpoint(_) => {}
                             api::Event::Usage(value) => { usage = Some(TokenUsage { input_tokens: value.input_tokens.min(i64::MAX as u64) as i64, cached_input_tokens: value.cached_input_tokens.min(i64::MAX as u64) as i64, output_tokens: value.output_tokens.min(i64::MAX as u64) as i64, reasoning_output_tokens: value.reasoning_tokens.min(i64::MAX as u64) as i64, total_tokens: value.input_tokens.saturating_add(value.output_tokens).min(i64::MAX as u64) as i64, ..TokenUsage::default() }); }
                             api::Event::Completed { id } => {
-                                finish_item(&tx, &mut active, &mut history).await?;
+                                finish_item(&tx, &mut active, &mut history, &cancellation).await?;
                                 checkpoint_state.lock().await.complete(&final_store, &execution, &system, &history, &cancellation).await.map_err(error)?;
-                                emit(&tx, ResponseEvent::Completed { response_id: id, token_usage: usage, usage_metadata: None, end_turn: Some(true) }).await?;
+                                emit(&tx, ResponseEvent::Completed { response_id: id, token_usage: usage, usage_metadata: None, end_turn: Some(true) }, &cancellation).await?;
                                 return Ok(());
                             }
                         }
                     }
                     call = host_calls.recv(), if !host_calls.is_closed() => {
                         if let Some(call) = call {
-                            finish_item(&tx, &mut active, &mut history).await?;
+                            finish_item(&tx, &mut active, &mut history, &cancellation).await?;
                             let id = call.call.id.clone();
                             let item = match call_item(call.call, &targets, operations.as_deref()) {
                                 Ok(item) => item,
@@ -501,14 +510,18 @@ pub async fn stream(
                             };
                             for entry in messages(std::slice::from_ref(&item))? { push(&mut history, entry.role, entry.content); }
                             replies.insert(id, call.reply);
-                            emit(&tx, ResponseEvent::OutputItemDone(item)).await?;
+                            emit(&tx, ResponseEvent::OutputItemDone(item), &cancellation).await?;
                         }
                     }
                 }
             }
         }.await;
         if let Err(error) = result {
-            let _ = tx.send(Err(error)).await;
+            tokio::select! {
+                biased;
+                _ = cancellation.cancelled() => {},
+                _ = tx.send(Err(error)) => {},
+            }
         }
         cancellation.cancel();
     });
@@ -529,6 +542,52 @@ mod tests {
 
     fn item(value: Value) -> ResponseItem {
         serde_json::from_value(value).expect("valid response item")
+    }
+
+    #[tokio::test]
+    async fn cancellation_interrupts_a_full_host_event_channel() {
+        let (events, _receive) = tokio::sync::mpsc::channel(1);
+        events
+            .send(Ok(ResponseEvent::Created { response_id: None }))
+            .await
+            .unwrap();
+        let cancellation = tokio_util::sync::CancellationToken::new();
+        let cancelled = cancellation.clone();
+        let emitting = tokio::spawn(async move {
+            super::emit(
+                &events,
+                ResponseEvent::OutputTextDelta("blocked".into()),
+                &cancelled,
+            )
+            .await
+        });
+        tokio::task::yield_now().await;
+        cancellation.cancel();
+        let error = tokio::time::timeout(std::time::Duration::from_secs(2), emitting)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            codex_protocol::error::CodexErr::TurnAborted
+        ));
+    }
+
+    #[test]
+    fn moving_stream_parts_transfers_cancellation_ownership() {
+        let cancellation = tokio_util::sync::CancellationToken::new();
+        let (results, _) = tokio::sync::mpsc::channel(1);
+        let (_, events) = tokio::sync::mpsc::channel(1);
+        let stream = super::SessionStream {
+            results,
+            events,
+            cancellation: cancellation.clone(),
+        };
+        let (_, _, owned) = stream.into_parts();
+        assert!(!cancellation.is_cancelled());
+        owned.cancel();
+        assert!(cancellation.is_cancelled());
     }
 
     #[test]
@@ -685,12 +744,13 @@ mod tests {
     }
 
     struct MockBackend {
+        id: &'static str,
         cancelled: Arc<std::sync::atomic::AtomicBool>,
         results: Arc<std::sync::Mutex<Vec<api::ToolResult>>>,
     }
     impl api::Provider for MockBackend {
         fn id(&self) -> &'static str {
-            "claude"
+            self.id
         }
         fn models(&self, _: api::Context) -> api::ProviderFuture<'_, Vec<api::Model>> {
             Box::pin(async { Ok(vec![]) })
@@ -701,6 +761,7 @@ mod tests {
             _: api::Context,
         ) -> api::ProviderFuture<'_, Box<dyn api::ProviderSession>> {
             Box::pin(async move {
+                assert_eq!(request.namespace.provider, self.id);
                 assert_eq!(request.tools[0].name, "lookup");
                 let session = MockSession {
                     events: std::collections::VecDeque::from([
@@ -752,6 +813,7 @@ mod tests {
 
     fn mock_native(home: &std::path::Path) -> (Arc<NativeBackend>, Arc<MockBackend>, Prompt) {
         let provider = Arc::new(MockBackend {
+            id: "claude",
             cancelled: Arc::default(),
             results: Arc::default(),
         });
@@ -771,6 +833,102 @@ mod tests {
             ..Prompt::default()
         };
         (backend, provider, prompt)
+    }
+
+    fn fifth_factory(
+        _: codex_provider_registry::TransportOptions<'_>,
+    ) -> api::Result<Arc<dyn api::Provider>> {
+        Ok(Arc::new(MockBackend {
+            id: "fixture-fifth",
+            cancelled: Arc::default(),
+            results: Arc::default(),
+        }))
+    }
+
+    static FIFTH: codex_provider_registry::Descriptor = codex_provider_registry::Descriptor {
+        id: "fixture-fifth",
+        display_name: "Fifth fixture provider",
+        env_key: None,
+        auxiliary_model: "fixture-model",
+        legacy_wire_aliases: &[],
+        authentication: codex_provider_registry::Authentication::ApiKey,
+        capabilities: codex_provider_registry::Capabilities {
+            image_generation: false,
+            web_search: false,
+            external_web_access: false,
+        },
+        recovery_policy: api::RecoveryPolicy::RestorePrevious,
+        native_operations: false,
+        factory: Some(fifth_factory),
+        auth_driver: Some(&codex_provider_registry::AuthDriver::ApiKey),
+    };
+
+    #[tokio::test]
+    async fn registered_fifth_provider_drives_host_tools_through_the_generic_adapter() {
+        let home = tempfile::tempdir().unwrap();
+        let (_, _, prompt) = mock_native(home.path());
+        let mut registry = codex_provider_registry::Registry::new();
+        registry.register(&FIFTH).unwrap();
+        let descriptor = registry.get("fixture-fifth").unwrap();
+        let mut info = codex_model_provider_info::built_in_model_providers(None)
+            .remove("claude")
+            .unwrap();
+        info.wire_api = codex_model_provider_info::WireApi::Native;
+        info.native_provider = Some(descriptor.id.into());
+        info.experimental_bearer_token = Some("fixture-token".into());
+        let backend = Arc::new(NativeBackend::with_descriptor(
+            info,
+            Some(home.path().to_owned()),
+            descriptor,
+        ));
+        let mut stream = super::stream(
+            backend,
+            &prompt,
+            "fixture-model",
+            "fifth-thread".into(),
+            None,
+            "window".into(),
+            "turn",
+        )
+        .await
+        .unwrap();
+        let mut called = false;
+        let mut text = String::new();
+        loop {
+            let event =
+                tokio::time::timeout(std::time::Duration::from_secs(2), stream.events.recv())
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .unwrap();
+            match event {
+                ResponseEvent::OutputTextDelta(delta) => text.push_str(&delta),
+                ResponseEvent::OutputItemDone(ResponseItem::FunctionCall {
+                    call_id, name, ..
+                }) => {
+                    assert!(!called);
+                    assert_eq!(name, "lookup");
+                    called = true;
+                    stream
+                        .results
+                        .send(api::HostCompletion {
+                            call_id,
+                            output: json!("host result"),
+                            structured: None,
+                            disposition: api::CompletionDisposition::Success,
+                        })
+                        .await
+                        .unwrap();
+                }
+                ResponseEvent::Completed { response_id, .. } => {
+                    assert!(called);
+                    assert_eq!(response_id, "finished");
+                    assert_eq!(text, "before toolafter tool");
+                    break;
+                }
+                _ => {}
+            }
+        }
     }
 
     #[tokio::test]
