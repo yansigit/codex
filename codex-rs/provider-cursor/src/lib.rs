@@ -46,6 +46,8 @@ pub struct Options {
     pub client_version: String,
     pub connect_timeout: Duration,
     pub idle_timeout: Duration,
+    /// Drain trailing metadata after TurnEnded when the server holds HTTP/2 open.
+    /// The default matches pinned OpenCodex; later metadata requires a larger grace.
     pub completion_grace: Duration,
 }
 

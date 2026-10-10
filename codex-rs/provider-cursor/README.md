@@ -86,6 +86,15 @@ The implementation was checked against pinned sources:
   account/session lineage and host tool lifecycle lessons. This reference uses
   the Cursor SDK; this crate does not use that runtime.
 
+Completion uses the Connect end envelope or clean HTTP/2 EOF when available.
+Some upstream streams remain open after `turnEnded`; the default 500 ms trailing
+drain matches pinned OpenCodex `live-transport.ts`. No verified protocol field
+identifies the final checkpoint or KV frame. Metadata arriving after that drain
+can be missed; this is a bounded protocol assumption, not an ordering guarantee.
+`Options::completion_grace` can increase the drain. A delayed HTTP/2 fixture
+verifies a final KV write and checkpoint arriving after 700 ms with a two-second
+grace; incomplete trailing frames always fail rather than complete silently.
+
 Targeted tests cover fragmented/truncated/oversized/error Connect envelopes,
 native argument codecs, credential exchange and refresh, cancellation, foreign
 or corrupted checkpoints, unknown execution outcomes, image blob encoding, and
