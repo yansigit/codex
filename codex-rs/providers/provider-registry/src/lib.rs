@@ -93,14 +93,11 @@ impl Registry {
 
 pub fn registry() -> &'static Registry {
     static REGISTRY: OnceLock<Registry> = OnceLock::new();
-    REGISTRY.get_or_init(|| {
-        let mut registry = Registry::new();
-        for descriptor in BUILT_INS {
-            registry
-                .register(descriptor)
-                .expect("unique built-in provider registrations");
-        }
-        registry
+    REGISTRY.get_or_init(|| Registry {
+        descriptors: BUILT_INS
+            .iter()
+            .map(|descriptor| (descriptor.id, *descriptor))
+            .collect(),
     })
 }
 
@@ -215,6 +212,7 @@ mod tests {
 
     #[test]
     fn metadata_is_available_for_every_builtin() {
+        assert_eq!(registry().iter().count(), BUILT_INS.len());
         for descriptor in BUILT_INS {
             assert!(registry().get(descriptor.id).is_some());
             assert_eq!(
