@@ -61,10 +61,10 @@
     {
       "name": "core-responses-retry",
       "packages": ["codex-core"],
-      "filter": "suite::responses::",
-      "test_target": "all",
+      "filter": "client::tests::",
+      "test_target": "lib",
       "test_threads": 1,
-      "minimum_tests": 1
+      "minimum_tests": 33
     },
     {
       "name": "app-server-account-and-fork",
