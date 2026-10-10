@@ -1,5 +1,11 @@
 use anyhow::Result;
 use app_test_support::TestAppServer;
+use codex_app_server_protocol::ThreadForkParams;
+use codex_app_server_protocol::ThreadForkResponse;
+use codex_app_server_protocol::ThreadResumeParams;
+use codex_app_server_protocol::ThreadResumeResponse;
+use codex_app_server_protocol::ThreadStartParams;
+use codex_app_server_protocol::ThreadStartResponse;
 use codex_provider_auth::AuthStore;
 use codex_provider_auth::TokenRecord;
 use serde_json::Value;
@@ -17,13 +23,14 @@ fn write_claude_config(codex_home: &std::path::Path) -> Result<()> {
         codex_home.join("config.toml"),
         r#"
 model = "claude-haiku-5-5"
-model_provider = "claude"
+model_provider = "claude_native_fixture"
 approval_policy = "never"
 sandbox_mode = "danger-full-access"
 
-[model_providers.claude]
+[model_providers.claude_native_fixture]
 name = "Claude native provider test"
 wire_api = "claude"
+env_key = "ANTHROPIC_API_KEY"
 "#,
     )?;
     Ok(())
@@ -163,5 +170,68 @@ async fn environment_token_override_rejects_logout_without_deleting_stored_accou
         auth_store.status("claude")?.map(|status| status.account),
         Some("default".into())
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn native_provider_selection_survives_fork_and_cold_resume() -> Result<()> {
+    let codex_home = TempDir::new()?;
+    std::fs::write(
+        codex_home.path().join("config.toml"),
+        "model = \"gpt-5.6-luna\"\n",
+    )?;
+    AuthStore::new(codex_home.path())
+        .login(
+            "opencode-go",
+            "default",
+            seed_token("go-dummyfixturetoken"),
+            &CancellationToken::new(),
+        )
+        .await?;
+
+    let mut server = TestAppServer::builder()
+        .with_codex_home(codex_home.path())
+        .with_env_overrides(&[("OPENAI_API_KEY", None)])
+        .build_initialized_with_timeout(READ_TIMEOUT)
+        .await?;
+
+    let started: ThreadStartResponse = timeout(
+        READ_TIMEOUT,
+        server.start_thread(ThreadStartParams {
+            model: Some("glm-5.3".into()),
+            model_provider: Some("opencode-go".into()),
+            ..Default::default()
+        }),
+    )
+    .await??;
+    assert_eq!(started.model_provider, "opencode-go");
+    assert_eq!(started.model, "glm-5.3");
+
+    let fork_id = server
+        .send_thread_fork_request(ThreadForkParams {
+            thread_id: started.thread.id.clone(),
+            ..Default::default()
+        })
+        .await?;
+    let forked: ThreadForkResponse = timeout(READ_TIMEOUT, server.read_response(fork_id)).await??;
+    assert_eq!(forked.model_provider, "opencode-go");
+    assert_eq!(forked.model, "glm-5.3");
+
+    server.shutdown_gracefully().await?;
+    let mut restarted = TestAppServer::builder()
+        .with_codex_home(codex_home.path())
+        .with_env_overrides(&[("OPENAI_API_KEY", None)])
+        .build_initialized_with_timeout(READ_TIMEOUT)
+        .await?;
+    let resume_id = restarted
+        .send_thread_resume_request(ThreadResumeParams {
+            thread_id: started.thread.id,
+            ..Default::default()
+        })
+        .await?;
+    let resumed: ThreadResumeResponse =
+        timeout(READ_TIMEOUT, restarted.read_response(resume_id)).await??;
+    assert_eq!(resumed.model_provider, "opencode-go");
+    assert_eq!(resumed.model, "glm-5.3");
     Ok(())
 }
