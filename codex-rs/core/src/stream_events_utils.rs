@@ -397,7 +397,7 @@ pub(crate) async fn handle_output_item_done(
             output.last_agent_message = finalized_facts.and_then(|facts| facts.last_agent_message);
         }
         // The tool request should be answered directly (or was denied); push that response into the transcript.
-        Err(FunctionCallError::RespondToModel(message)) => {
+        Err(FunctionCallError::RespondToModel(message) | FunctionCallError::Rejected(message)) => {
             ctx.sess
                 .services
                 .executed_tool_calls
