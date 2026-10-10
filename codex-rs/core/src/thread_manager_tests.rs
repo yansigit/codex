@@ -3505,3 +3505,71 @@ async fn interrupted_fork_snapshot_uses_persisted_mid_turn_history_without_live_
         1,
     );
 }
+
+#[tokio::test]
+async fn per_thread_native_provider_avoids_global_openai_metadata_and_honors_catalog() {
+    use codex_protocol::openai_models::ToolMode;
+
+    let model = "gpt-5.6-luna";
+    for explicit_catalog in [false, true] {
+        let temp_dir = tempdir().expect("tempdir");
+        let mut config = test_config().await;
+        config.codex_home = temp_dir.path().join("codex-home").abs();
+        config.cwd = config.codex_home.abs();
+        std::fs::create_dir_all(&config.codex_home).expect("create codex home");
+        config.model_catalog = None;
+        let manager = ThreadManager::with_models_provider_and_home_for_tests(
+            CodexAuth::from_api_key("dummy"),
+            config.model_provider.clone(),
+            config.codex_home.to_path_buf(),
+            Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
+        );
+        let global_info = manager
+            .state
+            .models_manager
+            .get_model_info(model, &config.to_models_manager_config())
+            .await;
+        assert_eq!(global_info.tool_mode, Some(ToolMode::CodeModeOnly));
+
+        config.model = Some(model.into());
+        config.model_provider_id = "opencode-go".into();
+        config.model_provider = config
+            .model_providers
+            .get("opencode-go")
+            .expect("built-in native provider")
+            .clone();
+        config.model_provider.experimental_bearer_token = Some("fixture-key".into());
+        if explicit_catalog {
+            let mut native_info = global_info;
+            native_info.tool_mode = Some(ToolMode::Direct);
+            native_info.context_window = Some(12345);
+            native_info.max_context_window = Some(12345);
+            config.model_catalog = Some(ModelsResponse {
+                models: vec![native_info],
+            });
+        }
+        let started = manager
+            .start_thread(StartThreadOptions {
+                environments: Some(Vec::new()),
+                ..StartThreadOptions::new(config)
+            })
+            .await
+            .expect("start native thread under OpenAI-global manager");
+        let turn = started.thread.session.new_default_turn().await;
+        let info = turn.capture_current_model_info();
+        assert_eq!(info.slug, model);
+        assert_eq!(
+            info.tool_mode,
+            explicit_catalog.then_some(ToolMode::Direct),
+            "native thread must not inherit global OpenAI code-mode metadata"
+        );
+        if explicit_catalog {
+            assert_eq!(info.context_window, Some(12345));
+        }
+        started
+            .thread
+            .shutdown_and_wait()
+            .await
+            .expect("shutdown native thread");
+    }
+}
