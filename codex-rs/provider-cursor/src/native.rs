@@ -7,6 +7,7 @@ use codex_provider_api::Result;
 use codex_provider_api::ToolCall;
 use codex_provider_api::ToolResult;
 use prost::Message;
+use serde_json::Value;
 use serde_json::json;
 
 use crate::wire;
@@ -126,15 +127,12 @@ pub(crate) fn call(exec: &wire::ExecServer) -> Result<Option<(ToolCall, Operatio
             "Cursor native tool request missing call ID".into(),
         ));
     }
-    arguments
-        .as_object_mut()
-        .expect("native arguments are an object")
-        .retain(|_, value| !value.is_null());
-    if name == SHELL && arguments["working_directory"] == "" {
-        arguments
-            .as_object_mut()
-            .expect("native arguments are an object")
-            .remove("working_directory");
+    let fields = arguments.as_object_mut().ok_or_else(|| {
+        ProviderError::Protocol("Cursor native arguments must be an object".into())
+    })?;
+    fields.retain(|_, value| !value.is_null());
+    if name == SHELL && fields.get("working_directory").and_then(Value::as_str) == Some("") {
+        fields.remove("working_directory");
     }
     Ok(Some((
         ToolCall {
@@ -292,7 +290,7 @@ pub(crate) fn response(
         result
             .output
             .get(field)
-            .and_then(|v| v.as_i64())
+            .and_then(Value::as_i64)
             .unwrap_or(0)
     };
     let base = wire::ExecClient {
@@ -301,7 +299,7 @@ pub(crate) fn response(
         ..Default::default()
     };
     let mut response = base.clone();
-    if result.is_error && result.output.get("rejected").and_then(|v| v.as_bool()) == Some(true) {
+    if result.is_error && result.output.get("rejected").and_then(Value::as_bool) == Some(true) {
         let reason = result
             .output
             .get("reason")
@@ -503,12 +501,12 @@ pub(crate) fn response(
                             truncated: result
                                 .output
                                 .get("truncated")
-                                .and_then(|v| v.as_bool())
+                                .and_then(Value::as_bool)
                                 .unwrap_or(false),
                             range_applied: result
                                 .output
                                 .get("range_applied")
-                                .and_then(|v| v.as_bool())
+                                .and_then(Value::as_bool)
                                 .unwrap_or(false),
                         }
                         .encode_to_vec(),

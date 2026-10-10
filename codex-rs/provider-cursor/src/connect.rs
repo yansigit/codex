@@ -62,7 +62,12 @@ impl Decoder {
                 "unknown Cursor Connect flags".into(),
             ));
         }
-        let length = u32::from_be_bytes(self.buffer[1..5].try_into().expect("four bytes")) as usize;
+        let length = u32::from_be_bytes([
+            self.buffer[1],
+            self.buffer[2],
+            self.buffer[3],
+            self.buffer[4],
+        ]) as usize;
         if length > MAX_FRAME {
             return Err(ProviderError::Protocol("Cursor frame exceeds limit".into()));
         }
