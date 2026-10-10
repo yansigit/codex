@@ -8,9 +8,6 @@ use serde::Serialize;
 use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
-mod driver;
-pub use driver::drive_session;
-
 pub type ProviderFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>>;
 pub type Result<T> = std::result::Result<T, ProviderError>;
 
@@ -108,6 +105,77 @@ pub struct ToolResult {
     pub is_error: bool,
 }
 
+/// Outcome supplied by the host after its ordinary persistence path completed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CompletionDisposition {
+    Success,
+    Failure,
+    Denied,
+}
+
+/// Internal completion envelope. The recorded history output is independent of
+/// structured execution metadata and cannot collide with provider output keys.
+#[derive(Debug, Clone, PartialEq)]
+pub struct HostCompletion {
+    pub call_id: String,
+    pub output: Value,
+    pub structured: Option<Value>,
+    pub disposition: CompletionDisposition,
+}
+
+impl HostCompletion {
+    pub fn is_error(&self) -> bool {
+        self.disposition != CompletionDisposition::Success
+    }
+
+    pub fn to_tool_result(&self) -> ToolResult {
+        ToolResult {
+            call_id: self.call_id.clone(),
+            output: self.output.clone(),
+            is_error: self.is_error(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum RecoveryPolicy {
+    #[default]
+    RestorePrevious,
+    RebuildFromHistory,
+}
+
+/// Provider-neutral operations translated by the host's sandboxed tool adapter.
+#[derive(Debug, Clone, PartialEq)]
+pub enum HostOperation {
+    Shell(Value),
+    ReadFile(Value),
+    WriteFile(Value),
+    DeleteFile(Value),
+    ListDirectory(Value),
+    Search(Value),
+}
+
+impl HostOperation {
+    pub fn arguments(&self) -> &Value {
+        match self {
+            Self::Shell(args)
+            | Self::ReadFile(args)
+            | Self::WriteFile(args)
+            | Self::DeleteFile(args)
+            | Self::ListDirectory(args)
+            | Self::Search(args) => args,
+        }
+    }
+}
+
+/// A provider owns protocol operation names and result shapes. This mapping
+/// performs no host I/O; execution always returns through the host boundary.
+pub trait NativeOperations: Send + Sync {
+    fn definitions(&self) -> Vec<ToolDefinition>;
+    fn operation(&self, call: &ToolCall) -> Result<HostOperation>;
+    fn result(&self, call: &ToolCall, structured: &Value) -> Result<Value>;
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Request {
     pub namespace: Namespace,
@@ -181,6 +249,12 @@ pub trait ProviderSession: Send {
 
 pub trait Provider: Send + Sync {
     fn id(&self) -> &'static str;
+    fn recovery_policy(&self) -> RecoveryPolicy {
+        RecoveryPolicy::RestorePrevious
+    }
+    fn native_operations(&self) -> Option<Arc<dyn NativeOperations>> {
+        None
+    }
     fn models(&self, context: Context) -> ProviderFuture<'_, Vec<Model>>;
     fn start(
         &self,

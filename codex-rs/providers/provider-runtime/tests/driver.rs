@@ -1,10 +1,11 @@
+use codex_provider_runtime::drive_session;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use codex_provider_api::{
     Checkpoint, Event, Host, Namespace, ProviderError, ProviderFuture, ProviderSession, Request,
-    ToolCall, ToolDefinition, ToolResult, drive_session,
+    ToolCall, ToolDefinition, ToolResult,
 };
 use serde_json::{Value, json};
 use tokio::sync::{Barrier, Mutex, Notify, mpsc};
