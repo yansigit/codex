@@ -491,7 +491,11 @@ pub async fn stream(
                             api::Event::Usage(value) => { usage = Some(TokenUsage { input_tokens: value.input_tokens.min(i64::MAX as u64) as i64, cached_input_tokens: value.cached_input_tokens.min(i64::MAX as u64) as i64, output_tokens: value.output_tokens.min(i64::MAX as u64) as i64, reasoning_output_tokens: value.reasoning_tokens.min(i64::MAX as u64) as i64, total_tokens: value.input_tokens.saturating_add(value.output_tokens).min(i64::MAX as u64) as i64, ..TokenUsage::default() }); }
                             api::Event::Completed { id } => {
                                 finish_item(&tx, &mut active, &mut history, &cancellation).await?;
-                                checkpoint_state.lock().await.complete(&final_store, &execution, &system, &history, &cancellation).await.map_err(error)?;
+                                // The driver has accepted terminal completion,
+                                // so no checkpoint writer remains. Release the
+                                // async lock before the durable final write.
+                                let checkpoint = checkpoint_state.lock().await.clone();
+                                checkpoint.complete(&final_store, &execution, &system, &history, &cancellation).await.map_err(error)?;
                                 emit(&tx, ResponseEvent::Completed { response_id: id, token_usage: usage, usage_metadata: None, end_turn: Some(true) }, &cancellation).await?;
                                 return Ok(());
                             }
