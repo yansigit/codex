@@ -104,7 +104,7 @@ async fn checkpoint_after_tool_dispatch_cannot_clear_interruption_fence() {
     use api::Host;
     let home = tempfile::tempdir().unwrap();
     let request = bound_request();
-    let store = codex_provider_auth::SessionStore::new(home.path(), request.namespace.clone());
+    let store = crate::SessionStore::new(home.path(), request.namespace.clone());
     let state = Arc::new(tokio::sync::Mutex::new(super::TurnCheckpoint {
         namespace: request.namespace.clone(),
         latest: None,
@@ -157,7 +157,7 @@ async fn oversized_native_output_drains_the_foreground_process_before_returning_
     use api::Host;
     let home = tempfile::tempdir().unwrap();
     let request = bound_request();
-    let store = codex_provider_auth::SessionStore::new(home.path(), request.namespace.clone());
+    let store = crate::SessionStore::new(home.path(), request.namespace.clone());
     let cancel = tokio_util::sync::CancellationToken::new();
     let (calls, mut receive) = tokio::sync::mpsc::channel(1);
     let host = super::ChannelHost {
@@ -287,7 +287,7 @@ async fn channel_fixture(
 ) {
     let home = tempfile::tempdir().unwrap();
     let namespace = bound_request().namespace;
-    let store = codex_provider_auth::SessionStore::new(home.path(), namespace.clone());
+    let store = crate::SessionStore::new(home.path(), namespace.clone());
     let cancellation = tokio_util::sync::CancellationToken::new();
     let execution = Arc::new(store.begin_execution("turn", &cancellation).await.unwrap());
     let (calls, receive) = tokio::sync::mpsc::channel(1);
