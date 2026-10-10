@@ -151,6 +151,15 @@ impl Reader {
         }
     }
 
+    pub fn check_buffer_complete(&self) -> Result<()> {
+        if !self.decoder.buffer.is_empty() {
+            return Err(ProviderError::Protocol(
+                "truncated Cursor Connect frame at turn completion".into(),
+            ));
+        }
+        Ok(())
+    }
+
     pub async fn next(&mut self, cancellation: &CancellationToken) -> Result<Option<Bytes>> {
         loop {
             match self.decoder.next()? {
@@ -259,5 +268,19 @@ mod tests {
             decoder.next(),
             Err(ProviderError::Authentication(_))
         ));
+    }
+    #[test]
+    fn turn_completion_rejects_an_incomplete_buffered_frame() {
+        let mut reader = Reader {
+            stream: Box::pin(futures::stream::pending()),
+            decoder: Decoder::default(),
+        };
+        reader.decoder.push(&[0, 0]).unwrap();
+        assert!(reader.check_buffer_complete().is_err());
+        let reader = Reader {
+            stream: Box::pin(futures::stream::pending()),
+            decoder: Decoder::default(),
+        };
+        reader.check_buffer_complete().unwrap();
     }
 }

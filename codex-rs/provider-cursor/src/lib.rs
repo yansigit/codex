@@ -566,6 +566,10 @@ fn json_value(value: &Value) -> prost_types::Value {
 }
 
 fn from_value(value: prost_types::Value) -> Result<Value> {
+    from_value_at(value, true)
+}
+
+fn from_value_at(value: prost_types::Value, top_level: bool) -> Result<Value> {
     use prost_types::value::Kind;
     Ok(match value.kind {
         Some(Kind::NullValue(_)) => Value::Null,
@@ -574,20 +578,24 @@ fn from_value(value: prost_types::Value) -> Result<Value> {
             .map(Value::Number)
             .ok_or_else(|| ProviderError::Protocol("nonfinite Cursor tool argument".into()))?,
         Some(Kind::StringValue(value)) => {
-            serde_json::from_str(&value).unwrap_or(Value::String(value))
+            if top_level {
+                serde_json::from_str(&value).unwrap_or(Value::String(value))
+            } else {
+                Value::String(value)
+            }
         }
         Some(Kind::ListValue(values)) => Value::Array(
             values
                 .values
                 .into_iter()
-                .map(from_value)
+                .map(|value| from_value_at(value, false))
                 .collect::<Result<_>>()?,
         ),
         Some(Kind::StructValue(values)) => Value::Object(
             values
                 .fields
                 .into_iter()
-                .map(|(key, value)| Ok((key, from_value(value)?)))
+                .map(|(key, value)| Ok((key, from_value_at(value, false)?)))
                 .collect::<Result<_>>()?,
         ),
         None => {
@@ -853,6 +861,9 @@ impl Session {
             return Err(ProviderError::Protocol(
                 "Cursor stream ended without turn completion".into(),
             ));
+        }
+        if let Some(reader) = &self.reader {
+            reader.check_buffer_complete()?;
         }
         self.reader.take();
         self.writer.take();
