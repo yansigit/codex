@@ -1,5 +1,6 @@
 use codex_provider_api::{Checkpoint, Namespace, ToolCall, ToolResult};
-use codex_provider_auth::{AuthStore, SessionStore, Store, TokenRecord, ToolDisposition, digest};
+use codex_provider_auth::{AuthStore, Store, TokenRecord, digest};
+use codex_provider_runtime::{SessionStore, ToolDisposition};
 use serde_json::json;
 use std::fs;
 use std::path::Path;
@@ -80,6 +81,10 @@ async fn baseline_persisted_state_fixtures_remain_readable_and_writable() {
         session.load().unwrap().unwrap().context_hash,
         "fixture-context-digest"
     );
+    assert_eq!(
+        session.load().unwrap().unwrap().state["codex_host_lineage"]["length"],
+        1
+    );
     let tool_key = serde_json::json!(("tool", &ns, "fixture-call-1")).to_string();
     install_fixture(read_root.path(), &tool_key, &fixture("journal.json"));
     let call = ToolCall {
@@ -119,7 +124,16 @@ async fn baseline_persisted_state_fixtures_remain_readable_and_writable() {
         version: 1,
         namespace: ns.clone(),
         context_hash: "fixture-context-digest".into(),
-        state: json!({"cursor":"fixture-cursor", "opaque_state":"fixture-provider-state"}),
+        state: json!({
+            "codex_host_lineage": {
+                "failed_results": {"fixture-call-1":"fixture-failed-output-digest"},
+                "hash":"fixture-host-prefix-digest",
+                "length":1
+            },
+            "codex_host_pending":false,
+            "cursor":"fixture-cursor",
+            "opaque_state":{"thinking_signature":"fixture-signature-not-valid"}
+        }),
     };
     let session = SessionStore::new(writer_root.path(), ns.clone());
     session.save(&checkpoint, &cancellation).await.unwrap();
