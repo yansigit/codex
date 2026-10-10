@@ -7,6 +7,7 @@ use codex_provider_api::*;
 use serde_json::Value;
 use serde_json::json;
 use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 
 pub struct MessagesCodec {
     pub url: String,
@@ -18,6 +19,7 @@ pub struct MessagesCodec {
     usage: Usage,
     id: String,
     done: bool,
+    open_blocks: BTreeSet<u64>,
 }
 impl MessagesCodec {
     pub fn new(
@@ -47,6 +49,7 @@ impl MessagesCodec {
             usage: Usage::default(),
             id: String::new(),
             done: false,
+            open_blocks: BTreeSet::new(),
         })
     }
     fn wire_name(&self, name: &str) -> String {
@@ -178,9 +181,7 @@ impl WireCodec for MessagesCodec {
         }
         if let Some(effort) = &request.reasoning_effort {
             if effort != "none" && effort != "off" {
-                if request.namespace.model.contains("4-6")
-                    || request.namespace.model.contains("4-7")
-                {
+                if request.metadata["anthropic_adaptive_thinking"] == true {
                     body["thinking"] = json!({"type":"adaptive"});
                     body["output_config"] = json!({"effort":effort});
                 } else {
@@ -217,6 +218,7 @@ impl WireCodec for MessagesCodec {
     }
     fn reset(&mut self) {
         self.blocks.clear();
+        self.open_blocks.clear();
         self.arguments.clear();
         self.usage = Usage::default();
         self.id.clear();
@@ -245,6 +247,7 @@ impl WireCodec for MessagesCodec {
                     .as_u64()
                     .ok_or_else(|| protocol("missing Messages block index"))?;
                 let block = value["content_block"].clone();
+                self.open_blocks.insert(index);
                 if let Some(text) = block["text"].as_str().filter(|text| !text.is_empty()) {
                     events.push(Event::TextDelta(text.to_owned()));
                 }
@@ -295,6 +298,9 @@ impl WireCodec for MessagesCodec {
                 let index = value["index"]
                     .as_u64()
                     .ok_or_else(|| protocol("missing Messages block index"))?;
+                if !self.open_blocks.remove(&index) {
+                    return Err(protocol("Messages stop without open block"));
+                }
                 if let Some(arguments) = self.arguments.remove(&index) {
                     let block = self
                         .blocks
@@ -311,8 +317,21 @@ impl WireCodec for MessagesCodec {
                 events.push(Event::Usage(self.usage.clone()));
             }
             Some("message_stop") => {
-                if !self.arguments.is_empty() {
+                if !self.arguments.is_empty() || !self.open_blocks.is_empty() {
                     return Err(protocol("unfinished Messages tool JSON"));
+                }
+                if self.id.is_empty() {
+                    return Err(protocol("Messages terminal before message start"));
+                }
+                if self.subscription
+                    && self.blocks.values().any(|block| {
+                        block["type"] == "thinking"
+                            && block["signature"].as_str().is_none_or(str::is_empty)
+                    })
+                {
+                    return Err(protocol(
+                        "Claude thinking block is missing its replay signature",
+                    ));
                 }
                 self.done = true;
             }
@@ -345,6 +364,9 @@ impl WireCodec for MessagesCodec {
                     signature: block["signature"].as_str().map(str::to_owned),
                 }),
                 Some("tool_use") => {
+                    if !block["input"].is_object() {
+                        return Err(protocol("Messages tool arguments must be an object"));
+                    }
                     let name = string(block, "name")?;
                     let name = self
                         .tool_names

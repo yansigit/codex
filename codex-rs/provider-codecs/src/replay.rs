@@ -4,7 +4,7 @@ use sha2::Digest;
 use sha2::Sha256;
 
 fn hash(request: &Request, messages: &[Message]) -> Result<String> {
-    let bytes = serde_json::to_vec(&json!({"system":request.system,"messages":messages.iter().map(public_message).collect::<Vec<_>>(),"tools":request.tools})).map_err(|_| ProviderError::Checkpoint("invalid history".into()))?;
+    let bytes = serde_json::to_vec(&json!({"system":request.system,"messages":messages.iter().map(public_message).collect::<Vec<_>>()})).map_err(|_| ProviderError::Checkpoint("invalid history".into()))?;
     Ok(format!("{:x}", Sha256::digest(bytes)))
 }
 pub(crate) fn checkpoint(request: &Request, assistant: &Message) -> Result<Checkpoint> {
@@ -34,20 +34,29 @@ pub(crate) fn checkpoint(request: &Request, assistant: &Message) -> Result<Check
     })
 }
 fn public_message(message: &Message) -> Message {
+    let mut content = Vec::new();
+    for block in &message.content {
+        let block = match block {
+            Content::Opaque { .. } => continue,
+            Content::Thinking { text, .. } => Content::Thinking {
+                text: text.clone(),
+                signature: None,
+            },
+            block => block.clone(),
+        };
+        match (content.last_mut(), &block) {
+            (Some(Content::Text { text: previous }), Content::Text { text }) => {
+                previous.push_str(text)
+            }
+            (Some(Content::Thinking { text: previous, .. }), Content::Thinking { text, .. }) => {
+                previous.push_str(text)
+            }
+            _ => content.push(block),
+        }
+    }
     Message {
         role: message.role.clone(),
-        content: message
-            .content
-            .iter()
-            .filter_map(|content| match content {
-                Content::Opaque { .. } => None,
-                Content::Thinking { text, .. } => Some(Content::Thinking {
-                    text: text.clone(),
-                    signature: None,
-                }),
-                content => Some(content.clone()),
-            })
-            .collect(),
+        content,
     }
 }
 /// Restore only the matching, generated assistant message. Signed state cannot migrate

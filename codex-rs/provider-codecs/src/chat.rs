@@ -18,6 +18,7 @@ pub struct ChatCodec {
     finish_reason: Option<String>,
     done: bool,
     id: String,
+    content: Vec<Content>,
 }
 impl ChatCodec {
     pub fn new(
@@ -37,6 +38,7 @@ impl ChatCodec {
             finish_reason: None,
             done: false,
             id: String::new(),
+            content: Vec::new(),
         }
     }
 }
@@ -72,7 +74,25 @@ impl WireCodec for ChatCodec {
                 }
             }
             if !content.is_empty() || !calls.is_empty() || !thinking.is_empty() {
-                let mut value = json!({"role":role,"content":content});
+                let wire_content = if role == "assistant" {
+                    if content.iter().any(|block| block["type"] != "text") {
+                        return Err(ProviderError::Unsupported(
+                            "Chat assistant image replay".into(),
+                        ));
+                    }
+                    let text = content
+                        .iter()
+                        .filter_map(|block| block["text"].as_str())
+                        .collect::<String>();
+                    if text.is_empty() {
+                        Value::Null
+                    } else {
+                        json!(text)
+                    }
+                } else {
+                    json!(content)
+                };
+                let mut value = json!({"role":role,"content":wire_content});
                 if !calls.is_empty() {
                     value["tool_calls"] = json!(calls);
                 }
@@ -92,6 +112,9 @@ impl WireCodec for ChatCodec {
         }
         if let Some(effort) = &request.reasoning_effort {
             body["reasoning_effort"] = json!(effort);
+            if self.reasoning_content {
+                body["thinking"] = json!({"type":if effort == "none" || effort == "off" {"disabled"} else {"enabled"}});
+            }
         }
         if let Some(schema) = &request.output_schema {
             body["response_format"] = json!({"type":"json_schema","json_schema":{"name":"codex_output","strict":true,"schema":schema}});
@@ -109,6 +132,7 @@ impl WireCodec for ChatCodec {
         self.finish_reason = None;
         self.done = false;
         self.id.clear();
+        self.content.clear();
     }
     fn frame(&mut self, _event: &str, data: &str) -> Result<Vec<Event>> {
         if data == "[DONE]" {
@@ -149,6 +173,9 @@ impl WireCodec for ChatCodec {
             let delta = &choice["delta"];
             if let Some(text) = delta["content"].as_str() {
                 self.text.push_str(text);
+                self.content.push(Content::Text {
+                    text: text.to_owned(),
+                });
                 events.push(Event::TextDelta(text.to_owned()));
             }
             if let Some(text) = delta["reasoning_content"]
@@ -156,6 +183,10 @@ impl WireCodec for ChatCodec {
                 .or_else(|| delta["reasoning"].as_str())
             {
                 self.thinking.push_str(text);
+                self.content.push(Content::Thinking {
+                    text: text.to_owned(),
+                    signature: None,
+                });
                 events.push(Event::ThinkingDelta(text.to_owned()));
             }
             if let Some(calls) = delta["tool_calls"].as_array() {
@@ -188,24 +219,16 @@ impl WireCodec for ChatCodec {
         self.id.clone()
     }
     fn assistant(&self, _namespace: &Namespace) -> Result<Message> {
-        let mut content = Vec::new();
-        if !self.thinking.is_empty() {
-            content.push(Content::Thinking {
-                text: self.thinking.clone(),
-                signature: None,
-            });
-        }
-        if !self.text.is_empty() {
-            content.push(Content::Text {
-                text: self.text.clone(),
-            });
-        }
+        let mut content = self.content.clone();
         for (id, name, arguments) in self.calls.values() {
             if id.is_empty() || !self.declared.contains(name) {
                 return Err(protocol("Chat returned missing id or undeclared tool"));
             }
-            let arguments = serde_json::from_str(arguments)
+            let arguments: Value = serde_json::from_str(arguments)
                 .map_err(|_| protocol("invalid Chat tool arguments JSON"))?;
+            if !arguments.is_object() {
+                return Err(protocol("Chat tool arguments must be an object"));
+            }
             content.push(Content::ToolCall(ToolCall {
                 id: id.clone(),
                 name: name.clone(),

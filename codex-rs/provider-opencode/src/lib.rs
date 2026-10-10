@@ -89,7 +89,7 @@ impl Provider for OpenCodeProvider {
             );
             let codec: Box<dyn WireCodec> = match model["api"].as_str() {
                 Some("anthropic-messages") => Box::new(MessagesCodec::new(
-                    format!("{}/messages", self.base_url),
+                    format!("{}/v1/messages", self.base_url),
                     headers,
                     false,
                     &request.tools,
@@ -116,5 +116,75 @@ impl Provider for OpenCodeProvider {
                     as Box<dyn ProviderSession>,
             )
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use wiremock::matchers::{body_partial_json, header, method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+    #[tokio::test]
+    async fn verified_model_families_use_native_v1_paths_and_session_header() {
+        for (model, endpoint, key_header, key_value) in [
+            (
+                "glm-5.3",
+                "/v1/chat/completions",
+                "authorization",
+                "Bearer fixture-key",
+            ),
+            ("minimax-m3", "/v1/messages", "x-api-key", "fixture-key"),
+            (
+                "gpt-6-luna",
+                "/v1/responses",
+                "authorization",
+                "Bearer fixture-key",
+            ),
+        ] {
+            let server = MockServer::start().await;
+            Mock::given(method("POST"))
+                .and(path(endpoint))
+                .and(header(key_header, key_value))
+                .and(header("x-opencode-session", "thread-a"))
+                .and(body_partial_json(json!({"model":model,"stream":true})))
+                .respond_with(ResponseTemplate::new(200))
+                .expect(1)
+                .mount(&server)
+                .await;
+            let provider = OpenCodeProvider::with_base_url(Client::new(), server.uri()).unwrap();
+            let context = Context {
+                credentials: Credentials {
+                    access_token: "fixture-key".into(),
+                    account_id: "account-a".into(),
+                    metadata: json!({}),
+                },
+                cancellation: Default::default(),
+            };
+            let request = Request {
+                namespace: Namespace {
+                    provider: "opencode-go".into(),
+                    account: "account-a".into(),
+                    model: model.into(),
+                    thread: "thread-a".into(),
+                },
+                system: String::new(),
+                messages: vec![Message {
+                    role: Role::User,
+                    content: vec![Content::Text {
+                        text: "hello".into(),
+                    }],
+                }],
+                tools: vec![],
+                parallel_tool_calls: true,
+                max_output_tokens: Some(128),
+                reasoning_effort: None,
+                output_schema: None,
+                checkpoint: None,
+                metadata: json!({}),
+            };
+            drop(provider.start(request, context).await.unwrap());
+            server.verify().await;
+        }
     }
 }

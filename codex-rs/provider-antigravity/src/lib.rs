@@ -13,6 +13,8 @@ pub const AUTHORIZE_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 pub const TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
 pub const CLIENT_ID: &str =
     "REMOVED_OAUTH_CLIENT_ID";
+// Public desktop OAuth registration, observed in the pinned Antigravity clients.
+pub const CLIENT_SECRET: &str = "REMOVED_OAUTH_CLIENT_SECRET";
 pub const REDIRECT_URI: &str = "http://localhost:51121/oauth-callback";
 pub const SCOPES: &[&str] = &[
     "https://www.googleapis.com/auth/cloud-platform",
@@ -219,7 +221,7 @@ impl Provider for AntigravityProvider {
             let project = self.discover_project(&context).await?;
             let headers = BTreeMap::from([(
                 "user-agent".into(),
-                "antigravity/ide/2.5.5 (os_type=linux; arch=x64; aidev_client; auth_method=oauth)"
+                "antigravity/ide/2.5.5 (os_type=windows; arch=amd64; aidev_client; auth_method=oauth)"
                     .into(),
             )]);
             let codec = GoogleCodec::new(

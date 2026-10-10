@@ -1,5 +1,6 @@
 use crate::WireCodec;
 use crate::WireRequest;
+use crate::output_text;
 use crate::protocol;
 use crate::string;
 use codex_provider_api::*;
@@ -48,9 +49,19 @@ impl GoogleCodec {
                         "Antigravity replay namespace mismatch".into(),
                     ));
                 }
-                return value["google_parts"].as_array().cloned().ok_or_else(|| {
+                let parts = value["google_parts"].as_array().ok_or_else(|| {
                     ProviderError::Checkpoint("foreign Antigravity replay format".into())
-                });
+                })?;
+                // Claude streams unsigned, empty text delimiters. They are not
+                // content blocks and its upstream translator rejects replay.
+                return Ok(parts
+                    .iter()
+                    .filter(|part| {
+                        !(part.as_object().is_some_and(|object| object.len() == 1)
+                            && part["text"].as_str() == Some(""))
+                    })
+                    .cloned()
+                    .collect());
             }
         }
         let mut parts = Vec::new();
@@ -75,20 +86,30 @@ impl GoogleCodec {
                 } => parts.push(json!({"text":text,"thought":true,"thoughtSignature":signature})),
                 Content::Thinking { .. } => {}
                 Content::ToolCall(call) => {
-                    parts.push(json!({"functionCall":{"name":call.name,"args":call.arguments}}))
+                    let mut part = json!({"functionCall":{"name":call.name,"args":call.arguments}});
+                    if request.namespace.model.starts_with("claude-")
+                        || request.namespace.model.starts_with("gpt-oss-")
+                    {
+                        part["functionCall"]["id"] = json!(call.id);
+                    }
+                    parts.push(part);
                 }
                 Content::ToolResult(result) => {
                     let name = names.get(&result.call_id).ok_or_else(|| {
                         protocol("Antigravity tool result has no matching tool call")
                     })?;
                     let response = if result.is_error {
-                        json!({"error":result.output})
-                    } else if result.output.is_object() {
-                        result.output.clone()
+                        json!({"error":output_text(&result.output)})
                     } else {
-                        json!({"result":result.output})
+                        json!({"output":output_text(&result.output)})
                     };
-                    parts.push(json!({"functionResponse":{"name":name,"response":response}}));
+                    let mut part = json!({"functionResponse":{"name":name,"response":response}});
+                    if request.namespace.model.starts_with("claude-")
+                        || request.namespace.model.starts_with("gpt-oss-")
+                    {
+                        part["functionResponse"]["id"] = json!(result.call_id);
+                    }
+                    parts.push(part);
                 }
                 Content::Opaque { .. } => {}
             }
@@ -124,7 +145,21 @@ fn tool_schema(value: &Value) -> Result<Value> {
                         "Antigravity tool schema keyword {key}"
                     )));
                 }
-                result.insert(key.clone(), tool_schema(value)?);
+                let value = if key == "properties" {
+                    let properties = value.as_object().ok_or_else(|| {
+                        protocol("Antigravity schema properties must be an object")
+                    })?;
+                    let properties = properties
+                        .iter()
+                        .map(|(name, schema)| Ok((name.clone(), tool_schema(schema)?)))
+                        .collect::<Result<serde_json::Map<String, Value>>>()?;
+                    Value::Object(properties)
+                } else if matches!(key.as_str(), "enum" | "default" | "examples" | "const") {
+                    value.clone()
+                } else {
+                    tool_schema(value)?
+                };
+                result.insert(key.clone(), value);
             }
             Ok(Value::Object(result))
         }
