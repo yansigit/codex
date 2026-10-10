@@ -56,6 +56,31 @@ checks passed on 2026-10-10. Provider source revisions and licenses are in
   `/tmp/native-clippy-ultimate.log`. Bazel and the full repository test suite
   were not run.
 
+## Publication rebase
+
+The `feature/native-rust-providers` branch is based on upstream main at
+`34f33e4ada8f417203d87f3b5858c97add8dad6b`. The rebase preserved provider
+implementations, regenerated both compressed protocol export bundles, and
+adapted native assistant messages to upstream's new optional response metadata.
+Regenerating the Python SDK produced no additional changes.
+
+- The rebased CLI build passed: `/tmp/native-rebase-build-final.log`.
+- All 22 native core tests passed: `/tmp/native-rebase-core-tests.log`.
+- All three app-server account/fork tests passed:
+  `/tmp/native-rebase-appserver-tests.log`.
+- All 229 provider and adapter tests passed:
+  `/tmp/native-rebase-provider-tests.log`.
+- All 33 Responses tests passed serially: `/tmp/native-rebase-responses-tests.log`.
+  The initial parallel run had one failure in the existing
+  `response_stream_records_last_model_feedback_ids` tracing test; it passed in
+  isolation and in the serial suite. The initial failure is retained in
+  `/tmp/native-rebase-responses-parallel.log`.
+- All four schema fixture checks passed: `/tmp/native-rebase-schema-tests.log`.
+  Formatting and diff checks also passed.
+- Strict clippy for the provider, adapter, core, CLI, and app-server crates
+  passed: `/tmp/native-rebase-clippy.log`. The adapter also compiled with
+  default provider features disabled: `/tmp/native-rebase-feature-check.log`.
+
 ## Live provider acceptance
 
 All checks used explicitly selected accounts in private test homes and did not
