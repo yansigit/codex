@@ -1,11 +1,14 @@
 //! Native Cloud Code Assist transport for Antigravity. Project onboarding is an RPC,
 //! not a delegated `agy` process. All signed parts stay with their exact assistant turn.
 use codex_provider_api::*;
+use codex_provider_auth::{Store, StoreLock};
 use codex_provider_codecs::*;
 use reqwest::Client;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_json::json;
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 use std::time::Duration;
 use tokio::sync::Mutex;
 
@@ -24,10 +27,30 @@ pub const SCOPES: &[&str] = &[
     "https://www.googleapis.com/auth/experimentsandconfigs",
 ];
 
+#[derive(Clone, Default, Serialize, Deserialize)]
+struct ProjectState {
+    project: Option<String>,
+    pending: bool,
+    operation: Option<String>,
+}
+fn persist_project(
+    state: &ProjectState,
+    account: &str,
+    projects: &mut BTreeMap<String, ProjectState>,
+    lock: Option<&StoreLock>,
+) -> Result<()> {
+    if let Some(lock) = lock {
+        lock.write(state)?;
+    }
+    projects.insert(account.to_owned(), state.clone());
+    Ok(())
+}
+
 pub struct AntigravityProvider {
     client: Client,
     base_url: String,
-    projects: Mutex<BTreeMap<String, String>>,
+    projects: Mutex<BTreeMap<String, ProjectState>>,
+    state_store: Option<Store>,
 }
 impl Default for AntigravityProvider {
     fn default() -> Self {
@@ -40,6 +63,7 @@ impl AntigravityProvider {
             client,
             base_url: "https://daily-cloudcode-pa.googleapis.com".into(),
             projects: Mutex::new(BTreeMap::new()),
+            state_store: None,
         }
     }
     pub fn with_base_url(client: Client, base_url: String) -> Result<Self> {
@@ -57,7 +81,14 @@ impl AntigravityProvider {
             client,
             base_url: base_url.trim_end_matches('/').into(),
             projects: Mutex::new(BTreeMap::new()),
+            state_store: None,
         })
+    }
+    /// Persist provisioning fences and operation names across process restarts.
+    /// Without a state home, onboarding recovery is limited to this instance.
+    pub fn with_state_home(mut self, home: PathBuf) -> Self {
+        self.state_store = Some(Store::new(&home));
+        self
     }
     async fn rpc(&self, name: &str, body: Value, context: &Context) -> Result<Value> {
         let request = self
@@ -89,9 +120,21 @@ impl AntigravityProvider {
             return Ok(project.to_owned());
         }
         let mut projects = tokio::select! {biased;_=context.cancellation.cancelled()=>return Err(ProviderError::Cancelled),projects=self.projects.lock()=>projects};
-        if let Some(project) = projects.get(&context.credentials.account_id) {
+        let account = &context.credentials.account_id;
+        let key = json!(("antigravity-project", &self.base_url, account)).to_string();
+        let lock = match &self.state_store {
+            Some(store) => Some(store.lock(&key, &context.cancellation).await?),
+            None => None,
+        };
+        let mut state = match &lock {
+            Some(lock) => lock.read::<ProjectState>()?.unwrap_or_default(),
+            None => projects.get(account).cloned().unwrap_or_default(),
+        };
+        if let Some(project) = &state.project {
             return Ok(project.clone());
         }
+        // Recheck provisioning before recovering an operation, including after
+        // an ambiguous POST whose response could not be durably recorded.
         let load = self
             .rpc(
                 "loadCodeAssist",
@@ -108,8 +151,26 @@ impl AntigravityProvider {
                 .and_then(|tier| tier["id"].as_str())
                 .or_else(|| load["currentTier"]["id"].as_str())
                 .unwrap_or("free-tier");
-            let request=self.client.post(format!("{}/v1internal:onboardUser",self.base_url)).bearer_auth(&context.credentials.access_token).header("user-agent","google-api-nodejs-client/10.3.0").header("x-goog-api-client","gl-node/22.21.1").json(&json!({"tier_id":tier,"metadata":{"ide_type":"ANTIGRAVITY","ide_name":"antigravity","ide_version":"2.2.1"}}));
-            let mut operation = self.read_request(request, context).await?;
+            let mut operation = if let Some(name) = &state.operation {
+                json!({"name":name,"done":false})
+            } else {
+                if state.pending {
+                    return Err(ProviderError::Checkpoint("Antigravity onboarding has an unknown outcome; wait for provisioning and retry discovery; refusing another onboarding request".into()));
+                }
+                state.pending = true;
+                persist_project(&state, account, &mut projects, lock.as_ref())?;
+                let request=self.client.post(format!("{}/v1internal:onboardUser",self.base_url)).bearer_auth(&context.credentials.access_token).header("user-agent","google-api-nodejs-client/10.3.0").header("x-goog-api-client","gl-node/22.21.1").json(&json!({"tier_id":tier,"metadata":{"ide_type":"ANTIGRAVITY","ide_name":"antigravity","ide_version":"2.2.1"}}));
+                let operation = self.read_request(request, context).await?;
+                if operation["done"] != true {
+                    let name = operation["name"].as_str().ok_or_else(|| {
+                        ProviderError::Protocol("onboarding operation name missing".into())
+                    })?;
+                    validate_operation_name(name)?;
+                    state.operation = Some(name.to_owned());
+                    persist_project(&state, account, &mut projects, lock.as_ref())?;
+                }
+                operation
+            };
             let end = tokio::time::Instant::now() + Duration::from_secs(300);
             loop {
                 if operation.get("error").is_some() {
@@ -130,15 +191,7 @@ impl AntigravityProvider {
                         ProviderError::Protocol("onboarding operation name missing".into())
                     })?
                     .to_owned();
-                if !name.starts_with("operations/")
-                    || name.contains("..")
-                    || name.contains('?')
-                    || name.contains('#')
-                {
-                    return Err(ProviderError::Protocol(
-                        "invalid onboarding operation name".into(),
-                    ));
-                }
+                validate_operation_name(&name)?;
                 if tokio::time::Instant::now() >= end {
                     return Err(ProviderError::Transport(
                         "Antigravity onboarding timeout".into(),
@@ -158,9 +211,24 @@ impl AntigravityProvider {
                     .await?;
             }
         };
-        projects.insert(context.credentials.account_id.clone(), project.clone());
+        state.project = Some(project.clone());
+        state.pending = false;
+        state.operation = None;
+        persist_project(&state, account, &mut projects, lock.as_ref())?;
         Ok(project)
     }
+}
+fn validate_operation_name(name: &str) -> Result<()> {
+    if !name.starts_with("operations/")
+        || name.contains("..")
+        || name.contains('?')
+        || name.contains('#')
+    {
+        return Err(ProviderError::Protocol(
+            "invalid onboarding operation name".into(),
+        ));
+    }
+    Ok(())
 }
 fn extract_project(value: &Value) -> Option<String> {
     [
@@ -325,5 +393,158 @@ mod tests {
             Some("p".into())
         );
         assert_eq!(extract_project(&json!({"project":" "})), None);
+    }
+    async fn wait_for_pending_state(home: &std::path::Path, base_url: &str, operation: bool) {
+        let key = json!(("antigravity-project", base_url, "account-a")).to_string();
+        tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                if Store::new(home)
+                    .read::<ProjectState>(&key)
+                    .unwrap()
+                    .is_some_and(|state| state.pending && state.operation.is_some() == operation)
+                {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn cancelled_onboarding_operation_resumes_after_provider_restart_without_another_post() {
+        let server = MockServer::start().await;
+        let home = tempfile::tempdir().unwrap();
+        Mock::given(method("POST"))
+            .and(path("/v1internal:loadCodeAssist"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(json!({"allowedTiers":[{"id":"free-tier","isDefault":true}]})),
+            )
+            .expect(2)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/v1internal:onboardUser"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(json!({"name":"operations/provision-test","done":false})),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/v1internal/operations/provision-test"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(
+                    json!({"done":true,"response":{"project":"project-after-restart"}}),
+                ),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+        let provider = std::sync::Arc::new(
+            AntigravityProvider::with_base_url(Client::new(), server.uri())
+                .unwrap()
+                .with_state_home(home.path().to_owned()),
+        );
+        let ctx = context();
+        let task = {
+            let provider = provider.clone();
+            let ctx = ctx.clone();
+            tokio::spawn(async move { provider.discover_project(&ctx).await })
+        };
+        wait_for_pending_state(home.path(), &server.uri(), true).await;
+        ctx.cancellation.cancel();
+        assert!(matches!(task.await.unwrap(), Err(ProviderError::Cancelled)));
+        drop(provider);
+        let restarted = AntigravityProvider::with_base_url(Client::new(), server.uri())
+            .unwrap()
+            .with_state_home(home.path().to_owned());
+        assert_eq!(
+            restarted.discover_project(&context()).await.unwrap(),
+            "project-after-restart"
+        );
+        server.verify().await;
+    }
+
+    #[tokio::test]
+    async fn ambiguous_onboarding_post_is_fenced_across_restart_until_project_exists() {
+        let server = MockServer::start().await;
+        let home = tempfile::tempdir().unwrap();
+        Mock::given(method("POST"))
+            .and(path("/v1internal:loadCodeAssist"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({})))
+            .expect(2)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/v1internal:onboardUser"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_delay(Duration::from_secs(10))
+                    .set_body_json(json!({"name":"operations/unobserved","done":false})),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+        let provider = std::sync::Arc::new(
+            AntigravityProvider::with_base_url(Client::new(), server.uri())
+                .unwrap()
+                .with_state_home(home.path().to_owned()),
+        );
+        let ctx = context();
+        let task = {
+            let provider = provider.clone();
+            let ctx = ctx.clone();
+            tokio::spawn(async move { provider.discover_project(&ctx).await })
+        };
+        wait_for_pending_state(home.path(), &server.uri(), false).await;
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while !server
+                .received_requests()
+                .await
+                .unwrap()
+                .iter()
+                .any(|request| request.url.path() == "/v1internal:onboardUser")
+            {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+        ctx.cancellation.cancel();
+        assert!(matches!(task.await.unwrap(), Err(ProviderError::Cancelled)));
+        drop(provider);
+        let restarted = AntigravityProvider::with_base_url(Client::new(), server.uri())
+            .unwrap()
+            .with_state_home(home.path().to_owned());
+        assert!(
+            matches!(restarted.discover_project(&context()).await, Err(ProviderError::Checkpoint(message)) if message.contains("unknown outcome"))
+        );
+        server.verify().await;
+        server.reset().await;
+        Mock::given(method("POST"))
+            .and(path("/v1internal:loadCodeAssist"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(json!({"project":"provisioning-completed"})),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+        assert_eq!(
+            restarted.discover_project(&context()).await.unwrap(),
+            "provisioning-completed"
+        );
+        let key = json!(("antigravity-project", server.uri(), "account-a")).to_string();
+        let state = Store::new(home.path())
+            .read::<ProjectState>(&key)
+            .unwrap()
+            .unwrap();
+        assert!(!state.pending);
+        assert!(state.operation.is_none());
+        server.verify().await;
     }
 }
