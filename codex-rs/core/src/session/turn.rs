@@ -1707,10 +1707,8 @@ async fn run_sampling_request(
         // safely reconstruct that provider-owned state.
         if turn_context
             .provider
-            .info()
-            .wire_api
-            .native_provider_id()
-            .is_some()
+            .backend()
+            .is_some_and(|backend| !backend.session_capabilities().automatic_inference_retry)
         {
             return Err(err);
         }
@@ -2636,16 +2634,16 @@ async fn try_run_sampling_request(
             codex.usage.total_tokens = field::Empty,
         );
 
-        let native_results = stream.native_tool_results.clone();
+        let session_control = stream.session_control.clone();
         let event = tokio::select! {
-            result = in_flight.next(), if native_results.is_some() && !in_flight.is_empty() => {
+            result = in_flight.next(), if session_control.is_some() && !in_flight.is_empty() => {
                 match result {
                     Some(Ok(envelope)) => {
                         let mut result = match crate::native_provider::tool_result(&envelope.item) {
                             Ok(result) => result,
                             Err(error) => break Err(error),
                         };
-                        let structured = tool_runtime.take_native_output(&result.call_id);
+                        let execution = tool_runtime.take_execution_output(&result.call_id);
                         mark_thread_memory_mode_polluted_if_external_context(sess.as_ref(), turn_context.as_ref(), &envelope.item).await;
                         sess.record_annotated_conversation_items(&turn_context, &step_context.settings.model_info, vec![envelope]).await;
                         // History applies tool-specific truncation before the next
@@ -2658,13 +2656,14 @@ async fn try_run_sampling_request(
                             break Err(CodexErr::Stream("native tool output was not recorded in history".into()));
                         };
                         result.output = recorded.output;
-                        if let Some(structured) = structured {
-                            result.output = serde_json::json!({"codex_native_structured": structured, "codex_native_history": result.output});
+                        if execution.as_ref().is_some_and(|output| output.denied) {
+                            result.disposition = codex_provider_adapter::CompletionDisposition::Denied;
                         }
-                        let Some(native_results) = native_results else {
-                            break Err(CodexErr::Stream("native tool result channel missing".into()));
+                        result.structured = execution.map(|output| output.structured);
+                        let Some(control) = session_control else {
+                            break Err(CodexErr::Stream("session tool result channel missing".into()));
                         };
-                        if native_results.send(result).await.is_err() {
+                        if control.results.send(result).await.is_err() {
                             break Err(CodexErr::Stream("native provider closed while a tool was running".into()));
                         }
                         continue;
@@ -3039,7 +3038,12 @@ async fn try_run_sampling_request(
                 if let Some(false) = end_turn {
                     needs_follow_up = true;
                 }
-                if stream.native_tool_results.is_some() && end_turn == Some(true) {
+                if stream
+                    .session_control
+                    .as_ref()
+                    .is_some_and(|control| control.capabilities.terminal_completion)
+                    && end_turn == Some(true)
+                {
                     needs_follow_up = false;
                 }
                 break Ok(SamplingRequestResult {

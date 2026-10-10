@@ -3,16 +3,23 @@ use crate::backend::NativeBackend;
 use crate::host_operations;
 use codex_api::ResponseEvent;
 use codex_protocol::ResponseItemId;
-use codex_protocol::error::{CodexErr, Result};
-use codex_protocol::models::{ContentItem, ResponseItem};
+use codex_protocol::error::CodexErr;
+use codex_protocol::error::Result;
+use codex_protocol::models::ContentItem;
+use codex_protocol::models::ResponseItem;
 use codex_protocol::protocol::TokenUsage;
 use codex_provider_api as api;
+use codex_provider_runtime::ChannelHost;
+use codex_provider_runtime::HostCall;
 use codex_provider_runtime::SessionStore;
-use codex_provider_runtime::{ChannelHost, HostCall, TurnCheckpoint, validate_lineage};
-use serde_json::{Value, json};
+use codex_provider_runtime::TurnCheckpoint;
+use codex_provider_runtime::validate_lineage;
+use serde_json::Value;
+use serde_json::json;
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::mpsc;
+use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 
 #[derive(Clone, Default)]
@@ -538,10 +545,19 @@ pub async fn stream(
 
 #[cfg(test)]
 mod tests {
-    use super::{NativeBackend, Prompt, ResponseEvent, call_item, messages, tool_result, tools};
-    use codex_protocol::models::{FunctionCallOutputBody, FunctionCallOutputPayload, ResponseItem};
+    use super::NativeBackend;
+    use super::Prompt;
+    use super::ResponseEvent;
+    use super::call_item;
+    use super::messages;
+    use super::tool_result;
+    use super::tools;
+    use codex_protocol::models::FunctionCallOutputBody;
+    use codex_protocol::models::FunctionCallOutputPayload;
+    use codex_protocol::models::ResponseItem;
     use codex_provider_api as api;
-    use serde_json::{Value, json};
+    use serde_json::Value;
+    use serde_json::json;
     use std::sync::Arc;
 
     fn item(value: Value) -> ResponseItem {
