@@ -4,6 +4,9 @@ use codex_provider_auth::{
 };
 use serde_json::json;
 use std::collections::BTreeMap;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 use url::Url;
 use wiremock::matchers::{body_string_contains, method, path};
@@ -280,18 +283,153 @@ async fn reused_account_label_gets_new_identity_and_refresh_preserves_generation
     assert_eq!(store.status("provider-a").unwrap().unwrap().account, "Work");
 
     let refreshed = store
-        .credentials_with_refresh("provider-a", &cancellation, |old| async move {
-            Ok(TokenRecord {
-                access_token: "refreshed-access".into(),
-                refresh_token: old.refresh_token,
-                expires_at: None,
-                metadata: old.metadata,
-                revoked: false,
-            })
-        })
+        .credentials_with_refresh(
+            "provider-a",
+            &cancellation,
+            |old, _refresh_cancel| async move {
+                Ok(TokenRecord {
+                    access_token: "refreshed-access".into(),
+                    refresh_token: old.refresh_token,
+                    expires_at: None,
+                    metadata: old.metadata,
+                    revoked: false,
+                })
+            },
+        )
         .await
         .unwrap();
     assert_eq!(refreshed.account_id, second_identity);
+}
+
+#[tokio::test]
+async fn caller_cancellation_does_not_abort_an_accepted_refresh_rotation() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/token"))
+        .and(body_string_contains("\"refresh_token\":\"old-refresh\""))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_delay(Duration::from_millis(200))
+                .set_body_json(json!({
+                    "access_token":"rotated-access",
+                    "refresh_token":"rotated-refresh",
+                    "expires_in":3600
+                })),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let root = tempfile::tempdir().unwrap();
+    let store = AuthStore::new(root.path());
+    let record = TokenRecord {
+        access_token: "expired-access".into(),
+        refresh_token: Some("old-refresh".into()),
+        expires_at: Some(0),
+        metadata: json!({"tenant":"retained"}),
+        revoked: false,
+    };
+    let initial_cancel = CancellationToken::new();
+    store
+        .login("provider-a", "Display", record, &initial_cancel)
+        .await
+        .unwrap();
+    let stable_identity = store.identity("provider-a").unwrap().unwrap();
+
+    let caller_cancel = CancellationToken::new();
+    let refresh_store = store.clone();
+    let refresh_cancel = caller_cancel.clone();
+    let refresh_config = config(&server.uri());
+    let caller = tokio::spawn(async move {
+        refresh_store
+            .credentials("provider-a", Some(&refresh_config), &refresh_cancel)
+            .await
+    });
+    tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            if !server.received_requests().await.unwrap().is_empty() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .expect("refresh request was accepted by the mock endpoint");
+    caller_cancel.cancel();
+    assert!(matches!(
+        caller.await.unwrap(),
+        Err(ProviderError::Cancelled)
+    ));
+
+    let completed = store
+        .credentials(
+            "provider-a",
+            Some(&config(&server.uri())),
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(completed.access_token, "rotated-access");
+    assert_eq!(completed.account_id, stable_identity);
+    assert_eq!(
+        store.identity("provider-a").unwrap().unwrap(),
+        stable_identity
+    );
+    assert_eq!(server.received_requests().await.unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn ambiguous_refresh_error_is_persisted_and_never_retried_automatically() {
+    let root = tempfile::tempdir().unwrap();
+    let store = AuthStore::new(root.path());
+    let cancellation = CancellationToken::new();
+    store
+        .login(
+            "provider-a",
+            "Display",
+            TokenRecord {
+                access_token: "expired-access".into(),
+                refresh_token: Some("possibly-used".into()),
+                expires_at: Some(0),
+                metadata: json!({}),
+                revoked: false,
+            },
+            &cancellation,
+        )
+        .await
+        .unwrap();
+
+    let first = store
+        .credentials_with_refresh(
+            "provider-a",
+            &cancellation,
+            |_record, _refresh_cancel| async {
+                Err(ProviderError::Transport(
+                    "connection lost after refresh may have been accepted".into(),
+                ))
+            },
+        )
+        .await;
+    assert!(matches!(first, Err(ProviderError::Transport(_))));
+
+    let invoked = Arc::new(AtomicBool::new(false));
+    let refresh_invoked = Arc::clone(&invoked);
+    let second = store
+        .credentials_with_refresh(
+            "provider-a",
+            &cancellation,
+            move |_record, _refresh_cancel| async move {
+                refresh_invoked.store(true, Ordering::SeqCst);
+                Err(ProviderError::Transport("must not run".into()))
+            },
+        )
+        .await;
+    assert!(matches!(
+        second,
+        Err(ProviderError::Authentication(message))
+            if message.contains("previous refresh was interrupted")
+    ));
+    assert!(!invoked.load(Ordering::SeqCst));
 }
 
 #[cfg(unix)]
