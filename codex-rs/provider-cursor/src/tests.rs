@@ -282,7 +282,7 @@ async fn bidirectional_h2_tools_blob_ack_checkpoint_and_duplicate_redelivery() {
             Some(Event::Checkpoint(checkpoint)) => checkpoints.push(checkpoint),
             Some(Event::ToolCall(call)) => {
                 calls += 1;
-                assert_eq!(call.arguments, json!({"count":7.0}));
+                assert_eq!(call.arguments, json!({"count":7}));
                 assert!(
                     checkpoints.last().unwrap().state["executions"]["call-3"]["result"].is_null()
                 );
@@ -391,7 +391,7 @@ fn cursor_arg_wire_formats_keep_numbers_booleans_arrays_and_json_strings() {
     .collect();
     assert_eq!(
         decode_args(args).unwrap(),
-        json!({"number":3.0,"boolean":false,"array":[1.0,"two"],"json":{"key":true},"string":"hello"})
+        json!({"number":3,"boolean":false,"array":[1,"two"],"json":{"key":true},"string":"hello"})
     );
 }
 
@@ -706,4 +706,35 @@ fn nested_protobuf_strings_keep_their_original_types() {
     let value = json!({"number_text":"123","boolean_text":"true","json_text":"{\"a\":1}","values":["false","null","42"]});
     assert_eq!(from_value(json_value(&value)).unwrap(), value);
     assert_eq!(from_value(json_value(&json!("123"))).unwrap(), json!(123));
+}
+
+#[test]
+fn protobuf_integral_numbers_deserialize_into_integer_host_fields() {
+    #[derive(serde::Deserialize)]
+    struct HostArgs {
+        yield_time_ms: u64,
+        delta: i64,
+        ratio: f64,
+    }
+    let args = decode_args(
+        [
+            (
+                "yield_time_ms".into(),
+                json_value(&json!(1000)).encode_to_vec(),
+            ),
+            ("delta".into(), json_value(&json!(-2)).encode_to_vec()),
+            ("ratio".into(), json_value(&json!(0.5)).encode_to_vec()),
+        ]
+        .into_iter()
+        .collect(),
+    )
+    .unwrap();
+    assert_eq!(
+        args.to_string(),
+        "{\"delta\":-2,\"ratio\":0.5,\"yield_time_ms\":1000}"
+    );
+    let host: HostArgs = serde_json::from_value(args).unwrap();
+    assert_eq!(host.yield_time_ms, 1000);
+    assert_eq!(host.delta, -2);
+    assert_eq!(host.ratio, 0.5);
 }

@@ -574,9 +574,20 @@ fn from_value_at(value: prost_types::Value, top_level: bool) -> Result<Value> {
     Ok(match value.kind {
         Some(Kind::NullValue(_)) => Value::Null,
         Some(Kind::BoolValue(value)) => Value::Bool(value),
-        Some(Kind::NumberValue(value)) => serde_json::Number::from_f64(value)
-            .map(Value::Number)
-            .ok_or_else(|| ProviderError::Protocol("nonfinite Cursor tool argument".into()))?,
+        Some(Kind::NumberValue(value)) => {
+            // Protobuf Value stores every number as a double. Preserve integer
+            // JSON syntax for exactly representable values so host tools with
+            // integer fields accept the same values as the reference JS codec.
+            if value.fract() == 0.0 && value.abs() <= 9_007_199_254_740_991.0 {
+                Value::Number(serde_json::Number::from(value as i64))
+            } else {
+                serde_json::Number::from_f64(value)
+                    .map(Value::Number)
+                    .ok_or_else(|| {
+                        ProviderError::Protocol("nonfinite Cursor tool argument".into())
+                    })?
+            }
+        }
         Some(Kind::StringValue(value)) => {
             if top_level {
                 serde_json::from_str(&value).unwrap_or(Value::String(value))
