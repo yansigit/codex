@@ -34,21 +34,31 @@ class NativeProviderArchitectureTests(unittest.TestCase):
                     "id": hook_id,
                     "path": architecture.REQUIRED_HOOK_PATHS[hook_id],
                     "purpose": "test hook",
+                    "regression_test_group": "control",
                 }
             )
         integration_file = self.root / "codex-rs/integration.rs"
         integration_file.parent.mkdir(parents=True, exist_ok=True)
         integration_file.write_text("fn route_provider() {}\n")
+        registry_source = self.root / "codex-rs/providers/registry.rs"
+        registry_source.write_text(
+            "pub static CURSOR: Descriptor = Descriptor {\n"
+            '    id: "cursor",\n};\n'
+            "pub static CLAUDE: Descriptor = Descriptor {\n"
+            '    id: "claude",\n};\n'
+        )
         self.manifest = {
             "schema_version": 1,
             "owned_root": "codex-rs/providers",
+            "registry_metadata_source": "codex-rs/providers/registry.rs",
             "subsystem_packages": ["codex-provider-runtime"],
             "adapter_package": "codex-provider-adapter",
+            "focused_test_groups": [{"name": "control", "minimum_tests": 1}],
             "integration_hooks": hooks,
             "provider_branch_scan": {
                 "paths": ["codex-rs/integration.rs"],
                 "allowed_compatibility_paths": [],
-                "provider_ids": ["cursor", "opencode-go", "claude", "antigravity"],
+                "provider_ids": ["cursor", "claude"],
                 "provider_symbols": ["WireApi::Cursor", "codex_provider_cursor"],
             },
         }
@@ -61,7 +71,7 @@ class NativeProviderArchitectureTests(unittest.TestCase):
                 package(
                     "codex-provider-adapter",
                     str(self.root / "codex-rs/providers/adapter/Cargo.toml"),
-                    ["codex-core", "codex-config", "codex-provider-runtime"],
+                    ["codex-config", "codex-provider-runtime"],
                 ),
                 package("codex-core", str(self.root / "codex-rs/core/Cargo.toml")),
                 package("codex-config", str(self.root / "codex-rs/config/Cargo.toml")),
@@ -75,25 +85,128 @@ class NativeProviderArchitectureTests(unittest.TestCase):
         self.temporary.cleanup()
 
     def test_adapter_may_depend_on_upstream_while_subsystem_stays_owned(self) -> None:
-        self.assertEqual(architecture.validate(self.metadata, self.manifest, self.root), [])
+        self.assertEqual(
+            architecture.validate(self.metadata, self.manifest, self.root), []
+        )
 
     def test_subsystem_upstream_dependency_is_rejected(self) -> None:
         self.metadata["packages"][0]["dependencies"] = [{"name": "codex-core"}]
         errors = architecture.validate(self.metadata, self.manifest, self.root)
-        self.assertTrue(any("subsystem package codex-provider-runtime" in error for error in errors))
-        self.assertTrue(any("must not depend on codex-core" in error for error in errors))
+        self.assertTrue(
+            any("owned package codex-provider-runtime" in error for error in errors)
+        )
+        self.assertTrue(any("reaches codex-core" in error for error in errors))
 
-    def test_new_upstream_workspace_dependency_is_rejected_from_metadata_paths(self) -> None:
+    def test_adapter_may_not_depend_on_codex_core(self) -> None:
+        adapter = next(
+            package
+            for package in self.metadata["packages"]
+            if package["name"] == "codex-provider-adapter"
+        )
+        adapter["dependencies"] = [{"name": "codex-core"}]
+        errors = architecture.validate(self.metadata, self.manifest, self.root)
+        self.assertTrue(any("reaches codex-core" in error for error in errors))
+
+    def test_subsystem_closure_cannot_reach_upstream_through_adapter(self) -> None:
+        self.metadata["packages"][0]["dependencies"] = [
+            {"name": "codex-provider-adapter"}
+        ]
+        adapter = next(
+            package
+            for package in self.metadata["packages"]
+            if package["name"] == "codex-provider-adapter"
+        )
+        adapter["dependencies"] = [{"name": "codex-config"}]
+        errors = architecture.validate(self.metadata, self.manifest, self.root)
+        self.assertTrue(
+            any("codex-provider-runtime reaches upstream" in error for error in errors)
+        )
+
+    def test_new_upstream_workspace_dependency_is_rejected_from_metadata_paths(
+        self,
+    ) -> None:
         self.metadata["packages"][0]["dependencies"] = [{"name": "codex-config"}]
         errors = architecture.validate(self.metadata, self.manifest, self.root)
         self.assertTrue(any("codex-config" in error for error in errors))
 
+    def test_newly_named_upstream_workspace_package_is_rejected(self) -> None:
+        new_package = package(
+            "codex-new-integration",
+            str(self.root / "codex-rs/new-integration/Cargo.toml"),
+        )
+        self.metadata["packages"].append(new_package)
+        self.metadata["workspace_members"].append(new_package["id"])
+        self.metadata["packages"][0]["dependencies"] = [
+            {"name": "codex-new-integration"}
+        ]
+        errors = architecture.validate(self.metadata, self.manifest, self.root)
+        self.assertTrue(any("codex-new-integration" in error for error in errors))
+
     def test_provider_specific_execution_branch_is_rejected(self) -> None:
         (self.root / "codex-rs/integration.rs").write_text(
-            'if request.provider == "cursor" { route_cursor(); }\n'
+            'if request\n    .provider\n    == "cursor" {\n    route_cursor();\n}\n'
         )
         errors = architecture.validate(self.metadata, self.manifest, self.root)
-        self.assertTrue(any("provider-specific execution branch" in error for error in errors))
+        self.assertTrue(
+            any("provider-specific execution branch" in error for error in errors)
+        )
+
+    def test_provider_match_arms_and_multiline_legacy_variants_are_rejected(
+        self,
+    ) -> None:
+        integration = self.root / "codex-rs/integration.rs"
+        integration.write_text(
+            "match backend.provider_id() {\n"
+            '    "claude" => use_claude(),\n'
+            "    _ => use_default(),\n}\n"
+        )
+        errors = architecture.validate(self.metadata, self.manifest, self.root)
+        self.assertTrue(
+            any("provider-specific execution branch" in error for error in errors)
+        )
+        integration.write_text(
+            "if matches!(\n"
+            "    provider_kind,\n"
+            '    "claude"\n'
+            ") {\n"
+            "    use_claude();\n}\n"
+        )
+        errors = architecture.validate(self.metadata, self.manifest, self.root)
+        self.assertTrue(
+            any("provider-specific execution branch" in error for error in errors)
+        )
+        integration.write_text(
+            "match wire_api {\n"
+            "    WireApi\n"
+            "        :: Cursor => route_cursor(),\n"
+            "    _ => route_default(),\n}\n"
+        )
+        errors = architecture.validate(self.metadata, self.manifest, self.root)
+        self.assertTrue(
+            any("provider-specific execution branch" in error for error in errors)
+        )
+
+    def test_new_registry_provider_is_scanned_and_must_be_listed(self) -> None:
+        registry = self.root / "codex-rs/providers/registry.rs"
+        registry.write_text(
+            registry.read_text()
+            + "pub static FUTURE: Descriptor = Descriptor {\n"
+            + '    id: "future-provider",\n};\n'
+        )
+        errors = architecture.validate(self.metadata, self.manifest, self.root)
+        self.assertTrue(
+            any("must exactly match registry descriptors" in error for error in errors)
+        )
+        self.manifest["provider_branch_scan"]["provider_ids"].append("future-provider")
+        (self.root / "codex-rs/integration.rs").write_text(
+            "match backend.provider_id() {\n"
+            '    "future-provider" => route_future(),\n'
+            "    _ => route_default(),\n}\n"
+        )
+        errors = architecture.validate(self.metadata, self.manifest, self.root)
+        self.assertTrue(
+            any("provider-specific execution branch" in error for error in errors)
+        )
 
     def test_unmanifested_owned_package_is_rejected(self) -> None:
         self.metadata["packages"].append(
@@ -130,6 +243,31 @@ class NativeProviderArchitectureTests(unittest.TestCase):
         hook["path"] = "codex-rs/integration.rs"
         errors = architecture.validate(self.metadata, self.manifest, self.root)
         self.assertTrue(any("must remain at" in error for error in errors))
+
+    def test_hook_regression_coverage_is_required_and_must_name_a_test_group(
+        self,
+    ) -> None:
+        hook = next(
+            hook
+            for hook in self.manifest["integration_hooks"]
+            if hook["id"] == "client-session-control"
+        )
+        hook.pop("regression_test_group")
+        errors = architecture.validate(self.metadata, self.manifest, self.root)
+        self.assertTrue(
+            any("missing regression_test_group" in error for error in errors)
+        )
+        hook["regression_test_group"] = "untracked-test-group"
+        errors = architecture.validate(self.metadata, self.manifest, self.root)
+        self.assertTrue(
+            any("unknown regression test group" in error for error in errors)
+        )
+        hook["regression_test_group"] = "control"
+        self.manifest["focused_test_groups"][0]["minimum_tests"] = 0
+        errors = architecture.validate(self.metadata, self.manifest, self.root)
+        self.assertTrue(
+            any("must require at least one test" in error for error in errors)
+        )
 
 
 if __name__ == "__main__":

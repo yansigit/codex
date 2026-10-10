@@ -30,19 +30,65 @@ REQUIRED_HOOK_PATHS = {
     "generic-cli-metadata-choices": "codex-rs/cli/src/provider_cmd.rs",
 }
 
+
 def provider_branch_patterns(provider_ids: list[str], provider_symbols: list[str]):
-    id_pattern = "(?:" + "|".join(re.escape(value) for value in provider_ids) + ")"
-    symbol_pattern = "(?:" + "|".join(re.escape(value) for value in provider_symbols) + ")"
-    return (
-        re.compile(
-            r"\b(?:if|else\s+if|match)\b[^;{}\n]*\b(?:provider|wire_api|backend)\b"
-            + r"[^;{}\n]*\b"
-            + id_pattern
-            + r"\b",
-            re.IGNORECASE,
-        ),
-        re.compile(r"\b" + symbol_pattern + r"\b"),
+    literals = "(?:" + "|".join(re.escape(value) for value in provider_ids) + ")"
+    variables = r"(?:provider(?:_id|_name|_kind)?|wire_api(?:_type)?|backend|id)"
+    quoted_id = r"(?:\"|')" + literals + r"(?:\"|')"
+    comparisons = re.compile(
+        r"(?is)\b(?:if|else\s+if|while)\b.{0,700}?\b"
+        + variables
+        + r"\b.{0,300}?(?:==|matches!\s*\().{0,200}?"
+        + quoted_id
     )
+    reversed_comparisons = re.compile(
+        r"(?is)\b(?:if|else\s+if|while)\b.{0,700}?"
+        + quoted_id
+        + r".{0,200}?(?:==).{0,200}?\b"
+        + variables
+        + r"\b"
+    )
+    matches_macro = re.compile(
+        r"(?is)matches!\s*\(\s*.{0,200}?\b"
+        + variables
+        + r"\b.{0,100}?[,)]\s*"
+        + quoted_id
+    )
+    match_arms = re.compile(
+        r"(?is)\bmatch\b[^{};]{0,500}?\b"
+        + variables
+        + r"\b[^{};]{0,300}?\{[^{}]{0,1200}?"
+        + quoted_id
+        + r"\s*=>"
+    )
+    symbols = []
+    for symbol in provider_symbols:
+        if "::" in symbol:
+            prefix, variant = symbol.split("::", 1)
+            symbols.append(re.escape(prefix) + r"\s*::\s*" + re.escape(variant))
+        else:
+            symbols.append(re.escape(symbol))
+    symbol_pattern = re.compile(r"\b(?:" + "|".join(symbols) + r")\b")
+    return comparisons, reversed_comparisons, matches_macro, match_arms, symbol_pattern
+
+
+def registered_provider_ids(root: Path, manifest: dict[str, Any]) -> set[str]:
+    relative_path = manifest.get("registry_metadata_source")
+    if not isinstance(relative_path, str):
+        return set()
+    source_path = root / relative_path
+    if not source_path.is_file():
+        return set()
+    source = source_path.read_text()
+    descriptor_pattern = re.compile(
+        r"pub\s+static\s+\w+\s*:\s*Descriptor\s*=\s*Descriptor\s*\{(.*?)\n\};",
+        re.DOTALL,
+    )
+    return {
+        match.group(1)
+        for descriptor in descriptor_pattern.findall(source)
+        if (match := re.search(r'\bid\s*:\s*"([^"]+)"', descriptor))
+    }
 
 
 def load_metadata(metadata_path: Path | None) -> dict[str, Any]:
@@ -82,15 +128,11 @@ def validate(
         errors.append("adapter_package must not also appear in subsystem_packages")
     packages = metadata.get("packages", [])
     by_name: dict[str, list[dict[str, Any]]] = {}
+    by_id = {package["id"]: package for package in packages}
     for package in packages:
         by_name.setdefault(package["name"], []).append(package)
 
     owned_root = (root / manifest["owned_root"]).resolve()
-    workspace_member_ids = set(metadata.get("workspace_members", []))
-    workspace_packages = [
-        package for package in packages if package.get("id") in workspace_member_ids
-    ]
-    workspace_by_name = {package["name"]: package for package in workspace_packages}
     expected_owned = set(subsystem) | ({adapter} if isinstance(adapter, str) else set())
     actual_owned: set[str] = set()
     for package in packages:
@@ -111,36 +153,117 @@ def validate(
             errors.append(f"unmanifested package under owned provider root: {name}")
     for name in sorted(expected_owned - actual_owned):
         if name in by_name:
-            errors.append(f"provider package is outside owned root {owned_root}: {name}")
+            errors.append(
+                f"provider package is outside owned root {owned_root}: {name}"
+            )
 
-    for name in sorted(set(subsystem) & set(by_name)):
-        for package in by_name[name]:
-            for dependency in package["dependencies"]:
-                workspace_dependency = workspace_by_name.get(dependency["name"])
-                dependency_path = dependency.get("path")
-                if workspace_dependency is not None:
-                    dependency_path = workspace_dependency["manifest_path"]
-                if dependency["name"] == "codex-core":
-                    errors.append(f"subsystem package {name} must not depend on codex-core")
-                if not dependency_path:
-                    continue
+    graph: dict[str, set[str]] = {package["id"]: set() for package in packages}
+    outside_path_edges: dict[tuple[str, str], str] = {}
+    for package in packages:
+        for dependency in package.get("dependencies", []):
+            dependency_name = dependency.get("name")
+            candidates = by_name.get(dependency_name, [])
+            dependency_path = dependency.get("path")
+            if dependency_path:
                 resolved_dependency_path = Path(dependency_path).resolve()
-                try:
-                    resolved_dependency_path.relative_to(owned_root)
-                except ValueError:
-                    errors.append(
-                        f"subsystem package {name} directly depends on upstream workspace "
-                        f"package {dependency['name']} at {resolved_dependency_path}"
+                path_candidates = [
+                    candidate
+                    for candidate in candidates
+                    if (
+                        Path(candidate["manifest_path"]).resolve()
+                        == resolved_dependency_path
+                        or Path(candidate["manifest_path"]).resolve().parent
+                        == resolved_dependency_path
                     )
+                ]
+                if path_candidates:
+                    candidates = path_candidates
+                elif not resolved_dependency_path.is_relative_to(owned_root):
+                    outside_path_edges[(package["id"], dependency_name)] = str(
+                        resolved_dependency_path
+                    )
+            elif dependency.get("source") is not None:
+                candidates = []
+            for candidate in candidates:
+                graph.setdefault(package["id"], set()).add(candidate["id"])
+
+    # Cargo's resolved nodes include renamed dependencies and package identities;
+    # include those edges as well as every declared dependency (including optional
+    # and target-specific edges, which may not be active in metadata's resolution).
+    for node in (metadata.get("resolve") or {}).get("nodes", []):
+        package_id = node.get("id")
+        if package_id not in by_id:
+            continue
+        for dependency in node.get("deps", []):
+            dependency_id = dependency.get("pkg")
+            if dependency_id in by_id:
+                graph.setdefault(package_id, set()).add(dependency_id)
+
+    for root_name in sorted(expected_owned):
+        if root_name not in by_name:
+            continue
+        allowed_upstream = root_name == adapter
+        for root_package in by_name[root_name]:
+            stack: list[tuple[str, tuple[str, ...]]] = [
+                (root_package["id"], (root_package["name"],))
+            ]
+            visited: set[str] = set()
+            while stack:
+                package_id, chain = stack.pop()
+                if package_id in visited:
+                    continue
+                visited.add(package_id)
+                package = by_id.get(package_id)
+                if package is None:
+                    continue
+                package_path = Path(package["manifest_path"]).resolve()
+                package_name = package["name"]
+                is_inside_owned_root = package_path.is_relative_to(owned_root)
+                if package_name == "codex-core":
+                    errors.append(
+                        f"owned package {root_name} reaches codex-core through "
+                        + " -> ".join(chain)
+                    )
+                    continue
+                if not is_inside_owned_root and not allowed_upstream:
+                    errors.append(
+                        f"subsystem package {root_name} reaches upstream workspace "
+                        f"package {package_name} through " + " -> ".join(chain)
+                    )
+                    continue
+                for dependency_id in sorted(graph.get(package_id, set())):
+                    dependency_package = by_id[dependency_id]
+                    stack.append((dependency_id, (*chain, dependency_package["name"])))
+                for (source_id, dependency_name), path in outside_path_edges.items():
+                    if source_id == package_id and not allowed_upstream:
+                        errors.append(
+                            f"subsystem package {root_name} reaches upstream path "
+                            f"dependency {dependency_name} through "
+                            + " -> ".join((*chain, f"{dependency_name} ({path})"))
+                        )
 
     branch_scan = manifest.get("provider_branch_scan", {})
     scan_paths = branch_scan.get("paths", [])
     compatibility_paths = set(branch_scan.get("allowed_compatibility_paths", []))
     provider_ids = branch_scan.get("provider_ids", [])
-    provider_symbols = branch_scan.get("provider_symbols", [])
+    provider_symbols = list(branch_scan.get("provider_symbols", []))
+    provider_symbols.extend(
+        f"codex_provider_{provider_id.replace('-', '_')}"
+        for provider_id in provider_ids
+    )
     if not scan_paths or not provider_ids or not provider_symbols:
         errors.append(
             "provider_branch_scan must name scan paths, provider_ids, and provider_symbols"
+        )
+    source_ids = registered_provider_ids(root, manifest)
+    if not source_ids:
+        errors.append(
+            "registry metadata source is missing or has no provider descriptors"
+        )
+    elif set(provider_ids) != source_ids:
+        errors.append(
+            "provider_branch_scan.provider_ids must exactly match registry descriptors; "
+            f"declared={sorted(provider_ids)}, registered={sorted(source_ids)}"
         )
     branch_patterns = (
         provider_branch_patterns(provider_ids, provider_symbols)
@@ -156,19 +279,45 @@ def validate(
             continue
         source = path.read_text()
         if any(pattern.search(source) for pattern in branch_patterns):
-            errors.append(f"provider-specific execution branch found outside registry: {scan_path}")
+            errors.append(
+                f"provider-specific execution branch found outside registry: {scan_path}"
+            )
 
+    focused_test_groups = {
+        group.get("name"): group
+        for group in manifest.get("focused_test_groups", [])
+        if isinstance(group, dict) and isinstance(group.get("name"), str)
+    }
     hook_ids: set[str] = set()
     for hook in manifest.get("integration_hooks", []):
         hook_id = hook.get("id")
         hook_path = hook.get("path")
         if not hook_id or hook_id in hook_ids:
-            errors.append(f"integration hook has a missing or duplicate id: {hook_id!r}")
+            errors.append(
+                f"integration hook has a missing or duplicate id: {hook_id!r}"
+            )
         hook_ids.add(hook_id)
         if not isinstance(hook_path, str) or not (root / hook_path).is_file():
             errors.append(f"integration hook path is missing: {hook_path!r}")
         if not hook.get("purpose"):
             errors.append(f"integration hook {hook_id!r} is missing its purpose")
+        regression_group = hook.get("regression_test_group")
+        if not isinstance(regression_group, str) or not regression_group:
+            errors.append(
+                f"integration hook {hook_id!r} is missing regression_test_group"
+            )
+        elif regression_group not in focused_test_groups:
+            errors.append(
+                f"integration hook {hook_id!r} names unknown regression test group "
+                f"{regression_group!r}"
+            )
+        else:
+            minimum_tests = focused_test_groups[regression_group].get("minimum_tests")
+            if not isinstance(minimum_tests, int) or minimum_tests < 1:
+                errors.append(
+                    f"integration hook {hook_id!r} regression test group "
+                    f"{regression_group!r} must require at least one test"
+                )
     missing_hooks = sorted(set(REQUIRED_HOOK_PATHS) - hook_ids)
     if missing_hooks:
         errors.append(
@@ -215,7 +364,9 @@ def main() -> int:
             print(f"- {error}", file=sys.stderr)
         return 1
     print("native provider package ownership and dependency boundaries are valid")
-    print(f"checked {len(manifest['subsystem_packages'])} subsystem packages and adapter")
+    print(
+        f"checked {len(manifest['subsystem_packages'])} subsystem packages and adapter"
+    )
     return 0
 
 
