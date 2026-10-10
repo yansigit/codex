@@ -20,7 +20,9 @@ pub(crate) fn checkpoint(request: &Request, assistant: &Message) -> Result<Check
         })
         .map(|(index, message)| json!({"index":index,"message":message}))
         .collect::<Vec<_>>();
-    let state = json!({"prefix_len":request.messages.len(),"assistant":assistant,"replay":replay});
+    let mut canonical_history = request.messages.clone();
+    canonical_history.push(assistant.clone());
+    let state = json!({"prefix_len":request.messages.len(),"assistant":assistant,"replay":replay,"canonical_history":canonical_history});
     if state.to_string().len() > 16 * 1024 * 1024 {
         return Err(ProviderError::Checkpoint(
             "signed replay exceeds 16 MiB".into(),
@@ -89,6 +91,29 @@ pub fn restore_checkpoint(request: &mut Request) -> Result<()> {
         .as_u64()
         .and_then(|n| usize::try_from(n).ok())
         .ok_or_else(|| ProviderError::Checkpoint("invalid prefix length".into()))?;
+    // The core host independently binds its exact persisted history, which can
+    // differ from native wire history after parallel execution or tool adapters.
+    // This marker is supplied only after that host-side lineage validation.
+    if let Some(host_prefix) = request.metadata.get("host_checkpoint_prefix") {
+        let host_prefix = host_prefix
+            .as_u64()
+            .and_then(|value| usize::try_from(value).ok())
+            .ok_or_else(|| ProviderError::Checkpoint("invalid verified host prefix".into()))?;
+        let mut canonical: Vec<Message> =
+            serde_json::from_value(checkpoint.state["canonical_history"].clone()).map_err(
+                |_| ProviderError::Checkpoint("native canonical checkpoint history missing".into()),
+            )?;
+        if host_prefix > request.messages.len()
+            || canonical.len() != prefix_len.saturating_add(1)
+            || hash(request, &canonical[..prefix_len])? != checkpoint.context_hash
+        {
+            return Err(ProviderError::Checkpoint(
+                "verified native checkpoint history mismatch".into(),
+            ));
+        }
+        canonical.extend_from_slice(&request.messages[host_prefix..]);
+        request.messages = canonical;
+    }
     if prefix_len > request.messages.len()
         || hash(request, &request.messages[..prefix_len])? != checkpoint.context_hash
     {

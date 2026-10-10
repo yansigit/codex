@@ -499,6 +499,83 @@ fn checkpoint_accepts_parallel_tool_completion_order_but_rejects_changed_results
     assert!(restore_checkpoint(&mut changed).is_err());
 }
 #[test]
+fn host_verified_prefix_restores_native_history_after_interleaved_results() {
+    let mut native = request("claude");
+    let first = ToolCall {
+        id: "first".into(),
+        name: "read".into(),
+        arguments: json!({"path":"a"}),
+    };
+    let second = ToolCall {
+        id: "second".into(),
+        name: "read".into(),
+        arguments: json!({"path":"b"}),
+    };
+    let first_result = ToolResult {
+        call_id: "first".into(),
+        output: json!("a"),
+        is_error: false,
+    };
+    let second_result = ToolResult {
+        call_id: "second".into(),
+        output: json!("b"),
+        is_error: false,
+    };
+    native.messages.push(Message { role: Role::Assistant, content: vec![Content::ToolCall(first.clone()), Content::ToolCall(second.clone()), Content::Opaque { namespace: native.namespace.clone(), value: json!({"anthropic_blocks":[{"type":"tool_use","id":"first","name":"Read","input":{"path":"a"}},{"type":"tool_use","id":"second","name":"Read","input":{"path":"b"}}]}) }] });
+    native.messages.push(Message {
+        role: Role::Tool,
+        content: vec![
+            Content::ToolResult(first_result.clone()),
+            Content::ToolResult(second_result.clone()),
+        ],
+    });
+    let final_message = Message {
+        role: Role::Assistant,
+        content: vec![Content::Text {
+            text: "done".into(),
+        }],
+    };
+    let checkpoint = crate::replay::checkpoint(&native, &final_message).unwrap();
+    let mut host = request("claude");
+    host.messages.extend([
+        Message {
+            role: Role::Assistant,
+            content: vec![Content::ToolCall(first)],
+        },
+        Message {
+            role: Role::Tool,
+            content: vec![Content::ToolResult(first_result)],
+        },
+        Message {
+            role: Role::Assistant,
+            content: vec![Content::ToolCall(second)],
+        },
+        Message {
+            role: Role::Tool,
+            content: vec![Content::ToolResult(second_result)],
+        },
+        final_message.clone(),
+    ]);
+    host.checkpoint = Some(checkpoint);
+    let host_prefix = host.messages.len();
+    let next_user = Message {
+        role: Role::User,
+        content: vec![Content::Text {
+            text: "next turn".into(),
+        }],
+    };
+    host.messages.push(next_user.clone());
+    assert!(restore_checkpoint(&mut host.clone()).is_err());
+    host.metadata["host_checkpoint_prefix"] = json!(host_prefix);
+    let mut corrupt = host.clone();
+    corrupt.checkpoint.as_mut().unwrap().state["canonical_history"][0]["content"][0]["text"] =
+        json!("changed");
+    assert!(restore_checkpoint(&mut corrupt).is_err());
+    restore_checkpoint(&mut host).unwrap();
+    native.messages.extend([final_message, next_user]);
+    assert_eq!(host.messages, native.messages);
+}
+#[test]
 fn chat_assistant_history_uses_plain_text_and_deepseek_thinking_enablement() {
     let mut req = request("opencode-go");
     req.reasoning_effort = Some("high".into());
