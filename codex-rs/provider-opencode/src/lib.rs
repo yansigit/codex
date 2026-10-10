@@ -58,7 +58,7 @@ impl Provider for OpenCodeProvider {
                     id: model["id"].as_str().unwrap_or_default().into(),
                     name: model["name"].as_str().unwrap_or_default().into(),
                     context_window: model["context_window"].as_u64(),
-                    supports_images: None,
+                    supports_images: model["supports_images"].as_bool(),
                 })
                 .collect())
         })
@@ -126,6 +126,39 @@ mod tests {
     use serde_json::json;
     use wiremock::matchers::{body_partial_json, header, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
+    #[tokio::test]
+    async fn catalog_preserves_model_specific_image_capabilities() {
+        let models = OpenCodeProvider::default()
+            .models(Context {
+                credentials: Credentials {
+                    access_token: "fixture-key".into(),
+                    account_id: "account-a".into(),
+                    metadata: json!({}),
+                },
+                cancellation: Default::default(),
+            })
+            .await
+            .unwrap();
+        assert!(models.iter().all(|model| model.supports_images.is_some()));
+        for (id, supports_images) in [
+            ("glm-5.3", false),
+            ("deepseek-v4-flash", false),
+            ("deepseek-v4-flash-vision-exp", true),
+            ("minimax-m3", true),
+            ("gpt-6-luna", true),
+        ] {
+            assert_eq!(
+                models
+                    .iter()
+                    .find(|model| model.id == id)
+                    .unwrap()
+                    .supports_images,
+                Some(supports_images),
+                "{id}"
+            );
+        }
+    }
+
     #[tokio::test]
     async fn verified_model_families_use_native_v1_paths_and_session_header() {
         for (model, endpoint, key_header, key_value) in [
