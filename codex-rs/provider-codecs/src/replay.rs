@@ -38,6 +38,7 @@ fn public_message(message: &Message) -> Message {
     for block in &message.content {
         let block = match block {
             Content::Opaque { .. } => continue,
+            Content::Text { text } | Content::Thinking { text, .. } if text.is_empty() => continue,
             Content::Thinking { text, .. } => Content::Thinking {
                 text: text.clone(),
                 signature: None,
