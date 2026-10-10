@@ -35,6 +35,8 @@ pub struct HttpSession {
     events: VecDeque<Event>,
     pending: BTreeMap<String, Option<ToolResult>>,
     completed: bool,
+    pending_order: Vec<String>,
+    round_bytes: usize,
 }
 impl HttpSession {
     pub async fn start(
@@ -62,6 +64,8 @@ impl HttpSession {
             events: VecDeque::new(),
             pending: BTreeMap::new(),
             completed: false,
+            pending_order: Vec::new(),
+            round_bytes: 0,
         };
         session.send().await?;
         Ok(session)
@@ -94,6 +98,7 @@ impl HttpSession {
             });
         }
         self.codec.reset();
+        self.round_bytes = 0;
         self.decoder = SseDecoder::default();
         self.response = Some(response);
         Ok(())
@@ -116,6 +121,7 @@ impl HttpSession {
             if self.pending.insert(call.id.clone(), None).is_some() {
                 return Err(protocol("duplicate upstream tool call id"));
             }
+            self.pending_order.push(call.id.clone());
             self.events.push_back(Event::ToolCall(call));
         }
         if self.pending.is_empty() {
@@ -148,6 +154,10 @@ impl HttpSession {
             };
             match chunk {
                 Some(chunk) => {
+                    self.round_bytes = self.round_bytes.saturating_add(chunk.len());
+                    if self.round_bytes > 64 * 1024 * 1024 {
+                        return Err(protocol("provider stream exceeds 64 MiB"));
+                    }
                     for (event, data) in self.decoder.push(&chunk)? {
                         self.events.extend(self.codec.frame(&event, &data)?);
                     }
@@ -181,9 +191,10 @@ impl ProviderSession for HttpSession {
             }
             *entry = Some(result);
             if self.pending.values().all(Option::is_some) {
-                let results = std::mem::take(&mut self.pending)
-                    .into_values()
-                    .flatten()
+                let mut pending = std::mem::take(&mut self.pending);
+                let results = std::mem::take(&mut self.pending_order)
+                    .into_iter()
+                    .filter_map(|id| pending.remove(&id).flatten())
                     .map(Content::ToolResult)
                     .collect();
                 self.request.messages.push(Message {
