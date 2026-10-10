@@ -383,3 +383,31 @@ async fn native_denial_uses_explicit_disposition_and_structured_rejection() {
     assert!(result.is_error);
     assert_eq!(result.output, denial);
 }
+
+#[test]
+fn history_hashes_keep_baseline_bytes_across_json_map_features() {
+    let history: Vec<api::Message> = serde_json::from_str(r#"[{"role":"assistant","content":[{"type":"tool_call","id":"call","name":"lookup","arguments":{"z":{"b":2,"a":1},"a":"first"}}]},{"role":"tool","content":[{"type":"tool_result","call_id":"call","output":{"z":[{"b":2,"a":1}],"a":1},"is_error":true}]}]"#).unwrap();
+    assert_eq!(
+        super::lineage_hash("rules", &history).unwrap(),
+        "8377e32212ac08e30e751146fc78f2475380643531d221efb88e4e63f69e21c8"
+    );
+    assert_eq!(
+        super::failed_result_bindings(&history).unwrap()["call"],
+        "58e970a973a916587b8d046acb04bc5281862ae0b9290eb30d02fa16a7e22eec"
+    );
+    let mut request = bound_request();
+    request.messages = history;
+    request.checkpoint.as_mut().unwrap().state["codex_host_lineage"] = json!({
+        "length":2,
+        "hash":"8377e32212ac08e30e751146fc78f2475380643531d221efb88e4e63f69e21c8",
+        "failed_results":{"call":"58e970a973a916587b8d046acb04bc5281862ae0b9290eb30d02fa16a7e22eec"}
+    });
+    let api::Content::ToolResult(result) = &mut request.messages[1].content[0] else {
+        panic!()
+    };
+    result.is_error = false;
+    super::validate_lineage(&mut request, api::RecoveryPolicy::RestorePrevious).unwrap();
+    assert!(
+        matches!(&request.messages[1].content[0], api::Content::ToolResult(result) if result.is_error)
+    );
+}

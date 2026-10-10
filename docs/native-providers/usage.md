@@ -137,6 +137,14 @@ Unix, the state directory is private and state files are owner-readable only.
 This state is separate from ChatGPT's `auth.json`; do not edit or remove it
 while Codex is running.
 
+Session keys and history bindings keep the original Cargo JSON representation:
+object keys are sorted recursively before hashing. Cursor context hashes retain
+typed message field order and sort only embedded JSON objects. This makes stored
+state compatible across Cargo and Bazel builds, including builds that enable
+`serde_json/preserve_order`. Normal provider request payloads are unchanged;
+Cursor bootstrap history blobs use the same normalization because their JSON
+bytes determine their content identifiers.
+
 If a native request is interrupted after a host tool may have started, Codex
 refuses automatic replay. Inspect the local and external effects first, then
 explicitly fork the conversation before continuing:

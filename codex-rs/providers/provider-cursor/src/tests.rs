@@ -416,7 +416,10 @@ fn snapshot(request: &Request, pending: bool) -> Checkpoint {
         },
     );
     state
-        .snapshot(&request.namespace, &state::hash(&request.messages).unwrap())
+        .snapshot(
+            &request.namespace,
+            &state::hash_messages(&request.messages).unwrap(),
+        )
         .unwrap()
 }
 
@@ -968,4 +971,33 @@ fn historical_and_active_images_share_attachment_limit_and_reject_unsupported_co
         prepare(&req, &mut state),
         Err(ProviderError::Unsupported(_))
     ));
+}
+
+#[test]
+fn history_hashes_keep_baseline_bytes_across_json_map_features_in_bootstrap() {
+    use sha2::Digest;
+
+    let mut req = request();
+    req.system = "rules".into();
+    req.messages = serde_json::from_str(r#"[{"role":"assistant","content":[{"type":"tool_call","id":"call","name":"lookup","arguments":{"z":{"b":2,"a":1},"a":"first"}}]},{"role":"tool","content":[{"type":"tool_result","call_id":"call","output":{"z":[{"b":2,"a":1}],"a":1},"is_error":true}]},{"role":"user","content":[{"type":"text","text":"continue"}]}]"#).unwrap();
+    let mut state = state::State::restore(&req).unwrap();
+    let (run, _) = prepare(&req, &mut state).unwrap();
+    let roots = wire::State::decode(run.state.as_slice()).unwrap().roots;
+    let digests = roots
+        .iter()
+        .map(|id| {
+            format!(
+                "{:x}",
+                sha2::Sha256::digest(state.blob(id).unwrap().unwrap())
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        digests,
+        [
+            "7503473182c40907507eff3c258c9bbb245392d2b44eea3743948fbe85e4b02d",
+            "460e9f2d1b5e8c69d44d4abcdff05da37e695b6153406c0752aee59d87a5290d",
+            "d934969799956b97ad0a158d47618912f56ceb57137c8100a4c390c94d16f3ee",
+        ]
+    );
 }
