@@ -90,7 +90,10 @@ An authorized live probe with one existing account and
 sequential host MCP calls and their results on one HTTP/2 stream, cancellation,
 and a second user turn resumed from the native checkpoint. These observations
 do not establish every discovered model or every native operation's live
-behavior.
+behavior. A separate live probe observed native `shellStreamArgs` (exec tag 14),
+ran an allowlisted `printf` command through an asynchronous test host, and
+received exact `NATIVE_SHELL_OK` completion with a native checkpoint. This test
+host does not validate Codex approval or sandbox enforcement.
 
 Model-specific reasoning/output controls, remote image URL retrieval, history
 image replay without a checkpoint, binary native writes, and unknown native

@@ -700,3 +700,10 @@ async fn native_shell_stream_continues_on_same_h2_session_after_final_ack() {
     assert_eq!(text, "continued");
     server.abort();
 }
+
+#[test]
+fn nested_protobuf_strings_keep_their_original_types() {
+    let value = json!({"number_text":"123","boolean_text":"true","json_text":"{\"a\":1}","values":["false","null","42"]});
+    assert_eq!(from_value(json_value(&value)).unwrap(), value);
+    assert_eq!(from_value(json_value(&json!("123"))).unwrap(), json!(123));
+}
