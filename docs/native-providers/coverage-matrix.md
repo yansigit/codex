@@ -9,10 +9,10 @@ for the reusable app-server checks are in [usage.md](usage.md).
 Implementation and regression entry points: [native core routing](../../codex-rs/core/src/native_provider.rs),
 [core tests](../../codex-rs/core/src/native_provider_tests.rs),
 [host-tool translation](../../codex-rs/core/src/native_provider_tools.rs),
-[shared driver tests](../../codex-rs/provider-api/tests/driver.rs),
-[auth security tests](../../codex-rs/provider-auth/tests/security.rs),
-[codec tests](../../codex-rs/provider-codecs/src/tests.rs),
-[Cursor transport tests](../../codex-rs/provider-cursor/src/tests.rs),
+[shared driver tests](../../codex-rs/providers/provider-api/tests/driver.rs),
+[auth security tests](../../codex-rs/providers/provider-auth/tests/security.rs),
+[codec tests](../../codex-rs/providers/provider-codecs/src/tests.rs),
+[Cursor transport tests](../../codex-rs/providers/provider-cursor/src/tests.rs),
 [native account app-server tests](../../codex-rs/app-server/tests/suite/v2/native_account.rs),
 [thread inheritance tests](../../codex-rs/app-server/src/request_processors/thread_processor_tests.rs),
 and [schema fixture tests](../../codex-rs/app-server-protocol/src/schema_fixtures_tests.rs).
@@ -79,6 +79,6 @@ and [schema fixture tests](../../codex-rs/app-server-protocol/src/schema_fixture
   the default sandbox.
 - Cursor uses a bounded 500 ms upstream drain after `turnEnded`; checkpoint
   metadata arriving later can be missed. See the
-  [protocol assumption](../../codex-rs/provider-cursor/README.md).
+  [protocol assumption](../../codex-rs/providers/provider-cursor/README.md).
 - The implemented paths have passed the listed local and live acceptance
   checks. Future model/platform combinations require their own validation.
