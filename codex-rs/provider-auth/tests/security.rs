@@ -215,6 +215,85 @@ async fn checkpoint_and_tool_journal_are_isolated_by_full_namespace() {
     ));
 }
 
+#[tokio::test]
+async fn checkpoint_scope_changes_at_compaction_but_interrupted_tool_journal_is_shared() {
+    let root = tempfile::tempdir().unwrap();
+    let cancellation = CancellationToken::new();
+    let namespace = namespace();
+    let before_compaction = SessionStore::new(root.path(), namespace.clone())
+        .with_checkpoint_scope("window-before-compaction".into());
+    let checkpoint = Checkpoint {
+        version: 1,
+        namespace: namespace.clone(),
+        context_hash: "pre-compaction-context".into(),
+        state: json!({"cursor":"before"}),
+    };
+    before_compaction
+        .save(&checkpoint, &cancellation)
+        .await
+        .unwrap();
+
+    let ToolDisposition::Execute(ticket) = before_compaction
+        .begin_tool(tool_call(), &cancellation)
+        .await
+        .unwrap()
+    else {
+        panic!("first tool execution should start");
+    };
+    drop(ticket); // Simulate interruption before the result is committed.
+
+    let after_compaction = SessionStore::new(root.path(), namespace)
+        .with_checkpoint_scope("window-after-compaction".into());
+    assert!(after_compaction.load().unwrap().is_none());
+    assert!(matches!(
+        after_compaction
+            .begin_tool(tool_call(), &cancellation)
+            .await,
+        Err(ProviderError::Checkpoint(message)) if message.contains("refusing automatic replay")
+    ));
+}
+
+#[tokio::test]
+async fn reused_account_label_gets_new_identity_and_refresh_preserves_generation() {
+    let root = tempfile::tempdir().unwrap();
+    let store = AuthStore::new(root.path());
+    let cancellation = CancellationToken::new();
+    let record = |access: &str| TokenRecord {
+        access_token: access.into(),
+        refresh_token: Some("refresh".into()),
+        expires_at: Some(0),
+        metadata: json!({"provider":"test"}),
+        revoked: false,
+    };
+
+    store
+        .login("provider-a", "Work", record("first-access"), &cancellation)
+        .await
+        .unwrap();
+    let first_identity = store.identity("provider-a").unwrap().unwrap();
+    store
+        .login("provider-a", "Work", record("second-access"), &cancellation)
+        .await
+        .unwrap();
+    let second_identity = store.identity("provider-a").unwrap().unwrap();
+    assert_ne!(first_identity, second_identity);
+    assert_eq!(store.status("provider-a").unwrap().unwrap().account, "Work");
+
+    let refreshed = store
+        .credentials_with_refresh("provider-a", &cancellation, |old| async move {
+            Ok(TokenRecord {
+                access_token: "refreshed-access".into(),
+                refresh_token: old.refresh_token,
+                expires_at: None,
+                metadata: old.metadata,
+                revoked: false,
+            })
+        })
+        .await
+        .unwrap();
+    assert_eq!(refreshed.account_id, second_identity);
+}
+
 #[cfg(unix)]
 #[tokio::test]
 async fn state_store_rejects_a_preexisting_symlink_for_state_file() {
@@ -233,6 +312,29 @@ async fn state_store_rejects_a_preexisting_symlink_for_state_file() {
     std::fs::write(&outside, b"{}").unwrap();
     symlink(outside, state_path).unwrap();
 
+    assert!(matches!(
+        store.read::<serde_json::Value>("test-state"),
+        Err(ProviderError::Checkpoint(_))
+    ));
+}
+
+#[cfg(unix)]
+#[test]
+fn state_store_rejects_a_symlinked_state_directory_for_reads() {
+    use std::os::unix::fs::symlink;
+
+    let root = tempfile::tempdir().unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    std::fs::write(
+        outside
+            .path()
+            .join(format!("{}.json", digest(b"test-state"))),
+        b"null",
+    )
+    .unwrap();
+    symlink(outside.path(), root.path().join("native-providers")).unwrap();
+
+    let store = Store::new(root.path());
     assert!(matches!(
         store.read::<serde_json::Value>("test-state"),
         Err(ProviderError::Checkpoint(_))
