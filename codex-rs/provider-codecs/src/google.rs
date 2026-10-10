@@ -130,21 +130,22 @@ impl GoogleCodec {
                         json!({"output":text})
                     };
                     let mut part = json!({"functionResponse":{"name":name,"response":response}});
+                    let mut sibling_images = Vec::new();
                     if !images.is_empty() {
-                        // Cloud Code Assist model adapters differ; only Gemini 3+ is
-                        // known to support images nested in function responses.
+                        // Gemini 3+ supports multimodal functionResponse.parts.
+                        // Other Cloud Code Assist adapters receive sibling inlineData
+                        // parts, as in the pinned pi-antigravity message converter.
                         let version = request
                             .namespace
                             .model
                             .strip_prefix("gemini-")
                             .and_then(|value| value.split(['.', '-']).next())
                             .and_then(|value| value.parse::<u32>().ok());
-                        if version.is_none_or(|version| version < 3) {
-                            return Err(ProviderError::Unsupported(
-                                "Antigravity tool images require a Gemini 3+ model".into(),
-                            ));
+                        if version.is_some_and(|version| version >= 3) {
+                            part["functionResponse"]["parts"] = json!(images);
+                        } else {
+                            sibling_images = images;
                         }
-                        part["functionResponse"]["parts"] = json!(images);
                     }
                     if request.namespace.model.starts_with("claude-")
                         || request.namespace.model.starts_with("gpt-oss-")
@@ -152,6 +153,7 @@ impl GoogleCodec {
                         part["functionResponse"]["id"] = json!(result.call_id);
                     }
                     parts.push(part);
+                    parts.extend(sibling_images);
                 }
                 Content::Opaque { .. } => {}
             }
