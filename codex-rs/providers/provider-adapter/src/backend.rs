@@ -56,8 +56,16 @@ impl NativeBackend {
     pub fn state_home(&self) -> Option<PathBuf> {
         self.home.clone()
     }
-    pub fn descriptor(&self) -> &'static Descriptor {
-        self.descriptor.expect("native provider must be registered")
+    pub fn descriptor(&self) -> codex_provider_api::Result<&'static Descriptor> {
+        let descriptor = self.descriptor.ok_or_else(|| {
+            ProviderError::Unsupported(format!("unknown native provider: {}", self.id()))
+        })?;
+        if descriptor.id != self.id() {
+            return Err(ProviderError::Protocol(
+                "native backend descriptor conflicts with provider configuration".into(),
+            ));
+        }
+        Ok(descriptor)
     }
     pub fn session_capabilities(&self) -> SessionCapabilities {
         SessionCapabilities {
@@ -132,12 +140,10 @@ impl NativeBackend {
 
 impl NativeBackend {
     pub fn provider(&self) -> codex_provider_api::Result<Arc<dyn Provider>> {
+        let descriptor = self.descriptor()?;
         if let Some(provider) = self.transport.get() {
             return Ok(Arc::clone(provider));
         }
-        let descriptor = self.descriptor.ok_or_else(|| {
-            ProviderError::Unsupported(format!("unknown native provider: {}", self.id()))
-        })?;
         let provider = descriptor.provider(TransportOptions {
             base_url: self.info.base_url.as_deref(),
             state_home: self.home.as_deref(),
@@ -147,6 +153,7 @@ impl NativeBackend {
     }
     pub fn credentials(&self, cancellation: CancellationToken) -> ProviderFuture<'_, Credentials> {
         Box::pin(async move {
+            let descriptor = self.descriptor()?;
             let token = self.environment_token();
             if let Some(access_token) = token {
                 return Ok(self.scope_credentials(Credentials {
@@ -158,13 +165,14 @@ impl NativeBackend {
                     metadata: serde_json::Value::Null,
                 }));
             }
-            self.descriptor()
+            descriptor
                 .credentials(&self.auth_store()?, &cancellation)
                 .await
                 .map(|credentials| self.scope_credentials(credentials))
         })
     }
     fn ensure_stored_auth(&self) -> codex_provider_api::Result<()> {
+        self.descriptor()?;
         if self.has_configured_token() {
             return Err(ProviderError::Authentication("remove the configured environment or bearer token override before changing stored login".into()));
         }
@@ -172,7 +180,7 @@ impl NativeBackend {
     }
     pub async fn begin_login(&self) -> codex_provider_api::Result<NativeLogin> {
         self.ensure_stored_auth()?;
-        NativeLogin::begin(self.descriptor()).await
+        NativeLogin::begin(self.descriptor()?).await
     }
     pub async fn commit_login(
         &self,
@@ -209,6 +217,7 @@ impl NativeBackend {
         self.auth_store()?.logout(self.id(), cancellation).await
     }
     pub fn status(&self) -> codex_provider_api::Result<Option<AccountInfo>> {
+        self.descriptor()?;
         if self.has_configured_token() {
             return Ok(Some(AccountInfo {
                 provider: self.id().into(),
@@ -222,6 +231,7 @@ impl NativeBackend {
     pub fn account(
         &self,
     ) -> codex_provider_api::Result<Option<codex_protocol::account::ProviderAccount>> {
+        self.descriptor()?;
         if self.environment_token().is_some() {
             return Ok(Some(codex_protocol::account::ProviderAccount::Native {
                 provider: self.id().into(),
@@ -239,6 +249,7 @@ impl NativeBackend {
 }
 impl ModelsEndpointClient for NativeBackend {
     fn identity(&self) -> Option<String> {
+        self.descriptor().ok()?;
         let account = match self.environment_token() {
             Some(token) => format!("token-{}", codex_provider_auth::digest(token.as_bytes())),
             None => self.auth_store().ok()?.identity(self.id()).ok()??,
