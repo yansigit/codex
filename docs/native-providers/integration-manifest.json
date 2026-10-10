@@ -38,39 +38,29 @@
     },
     {
       "name": "thread-config",
-      "packages": [
-        "codex-config"
-      ],
+      "packages": ["codex-config"],
       "minimum_tests": 1
     },
     {
       "name": "model-provider-facade",
-      "packages": [
-        "codex-model-provider"
-      ],
+      "packages": ["codex-model-provider"],
       "minimum_tests": 1
     },
     {
       "name": "model-provider-metadata",
-      "packages": [
-        "codex-model-provider-info"
-      ],
+      "packages": ["codex-model-provider-info"],
       "minimum_tests": 1
     },
     {
       "name": "core-native-provider",
-      "packages": [
-        "codex-core"
-      ],
+      "packages": ["codex-core"],
       "filter": "native_provider",
       "test_target": "lib",
       "minimum_tests": 1
     },
     {
       "name": "core-responses-retry",
-      "packages": [
-        "codex-core"
-      ],
+      "packages": ["codex-core"],
       "filter": "suite::responses::",
       "test_target": "all",
       "test_threads": 1,
@@ -78,26 +68,20 @@
     },
     {
       "name": "app-server-account-and-fork",
-      "packages": [
-        "codex-app-server"
-      ],
+      "packages": ["codex-app-server"],
       "test_target": "all",
       "filter": "native_account",
       "minimum_tests": 1
     },
     {
       "name": "schema-fixtures",
-      "packages": [
-        "codex-app-server-protocol"
-      ],
+      "packages": ["codex-app-server-protocol"],
       "filter": "schema_fixtures",
       "minimum_tests": 1
     },
     {
       "name": "cli-provider-choices",
-      "packages": [
-        "codex-cli"
-      ],
+      "packages": ["codex-cli"],
       "test_target": "bin:codex",
       "filter": "provider_cli_parses_each_supported_provider_and_rejects_unknown_values",
       "minimum_tests": 1
@@ -128,12 +112,7 @@
       "codex-rs/config/src/thread_config/remote.rs",
       "codex-rs/model-provider-info/src/lib.rs"
     ],
-    "provider_ids": [
-      "cursor",
-      "opencode-go",
-      "claude",
-      "antigravity"
-    ],
+    "provider_ids": ["cursor", "opencode-go", "claude", "antigravity"],
     "provider_symbols": [
       "WireApi::Cursor",
       "WireApi::OpenCodeGo",
