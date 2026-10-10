@@ -145,7 +145,7 @@ class AppServer:
             and command[2] == self.expected_approval_command
         )
         amendment = params.get("proposedExecpolicyAmendment")
-        exact_amendment = amendment in (
+        exact_amendment = amendment is None or amendment in (
             ["/bin/bash", "-lc", self.expected_approval_command],
             ["/bin/bash", "-c", self.expected_approval_command],
             ["/usr/bin/bash", "-lc", self.expected_approval_command],
@@ -444,6 +444,7 @@ def permissions(args: argparse.Namespace) -> None:
         before = len(server.approvals)
         server.approval_decision = "accept"
         server.expected_approval_command = f"printf ACCEPTED_WRITE > {target}"
+        server.expected_approval_cwd = workspace
         server.complete_turn(thread, prompt("ACCEPTED_WRITE"))
         if len(server.approvals) <= before:
             raise AcceptanceError("accept approval RPC was not exercised")
@@ -507,7 +508,10 @@ def main() -> int:
     }
     try:
         checks[args.check](args)
-    except Exception as error:  # Deliberately avoid printing exception payloads.  # noqa: BLE001
+    except AcceptanceError as error:
+        print(f"FAIL provider={args.provider} check={args.check} error={error}")
+        return 1
+    except Exception as error:  # Do not print unexpected exception payloads.  # noqa: BLE001
         print(
             f"FAIL provider={args.provider} check={args.check} error={type(error).__name__}"
         )
