@@ -108,6 +108,8 @@ pub enum WireApi {
     /// The Responses API exposed by OpenAI at `/v1/responses`.
     #[default]
     Responses,
+    /// A provider selected by the registered `native_provider` ID.
+    Native,
     Cursor,
     #[serde(rename = "opencode-go")]
     OpenCodeGo,
@@ -118,7 +120,7 @@ pub enum WireApi {
 impl WireApi {
     pub fn native_provider_id(self) -> Option<&'static str> {
         match self {
-            Self::Responses => None,
+            Self::Responses | Self::Native => None,
             Self::Cursor => Some("cursor"),
             Self::OpenCodeGo => Some("opencode-go"),
             Self::Claude => Some("claude"),
@@ -131,6 +133,7 @@ impl fmt::Display for WireApi {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let value = match self {
             Self::Responses => "responses",
+            Self::Native => "native",
             Self::Cursor => "cursor",
             Self::OpenCodeGo => "opencode-go",
             Self::Claude => "claude",
@@ -148,6 +151,7 @@ impl<'de> Deserialize<'de> for WireApi {
         let value = String::deserialize(deserializer)?;
         match value.as_str() {
             "responses" => Ok(Self::Responses),
+            "native" => Ok(Self::Native),
             "cursor" => Ok(Self::Cursor),
             "opencode-go" => Ok(Self::OpenCodeGo),
             "claude" => Ok(Self::Claude),
@@ -157,6 +161,7 @@ impl<'de> Deserialize<'de> for WireApi {
                 &value,
                 &[
                     "responses",
+                    "native",
                     "cursor",
                     "opencode-go",
                     "claude",
@@ -198,6 +203,8 @@ pub struct ModelProviderInfo {
     /// Which wire protocol this provider expects.
     #[serde(default)]
     pub wire_api: WireApi,
+    /// Registered provider ID required by `wire_api = "native"`.
+    pub native_provider: Option<String>,
     /// Optional API capability overrides for a custom Responses-compatible provider.
     /// Unspecified capabilities retain their existing provider defaults.
     pub capabilities: Option<ModelProviderCapabilities>,
@@ -330,8 +337,46 @@ other non-default provider fields are not supported"
         Ok(())
     }
 
+    /// Resolves both generic native configuration and preserved legacy wire aliases.
+    pub fn native_provider_id(&self) -> Option<&str> {
+        if self.wire_api == WireApi::Native {
+            self.native_provider.as_deref()
+        } else {
+            self.wire_api.native_provider_id()
+        }
+    }
+
     pub fn validate(&self) -> std::result::Result<(), String> {
-        if self.wire_api.native_provider_id().is_some() {
+        self.validate_with_registry(codex_provider_registry::registry())
+    }
+
+    pub fn validate_with_registry(
+        &self,
+        registry: &codex_provider_registry::Registry,
+    ) -> std::result::Result<(), String> {
+        match (self.wire_api, self.native_provider.as_deref()) {
+            (WireApi::Native, None) => {
+                return Err("wire_api = native requires native_provider".into());
+            }
+            (WireApi::Responses, Some(_)) => {
+                return Err("native_provider cannot be combined with wire_api = responses".into());
+            }
+            (wire, Some(id))
+                if wire != WireApi::Native && wire.native_provider_id() != Some(id) =>
+            {
+                return Err("native_provider conflicts with the legacy wire_api provider".into());
+            }
+            _ => {}
+        }
+        if let Some(id) = self.native_provider_id() {
+            if id.trim().is_empty() || id.trim() != id {
+                return Err(
+                    "native_provider must be nonempty without surrounding whitespace".into(),
+                );
+            }
+            if registry.get(id).is_none() {
+                return Err(format!("unknown native provider: {id}"));
+            }
             if self.requires_openai_auth
                 || self.aws.is_some()
                 || self.auth.is_some()
@@ -485,7 +530,7 @@ other non-default provider fields are not supported"
 
     /// Builds an API provider with managed residency taking precedence over configured headers.
     pub fn to_api_provider(&self, auth_mode: Option<AuthMode>) -> CodexResult<ApiProvider> {
-        if self.wire_api.native_provider_id().is_some() {
+        if self.native_provider_id().is_some() {
             return Err(CodexErr::InvalidRequest(
                 "native providers require their registered session transport".into(),
             ));
@@ -562,7 +607,7 @@ other non-default provider fields are not supported"
 
     /// Effective maximum number of request retries for this provider.
     pub fn request_max_retries(&self) -> u64 {
-        if self.wire_api.native_provider_id().is_some() {
+        if self.native_provider_id().is_some() {
             return 0;
         }
         self.request_max_retries
@@ -572,7 +617,7 @@ other non-default provider fields are not supported"
 
     /// Effective maximum number of stream reconnection attempts for this provider.
     pub fn stream_max_retries(&self) -> u64 {
-        if self.wire_api.native_provider_id().is_some() {
+        if self.native_provider_id().is_some() {
             return 0;
         }
         self.stream_max_retries
@@ -606,6 +651,7 @@ other non-default provider fields are not supported"
             gateway_oauth: None,
             aws: None,
             wire_api: WireApi::Responses,
+            native_provider: None,
             query_params: None,
             http_headers: Some(
                 [("version".to_string(), env!("CARGO_PKG_VERSION").into())]
@@ -658,6 +704,7 @@ other non-default provider fields are not supported"
                 auth_refresh: None,
             })),
             wire_api: WireApi::Responses,
+            native_provider: None,
             query_params: None,
             http_headers: Some(HashMap::from([(
                 AMAZON_BEDROCK_MANTLE_CLIENT_AGENT_HEADER.to_string(),
@@ -731,48 +778,22 @@ pub const OLLAMA_OSS_PROVIDER_ID: &str = "ollama";
 pub fn built_in_model_providers(
     openai_base_url: Option<String>,
 ) -> HashMap<String, ModelProviderInfo> {
+    built_in_model_providers_with_registry(openai_base_url, codex_provider_registry::registry())
+}
+
+pub fn built_in_model_providers_with_registry(
+    openai_base_url: Option<String>,
+    registry: &codex_provider_registry::Registry,
+) -> HashMap<String, ModelProviderInfo> {
     use ModelProviderInfo as P;
     let openai_provider = P::create_openai_provider(openai_base_url);
     let amazon_bedrock_provider = P::create_amazon_bedrock_provider(/*aws*/ None);
     let amazon_bedrock_runtime_provider =
         P::create_amazon_bedrock_runtime_provider(/*aws*/ None);
 
-    [
+    let mut providers: HashMap<String, ModelProviderInfo> = [
         (OPENAI_PROVIDER_ID, openai_provider),
         (AMAZON_BEDROCK_PROVIDER_ID, amazon_bedrock_provider),
-        (
-            "cursor",
-            P {
-                name: "Cursor".into(),
-                wire_api: WireApi::Cursor,
-                ..P::default()
-            },
-        ),
-        (
-            "opencode-go",
-            P {
-                name: "OpenCode Go".into(),
-                wire_api: WireApi::OpenCodeGo,
-                env_key: Some("OPENCODE_API_KEY".into()),
-                ..P::default()
-            },
-        ),
-        (
-            "claude",
-            P {
-                name: "Claude Pro/Max".into(),
-                wire_api: WireApi::Claude,
-                ..P::default()
-            },
-        ),
-        (
-            "antigravity",
-            P {
-                name: "Antigravity".into(),
-                wire_api: WireApi::Antigravity,
-                ..P::default()
-            },
-        ),
         (
             AMAZON_BEDROCK_RUNTIME_PROVIDER_ID,
             amazon_bedrock_runtime_provider,
@@ -788,7 +809,20 @@ pub fn built_in_model_providers(
     ]
     .into_iter()
     .map(|(k, v)| (k.to_string(), v))
-    .collect()
+    .collect();
+    for descriptor in registry.iter() {
+        providers.insert(
+            descriptor.id.to_owned(),
+            P {
+                name: descriptor.display_name.into(),
+                wire_api: WireApi::Native,
+                native_provider: Some(descriptor.id.into()),
+                env_key: descriptor.env_key.map(str::to_owned),
+                ..P::default()
+            },
+        );
+    }
+    providers
 }
 
 /// Merge configured providers into the built-in provider catalog.
@@ -864,6 +898,7 @@ pub fn create_oss_provider_with_base_url(base_url: &str, wire_api: WireApi) -> M
         gateway_oauth: None,
         aws: None,
         wire_api,
+        native_provider: None,
         query_params: None,
         http_headers: None,
         env_http_headers: None,

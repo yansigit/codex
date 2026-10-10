@@ -160,6 +160,7 @@ fn model_provider_from_proto(
     let id = provider.id;
     let wire_api = match proto::WireApi::try_from(provider.wire_api) {
         Ok(proto::WireApi::Responses) => WireApi::Responses,
+        Ok(proto::WireApi::Native) => WireApi::Native,
         Ok(proto::WireApi::Cursor) => WireApi::Cursor,
         Ok(proto::WireApi::OpenCodeGo) => WireApi::OpenCodeGo,
         Ok(proto::WireApi::Claude) => WireApi::Claude,
@@ -188,6 +189,7 @@ fn model_provider_from_proto(
         gateway_oauth: None,
         aws: None,
         wire_api,
+        native_provider: provider.native_provider,
         query_params: provider.query_params.map(redacted_string_map),
         http_headers: provider.http_headers.map(redacted_string_map),
         env_http_headers: provider.env_http_headers.map(|map| map.values),
@@ -201,6 +203,7 @@ fn model_provider_from_proto(
         capabilities: None,
         include_internal_metadata: false,
     };
+    info.validate().map_err(parse_error)?;
     Ok((id, info))
 }
 
@@ -220,6 +223,7 @@ fn model_provider_to_proto(
         gateway_oauth: _,
         aws: _,
         wire_api,
+        native_provider,
         query_params,
         http_headers,
         env_http_headers,
@@ -244,6 +248,7 @@ fn model_provider_to_proto(
         experimental_bearer_token: experimental_bearer_token.map(RedactedString::into_inner),
         auth: auth.map(model_provider_auth_to_proto),
         wire_api: proto_wire_api(wire_api).into(),
+        native_provider,
         query_params: query_params.map(proto_string_map),
         http_headers: http_headers.map(proto_string_map),
         env_http_headers: env_http_headers.map(|values| proto::StringMap { values }),
@@ -318,6 +323,7 @@ fn proto_string_map(values: HashMap<String, RedactedString>) -> proto::StringMap
 fn proto_wire_api(wire_api: WireApi) -> proto::WireApi {
     match wire_api {
         WireApi::Responses => proto::WireApi::Responses,
+        WireApi::Native => proto::WireApi::Native,
         WireApi::Cursor => proto::WireApi::Cursor,
         WireApi::OpenCodeGo => proto::WireApi::OpenCodeGo,
         WireApi::Claude => proto::WireApi::Claude,
@@ -502,6 +508,7 @@ mod tests {
                                 cwd: workspace_cwd,
                             }),
                             wire_api: proto::WireApi::Responses.into(),
+                            native_provider: None,
                             query_params: Some(proto::StringMap {
                                 values: HashMap::from([(
                                     "api-version".to_string(),
@@ -573,6 +580,7 @@ mod tests {
                 cwd: workspace_dir(),
             }),
             wire_api: WireApi::Responses,
+            native_provider: None,
             query_params: Some(HashMap::from([(
                 "api-version".to_string(),
                 "2026-04-16".into(),
@@ -600,5 +608,39 @@ mod tests {
         AbsolutePathBuf::current_dir()
             .expect("current dir")
             .join("workspace")
+    }
+    #[test]
+    fn native_provider_remote_configuration_round_trips_generic_and_legacy_ids() {
+        for wire_api in [
+            WireApi::Native,
+            WireApi::Cursor,
+            WireApi::OpenCodeGo,
+            WireApi::Claude,
+            WireApi::Antigravity,
+        ] {
+            let native_provider = if wire_api == WireApi::Native {
+                Some("cursor".into())
+            } else {
+                None
+            };
+            let expected = ModelProviderInfo {
+                name: "Native".into(),
+                wire_api,
+                native_provider,
+                ..Default::default()
+            };
+            let proto = model_provider_to_proto("custom", expected.clone());
+            let (id, actual) = model_provider_from_proto(proto).unwrap();
+            assert_eq!(id, "custom");
+            assert_eq!(actual, expected);
+        }
+        let invalid = ModelProviderInfo {
+            wire_api: WireApi::Native,
+            native_provider: Some("unknown".into()),
+            ..Default::default()
+        };
+        assert!(model_provider_from_proto(model_provider_to_proto("custom", invalid)).is_err());
+        assert_eq!(proto::WireApi::Antigravity as i32, 5);
+        assert_eq!(proto::WireApi::Native as i32, 6);
     }
 }
