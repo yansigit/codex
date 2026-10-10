@@ -121,11 +121,56 @@ On Linux, Cursor native file read/write and search operations are available
 when their required local executables are present and the request advertises
 the normal `exec_command` and `write_stdin` tools. Codex translates them into
 its existing shell-tool path, so normal Codex execution policy applies. Live
-read/write execution has passed; the [coverage matrix](coverage-matrix.md)
-tracks which search/list operations have only fixture coverage and which
-Cursor runtime checks remain pending.
+read/write, `ls`, `grep`, and delete passed in the full Codex runtime. The
+[coverage matrix](coverage-matrix.md) records the exact tested paths and
+platform limits.
+
+## Reproducing live acceptance
+
+[`scripts/native_provider_acceptance.py`](../../scripts/native_provider_acceptance.py)
+runs the lifecycle, interrupted-tool recovery, or approval allow/deny check
+against an existing `CODEX_HOME`. It uses the account already selected in
+that home; it does not perform login, logout, account rotation, or fallback.
+The checks create unique temporary workspaces and only print provider/thread
+and pass/fail details.
+
+```sh
+CODEX="$PWD/codex-rs/target/debug/codex"
+CODEX_HOME="/path/to/private-acceptance-home"
+
+python3 scripts/native_provider_acceptance.py \
+  --codex "$CODEX" --codex-home "$CODEX_HOME" \
+  --provider claude --check lifecycle
+python3 scripts/native_provider_acceptance.py \
+  --codex "$CODEX" --codex-home "$CODEX_HOME" \
+  --provider antigravity --check interruption
+python3 scripts/native_provider_acceptance.py \
+  --codex "$CODEX" --codex-home "$CODEX_HOME" \
+  --provider opencode-go --check permissions
+```
+
+The interruption check intentionally runs a temporary 45-second foreground
+command, interrupts it, restarts the app-server, checks the model-change fence,
+and recovers through an explicit branch. The permission check declines then
+accepts only its exact temporary-file write through the normal approval RPC.
+Run against a private acceptance home with a previously selected account, not
+the default user home. The checked-in runner has live receipts for Go
+lifecycle, Antigravity interruption recovery, and Claude permissions; direct
+acceptance runs cover these scenarios across all four providers. Details and
+receipts are in the [coverage matrix](coverage-matrix.md).
+
+## Supported limits
+
+Full filesystem/shell acceptance is currently verified on Linux. Cursor uses
+Codex's normal host path and a bounded 500 ms foreground-output drain to capture
+late checkpoint updates; background shells are unsupported. Binary native
+writes, audio/resource input, remote-image resources, and unsupported
+model/protocol combinations return explicit errors. Provider requests do not
+automatically retry or switch accounts. Model capability and live acceptance
+are account- and route-specific; see the [coverage matrix](coverage-matrix.md).
 
 See the [pinned reference inventory](references.md) for source revisions and
 the [evidence matrix](coverage-matrix.md) for current local and live acceptance
-limits. Native providers are still in progress; these examples do not imply
-that every provider flow, model, or feature is complete.
+limits. The current root CLI build, final schema fixture gate, and strict
+workspace clippy rerun are still in progress; do not treat this page as a
+claim that all provider models, accounts, platforms, or features are complete.

@@ -1,10 +1,10 @@
 # Native provider implementation ledger
 
-The implementation remains under final integration review. Provider transports
-and selected live sessions do not establish complete end-to-end acceptance.
-Public source revisions and licenses are recorded in
-[references.md](references.md); behavioral coverage and evidence limits are in
-the [coverage matrix](coverage-matrix.md).
+The native provider implementation now has live end-to-end evidence across
+four provider families. The remaining root build, schema, and strict clippy
+gates are still in progress. Provider source revisions and licenses are in
+[references.md](references.md); scenario-level receipts and limits are in the
+[coverage matrix](coverage-matrix.md).
 
 ## Architecture and integration
 
@@ -13,83 +13,88 @@ the [coverage matrix](coverage-matrix.md).
   Codex-owned approvals, sandbox policy, hooks, and user-facing tool events.
 - `provider-auth` isolates credentials by provider/account and stores
   checkpoints and tool journals with provider/account/model/thread identity.
-  One account is selected per provider; there is no automatic rotation.
+  One account is selected per provider; automatic rotation and fallback are
+  not performed.
 - OAuth uses PKCE/state, cancellable callbacks, atomic credential writes, and
-  coordinated refresh. An interrupted tool call refuses automatic replay.
-- CLI provider commands, configuration, native account RPCs, model discovery,
-  and schemas are additive. Native thread inheritance supports cold resume and
-  fork when the client omits an explicit provider override.
-- A thread-scoped execution lease now preserves the uncertain-tool fence across
-  provider/account/model changes; a deliberate fork receives a separate lease.
+  coordinated refresh. Interrupted host tools fail closed: resume requires an
+  explicit branch after the caller inspects possible effects.
+- CLI provider commands, configuration, account RPCs, model discovery, and
+  schemas are additive. Native thread inheritance supports fork and cold
+  resume when the client omits a provider override.
+- A thread-scoped execution lease preserves the uncertain-tool fence across
+  provider/account/model changes. A deliberate fork receives a separate
+  execution identity.
+- Native provider protocols own their authentication, discovery, headers, and
+  transport. Unsupported overrides, timeout settings, and retry behavior are
+  rejected instead of silently ignored.
 
-## Verification evidence (2026-10-10)
+## Verification evidence
 
-- **App-server:** `/tmp/native-appserver-tests.log` records all three native
-  account regressions passing: token login/read/logout and notifications,
-  stored Go account preservation during Claude logout, env-token override
-  rejection, and native Go model/provider inheritance through fork and cold
-  resume.
-- **Responses:** `/tmp/native-responses-tests.log` records 33 compatibility
-  tests passing.
-- **Core and provider regressions:** `/tmp/native-review-regressions.log`
-  records the additional cross-namespace execution-lease, checkpoint, codec,
-  catalog, and provider suites passing. The earlier core suite in
-  `/tmp/native-core-tests-final.log` recorded 20 native-provider tests passing.
-- **Cursor:** current isolated suite has 26 passing tests with strict clippy
-  success. Live browser auth/refresh and Linux native operations are recorded
-  below. The latest production model catalog enables only model-supported
-  image routes; full Codex image-path reruns are in progress.
-- **Schema:** config, app-server JSON/TypeScript, and Python SDK generation
-  succeeded; the schema fixture test passed. Python emitted `uint*` format
-  warnings but completed.
-- **Final gates:** a full current-source build, root clippy and feature checks
-  are still in progress. Do not treat earlier build/clippy logs as final.
+- **Core:** `/tmp/native-core-tests-21.log` records 21 native-provider tests
+  passing, including output-cap draining. Cross-namespace lease/checkpoint
+  and provider regression tests are recorded in
+  `/tmp/native-review-regressions.log`.
+- **Provider packages:** the latest package snapshot recorded 198 passing
+  tests. Cursor-specific validation recorded 26 Cursor tests and 29 codec
+  tests in `/tmp/native-final-codec-cursor-tests.log`.
+- **Responses:** `/tmp/native-responses-tests-final.log` records 33
+  compatibility tests passing.
+- **App-server:** `/tmp/native-appserver-tests.log` records three native
+  account/fork tests passing: login/read/logout notifications, account
+  isolation, env-token override rejection, and native fork/cold-resume
+  provider inheritance.
+- **Schema:** the native `Account`, `LoginAccountParams`, and
+  `LoginAccountResponse` variants were regenerated into stable and
+  experimental schema artifacts. The final four-test schema fixture gate is
+  running; do not report it as passed yet.
+- **Feature check:** the no-default-features check passed in
+  `/tmp/native-feature-check.log`.
+- **Final root gates:** the current CLI build, schema fixture suite, and strict
+  workspace clippy rerun are still running. Earlier build/clippy results do
+  not substitute for these final checks.
 
-## Live acceptance receipts
+## Live provider acceptance
 
-Authorized account flows were tested without printing credentials. Pool account
-selection was explicit; no automatic account fallback was used.
+All checks used explicitly selected accounts in private test homes and did not
+print credentials. The reusable app-server acceptance runner is
+[`scripts/native_provider_acceptance.py`](../../scripts/native_provider_acceptance.py);
+reproduction commands are in [usage.md](usage.md).
 
-| Provider    | Verified live behavior                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Still open                                                                                                                                                                              |
-| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Cursor      | Browser OAuth and refresh passed; refresh changed access, retained refresh token and identity generation, cleared the pending marker, then model discovery (256) and text passed. Linux CLI exercised native read/write, `ls`, `grep`, delete, shell output, exec/stdin, MCP text/image, failure, policy denial, cancellation and resume. Interactive approval RPC decline left a file absent and generation continued; acceptance wrote `ACCEPTED_WRITE` through the normal Codex host. | The MCP image check used a temporary image-enabled model catalog; rerun against the production-default image catalog on current binary.                                                 |
-| OpenCode Go | Chat (`glm-5.3`), Messages (`minimax-m3`), and Responses (`gpt-6-luna`) passed actual Codex tool calls and resume reads. Model change and branch/compaction passed. Normal permission denial and approval acceptance passed. Chat and Responses vision recognized the tested red PNG.                                                                                                                                                                                                    | Messages view-image misidentified the tested image on two probes. An image-only result placeholder fix is integrated; full-core rerun is pending. Repeat acceptance on the final build. |
-| Claude      | Browser OAuth, 14-model discovery, refresh, reasoning, core view-image, live Codex tool calls and resume passed. Model change, branch/compaction, approval denial/acceptance, and TUI status/model/provider/account presentation passed.                                                                                                                                                                                                                                                 | Repeat on final build and continue checking signatures across model/account/compaction boundaries.                                                                                      |
-| Antigravity | Browser OAuth, 26-model discovery, Gemini and Claude-family model changes, branch/compaction and permission denial/acceptance passed. Native Rust Gemini and Claude zero-argument image loops identified the tested red PNG.                                                                                                                                                                                                                                                             | Full core image verification on final build is pending; native provider-specific error and cancellation cases need continued coverage.                                                  |
+| Provider    | Verified live behavior                                                                                                                                                                                                                                                                                                                                       | Scope and remaining limits                                                                                                                                        |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cursor      | Browser login, refresh, 256-model discovery, model changes, ordinary native read/write/grep/list/delete, shell/exec/stdin, MCP text/image, file errors, policy rejection, permission decline/accept, lifecycle and interruption recovery passed. Final MCP image tests used the production-default catalog; historical user/tool image branches also passed. | Linux full-runtime checks. Background shells, binary native writes, and unsupported multimodal resources remain explicit errors.                                  |
+| OpenCode Go | Chat `glm-5.3`, Messages `minimax-m3`, and Responses `gpt-6-luna` passed two initial exec/write/read rounds plus one resumed read. Model change, browser login/refresh/discovery, approvals, branch/compaction, interruption/recovery, and Chat/Responses vision passed. Go Messages MCP image passed through the full Codex core.                           | Selected account/model coverage. The original Go key had exhausted its monthly quota, so tests explicitly chose the available pool account; no fallback was used. |
+| Claude      | Browser login/refresh, 14-model discovery, reasoning, view-image, model change, live tool rounds/resume, approvals, branch/compaction, active-tool interruption/recovery, and TUI status/provider/account/model display passed.                                                                                                                              | Selected models/accounts; no automatic account rotation.                                                                                                          |
+| Antigravity | Browser login/refresh, 26-model discovery, Gemini and Claude-family model changes, full-core image checks, live tool rounds/resume, approvals, branch/compaction, and active-tool interruption/recovery passed.                                                                                                                                              | Selected models/accounts; broader provider error and entitlement coverage remains open.                                                                           |
 
-All four latest lifecycle receipts are in
-`/tmp/native-lifecycle-current-{cursor,opencode-go,claude,antigravity}.log`;
-each passes branch and compaction without an explicit fork provider override.
-All four model-change receipts passed. Normal Codex approval denial and
-acceptance for Go, Claude and Antigravity are in
-`/tmp/native-permissions-{opencode-go,claude,antigravity}.log`.
+For all four providers, model changes passed. All four also passed a clean
+branch+compaction check without an explicit fork provider override. Active host
+tool cancellation followed by restart and model change stayed fenced, then an
+explicit branch continued without replay. Completion markers for the canceled
+45-second commands remained absent after the timeout windows.
 
-Cursor-specific refresh output is summarized in
-`/tmp/native-cursor-core-acceptance/browser-refresh-native.log`; native
-`ls`/`grep`/delete and approval output are under
-`/tmp/native-cursor-core-acceptance/native-ls-grep-delete.*` and
-`permissions-sonnet.*`. Antigravity browser/model/image tests are summarized in
-`/tmp/native-fresh-antig-images.out`.
-Core image routes are under `/tmp/native-core-services-images-per7emtn/` and
-`/tmp/native-core-services-images-a3g5t7dj/`; the Go Messages color failures
-are under `/tmp/native-core-services-images-siarjpky/`. These are private
-receipts outside the repository.
+Full ordinary-tool and resume results are in
+`/tmp/native-codex-services-final-ve861xmx/summary.json`. Interruption results
+are in `/tmp/native-interruption-{opencode-go,claude}.log`,
+`/tmp/native-interruption-antigravity-recovery.log`, and
+`/tmp/native-harness-interruption-cursor.log`. Full-core image receipts are
+listed in the [coverage matrix](coverage-matrix.md).
 
-## Remaining acceptance work
+## Limits and follow-up
 
-- Complete and record the final root build, clippy, and feature checks.
-- Re-run Cursor MCP image with the production default catalog, Go Messages
-  view-image after the placeholder fix, and Antigravity images through the full
-  Codex core on the final binary.
-- Rerun Cursor MCP image with the production-default catalog; the accepted
-  image call used a temporary image-enabled fixture catalog.
-- Re-run the provider sessions and lifecycle paths on the final binary after
-  root build changes, then test provider-specific quota, revocation, malformed
-  response, and cancellation cases.
-- Audit signed reasoning and checkpoints through model/account changes,
-  compaction, branch, restart, and interrupted execution.
-- Continue broader UI/app-server and entitlement checks without assuming that
-  one account/model represents every provider account or model.
-
-No provider is marked complete; the implementation still has current-build,
-multimodal-route, and provider-specific acceptance follow-ups.
+- The final root CLI build, four-test schema fixture gate, and strict clippy
+  rerun must finish before calling the source snapshot fully validated.
+- Live coverage is Linux-only for native filesystem and shell execution. It
+  does not establish Windows/macOS command availability or every sandbox
+  policy branch.
+- Cursor drains completed foreground output for a bounded 500 ms grace period
+  to capture late checkpoint writes. This is the tested design assumption;
+  longer-running background shells are unsupported.
+- Binary native writes, audio/resource inputs, remote-image resources, and
+  unsupported model/protocol combinations return explicit errors.
+- An optional baseline code-mode host build failed because the upstream V8
+  sandbox archive returned 404. Native providers use Codex's ordinary host and
+  do not depend on that optional binary; retain the normal default sandbox.
+- Auth, model, and service checks cover selected accounts and models. Provider
+  entitlements, account-wide rotation, and catalog-wide compatibility are not
+  claimed. No provider is marked complete or exhaustive.
