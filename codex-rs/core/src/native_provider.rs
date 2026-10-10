@@ -413,9 +413,15 @@ fn message(id: &str, text: String, thinking: bool) -> ResponseItem {
         }
     } else {
         ResponseItem::Message {
+            encrypted_content: None,
+            status: None,
             id: Some(ResponseItemId::from_server(id.to_owned())),
             role: "assistant".into(),
-            content: vec![ContentItem::OutputText { text }],
+            content: vec![ContentItem::OutputText {
+                text,
+                annotations: None,
+                logprobs: None,
+            }],
             phase: None,
             internal_chat_message_metadata_passthrough: None,
         }

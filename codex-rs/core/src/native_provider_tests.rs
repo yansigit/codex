@@ -616,7 +616,9 @@ async fn native_stream_preserves_text_order_and_waits_for_host_result() {
     assert_eq!(
         messages,
         vec![codex_protocol::models::ContentItem::OutputText {
-            text: "before tool".into()
+            text: "before tool".into(),
+            annotations: None,
+            logprobs: None,
         }]
     );
     assert!(
