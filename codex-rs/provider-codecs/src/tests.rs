@@ -1,0 +1,398 @@
+//! Synthetic regression fixtures reflecting source-observed wire shapes. These are
+//! deterministic interoperability tests, not a record of authenticated live traffic.
+use crate::*;
+use codex_provider_api::*;
+use serde_json::json;
+use std::collections::BTreeMap;
+use tokio_util::sync::CancellationToken;
+
+fn request(provider: &str) -> Request {
+    Request {
+        namespace: Namespace {
+            provider: provider.into(),
+            account: "test-account".into(),
+            model: "test-model".into(),
+            thread: "test-thread".into(),
+        },
+        system: "test system".into(),
+        messages: vec![Message {
+            role: Role::User,
+            content: vec![Content::Text {
+                text: "test prompt".into(),
+            }],
+        }],
+        tools: vec![ToolDefinition {
+            name: "read".into(),
+            description: "Read a file".into(),
+            parameters: json!({"type":"object","properties":{"path":{"type":"string"}},"required":["path"],"additionalProperties":false}),
+        }],
+        parallel_tool_calls: true,
+        max_output_tokens: Some(8192),
+        reasoning_effort: None,
+        output_schema: None,
+        checkpoint: None,
+        metadata: json!({}),
+    }
+}
+fn context() -> Context {
+    Context {
+        credentials: Credentials {
+            access_token: "fixture-secret".into(),
+            account_id: "test-account".into(),
+            metadata: json!({}),
+        },
+        cancellation: CancellationToken::new(),
+    }
+}
+fn feed(codec: &mut dyn WireCodec, value: serde_json::Value) -> Vec<Event> {
+    codec.frame("", &value.to_string()).unwrap()
+}
+
+#[test]
+fn messages_preserves_thinking_signature_and_restores_tool_name() {
+    let req = request("claude");
+    let ctx = context();
+    let mut codec = MessagesCodec::new(
+        "https://example.invalid/v1/messages".into(),
+        BTreeMap::new(),
+        true,
+        &req.tools,
+    )
+    .unwrap();
+    let wire = codec.request(&req, &ctx).unwrap();
+    assert_eq!(wire.body["tools"][0]["name"], "Read");
+    assert_eq!(wire.headers["authorization"], "Bearer fixture-secret");
+    feed(
+        &mut codec,
+        json!({"type":"message_start","message":{"id":"msg-test","usage":{"input_tokens":10,"cache_read_input_tokens":3}}}),
+    );
+    feed(
+        &mut codec,
+        json!({"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}}),
+    );
+    feed(
+        &mut codec,
+        json!({"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"reason"}}),
+    );
+    feed(
+        &mut codec,
+        json!({"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"signed-"}}),
+    );
+    feed(
+        &mut codec,
+        json!({"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"thought"}}),
+    );
+    feed(&mut codec, json!({"type":"content_block_stop","index":0}));
+    feed(
+        &mut codec,
+        json!({"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"tool-1","name":"Read","input":{}}}),
+    );
+    feed(
+        &mut codec,
+        json!({"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"path\":"}}),
+    );
+    feed(
+        &mut codec,
+        json!({"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\"a\"}"}}),
+    );
+    feed(&mut codec, json!({"type":"content_block_stop","index":1}));
+    let events = feed(
+        &mut codec,
+        json!({"type":"message_delta","usage":{"output_tokens":12}}),
+    );
+    assert!(matches!(
+        &events[0],
+        Event::Usage(Usage {
+            input_tokens: 10,
+            output_tokens: 12,
+            cached_input_tokens: 3,
+            ..
+        })
+    ));
+    feed(&mut codec, json!({"type":"message_stop"}));
+    let assistant = codec.assistant(&req.namespace).unwrap();
+    assert!(
+        assistant
+            .content
+            .iter()
+            .any(|block| matches!(block,Content::ToolCall(ToolCall {name,..}) if name=="read"))
+    );
+    let mut continued = req.clone();
+    continued.messages.push(assistant);
+    let continued_wire = codec.request(&continued, &ctx).unwrap();
+    assert_eq!(
+        continued_wire.body["messages"][1]["content"][0]["signature"],
+        "signed-thought"
+    );
+    assert_eq!(
+        continued_wire.body["messages"][1]["content"][1]["input"],
+        json!({"path":"a"})
+    );
+}
+#[test]
+fn messages_rejects_unsigned_incomplete_tool_json() {
+    let req = request("claude");
+    let mut codec = MessagesCodec::new("x".into(), BTreeMap::new(), true, &req.tools).unwrap();
+    feed(
+        &mut codec,
+        json!({"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"1","name":"Read","input":{}}}),
+    );
+    feed(
+        &mut codec,
+        json!({"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{"}}),
+    );
+    assert!(
+        codec
+            .frame(
+                "",
+                &json!({"type":"content_block_stop","index":0}).to_string()
+            )
+            .is_err()
+    );
+}
+#[test]
+fn chat_accumulates_fragmented_tool_arguments_and_reasoning_usage() {
+    let req = request("opencode-go");
+    let mut codec = ChatCodec::new("x".into(), BTreeMap::new(), true, &req.tools);
+    feed(
+        &mut codec,
+        json!({"id":"chat-1","choices":[{"index":0,"delta":{"reasoning_content":"think","tool_calls":[{"index":0,"id":"call-1","function":{"name":"read","arguments":"{\"path\":"}}]}}]}),
+    );
+    feed(
+        &mut codec,
+        json!({"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\"a\"}"}}]},"finish_reason":"tool_calls"}]}),
+    );
+    let events = feed(
+        &mut codec,
+        json!({"choices":[],"usage":{"prompt_tokens":9,"completion_tokens":8,"completion_tokens_details":{"reasoning_tokens":7}}}),
+    );
+    assert!(matches!(
+        events[0],
+        Event::Usage(Usage {
+            reasoning_tokens: 7,
+            ..
+        })
+    ));
+    codec.frame("", "[DONE]").unwrap();
+    let assistant = codec.assistant(&req.namespace).unwrap();
+    assert!(assistant.content.iter().any(|block|matches!(block,Content::ToolCall(ToolCall {arguments,..}) if arguments==&json!({"path":"a"}))));
+    let mut continued = req;
+    continued.messages.push(assistant);
+    assert_eq!(
+        codec.request(&continued, &context()).unwrap().body["messages"][2]["reasoning_content"],
+        "think"
+    );
+}
+#[test]
+fn google_replays_exact_signed_function_part() {
+    let req = request("antigravity");
+    let mut codec = GoogleCodec::new("x".into(), BTreeMap::new(), "project".into(), &req.tools);
+    let signed = json!({"thoughtSignature":"actual-upstream-signature","functionCall":{"name":"read","args":{"path":"a"}}});
+    feed(
+        &mut codec,
+        json!({"response":{"candidates":[{"content":{"role":"model","parts":[signed.clone()]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":5,"candidatesTokenCount":6}}}),
+    );
+    let assistant = codec.assistant(&req.namespace).unwrap();
+    let call = assistant
+        .content
+        .iter()
+        .find_map(|block| match block {
+            Content::ToolCall(call) => Some(call),
+            _ => None,
+        })
+        .unwrap()
+        .clone();
+    let mut continued = req;
+    continued.messages.push(assistant);
+    continued.messages.push(Message {
+        role: Role::Tool,
+        content: vec![Content::ToolResult(ToolResult {
+            call_id: call.id,
+            output: json!("file contents"),
+            is_error: false,
+        })],
+    });
+    let wire = codec.request(&continued, &context()).unwrap();
+    assert_eq!(wire.body["request"]["contents"][1]["parts"][0], signed);
+    assert_eq!(wire.body["request"]["sessionId"], "test-thread");
+    assert_eq!(
+        wire.body["request"]["contents"][2]["parts"][0]["functionResponse"]["name"],
+        "read"
+    );
+    assert!(wire.body.get("sessionId").is_none());
+}
+#[test]
+fn responses_replays_encrypted_reasoning_and_tool_call_ids() {
+    let req = request("opencode-go");
+    let mut codec = ResponsesCodec::new("x".into(), BTreeMap::new(), &req.tools);
+    let output = json!([{"type":"reasoning","id":"reason-1","summary":[],"encrypted_content":"opaque-signed-data"},{"type":"function_call","id":"fc-1","call_id":"call-1","name":"read","arguments":"{\"path\":\"a\"}"}]);
+    feed(
+        &mut codec,
+        json!({"type":"response.completed","response":{"id":"response-1","output":output}}),
+    );
+    let mut continued = req.clone();
+    continued
+        .messages
+        .push(codec.assistant(&req.namespace).unwrap());
+    let wire = codec.request(&continued, &context()).unwrap();
+    assert_eq!(
+        wire.body["input"][1]["encrypted_content"],
+        "opaque-signed-data"
+    );
+    assert_eq!(wire.body["input"][2]["call_id"], "call-1");
+}
+#[test]
+fn checkpoint_cumulative_replay_rejects_namespace_and_history_changes() {
+    let mut req = request("claude");
+    let first = Message {
+        role: Role::Assistant,
+        content: vec![
+            Content::Text {
+                text: "first".into(),
+            },
+            Content::Opaque {
+                namespace: req.namespace.clone(),
+                value: json!({"anthropic_blocks":[{"type":"text","text":"first"}]}),
+            },
+        ],
+    };
+    req.messages.push(first.clone());
+    let second = Message {
+        role: Role::Assistant,
+        content: vec![
+            Content::Text {
+                text: "second".into(),
+            },
+            Content::Opaque {
+                namespace: req.namespace.clone(),
+                value: json!({"anthropic_blocks":[{"type":"text","text":"second"}]}),
+            },
+        ],
+    };
+    let checkpoint = crate::replay::checkpoint(&req, &second).unwrap();
+    let mut resumed = req.clone();
+    resumed.messages[1].content.pop();
+    resumed.messages.push(Message {
+        role: Role::Assistant,
+        content: vec![Content::Text {
+            text: "second".into(),
+        }],
+    });
+    resumed.checkpoint = Some(checkpoint.clone());
+    restore_checkpoint(&mut resumed).unwrap();
+    assert_eq!(resumed.messages[1], first);
+    assert_eq!(resumed.messages[2], second);
+    let mut changed = req.clone();
+    changed.checkpoint = Some(checkpoint.clone());
+    changed.namespace.account = "other".into();
+    assert!(restore_checkpoint(&mut changed).is_err());
+    let mut changed = req;
+    changed.checkpoint = Some(checkpoint);
+    changed.system = "edited".into();
+    assert!(restore_checkpoint(&mut changed).is_err());
+}
+
+#[tokio::test]
+async fn native_http_session_continues_tool_round_and_checkpoints_before_execution() {
+    use wiremock::matchers::{body_partial_json, method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+    let server = MockServer::start().await;
+    let first = concat!(
+        "data: {\"id\":\"r1\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"c1\",\"function\":{\"name\":\"read\",\"arguments\":\"{\\\"path\\\":\\\"a\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\n",
+        "data: [DONE]\n\n"
+    );
+    Mock::given(method("POST")).and(path("/chat")).and(body_partial_json(json!({"messages":[{"role":"system","content":"test system"},{"role":"user","content":[{"type":"text","text":"test prompt"}]}]}))).respond_with(ResponseTemplate::new(200).set_body_string(first).insert_header("content-type","text/event-stream")).expect(1).mount(&server).await;
+    let second = "data: {\"id\":\"r2\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"done\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n";
+    Mock::given(method("POST"))
+        .and(path("/chat"))
+        .and(wiremock::matchers::body_string_contains("tool_call_id"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(second)
+                .insert_header("content-type", "text/event-stream"),
+        )
+        .with_priority(1)
+        .expect(1)
+        .mount(&server)
+        .await;
+    let req = request("opencode-go");
+    let codec = ChatCodec::new(
+        format!("{}/chat", server.uri()),
+        BTreeMap::new(),
+        false,
+        &req.tools,
+    );
+    let mut session = HttpSession::start(reqwest::Client::new(), Box::new(codec), req, context())
+        .await
+        .unwrap();
+    assert!(matches!(
+        session.next_event().await.unwrap(),
+        Some(Event::Checkpoint(_))
+    ));
+    let Some(Event::ToolCall(call)) = session.next_event().await.unwrap() else {
+        panic!("expected tool call");
+    };
+    session
+        .submit_tool_result(ToolResult {
+            call_id: call.id,
+            output: json!("contents"),
+            is_error: false,
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        session.next_event().await.unwrap(),
+        Some(Event::TextDelta("done".into()))
+    );
+    assert!(matches!(
+        session.next_event().await.unwrap(),
+        Some(Event::Checkpoint(_))
+    ));
+    assert_eq!(
+        session.next_event().await.unwrap(),
+        Some(Event::Completed { id: "r2".into() })
+    );
+    assert_eq!(session.next_event().await.unwrap(), None);
+    server.verify().await;
+}
+#[tokio::test]
+async fn cancelled_request_never_contacts_server() {
+    let server = wiremock::MockServer::start().await;
+    let req = request("opencode-go");
+    let ctx = context();
+    ctx.cancellation.cancel();
+    let codec = ChatCodec::new(
+        format!("{}/chat", server.uri()),
+        BTreeMap::new(),
+        false,
+        &req.tools,
+    );
+    assert!(matches!(
+        HttpSession::start(reqwest::Client::new(), Box::new(codec), req, ctx).await,
+        Err(ProviderError::Cancelled)
+    ));
+    assert!(server.received_requests().await.unwrap().is_empty());
+}
+#[tokio::test]
+async fn clean_http_eof_without_terminal_is_protocol_failure() {
+    let server = wiremock::MockServer::start().await;
+    wiremock::Mock::given(wiremock::matchers::method("POST"))
+        .respond_with(wiremock::ResponseTemplate::new(200).set_body_string(
+            "data: {\"id\":\"r\",\"choices\":[{\"delta\":{\"content\":\"partial\"}}]}\n\n",
+        ))
+        .mount(&server)
+        .await;
+    let req = request("opencode-go");
+    let codec = ChatCodec::new(server.uri(), BTreeMap::new(), false, &req.tools);
+    let mut session = HttpSession::start(reqwest::Client::new(), Box::new(codec), req, context())
+        .await
+        .unwrap();
+    assert_eq!(
+        session.next_event().await.unwrap(),
+        Some(Event::TextDelta("partial".into()))
+    );
+    assert!(matches!(
+        session.next_event().await,
+        Err(ProviderError::Protocol(_))
+    ));
+}
