@@ -15,13 +15,14 @@ import argparse
 import json
 import os
 import queue
+import shlex
 import subprocess
 import tempfile
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
-
+from typing import Any
 
 DEFAULT_MODELS = {
     "cursor": "gpt-5.6-luna-none",
@@ -48,6 +49,8 @@ class AppServer:
         self.next_id = 0
         self.approval_decision = "decline"
         self.approvals: list[str] = []
+        self.expected_approval_command: str | None = None
+        self.expected_approval_cwd: Path | None = None
         env = os.environ.copy()
         env["CODEX_HOME"] = str(codex_home)
         self.process = subprocess.Popen(
@@ -79,7 +82,9 @@ class AppServer:
         self.process.stdin.write(json.dumps(payload, separators=(",", ":")) + "\n")
         self.process.stdin.flush()
 
-    def wait(self, predicate: Callable[[dict[str, Any]], bool], seconds: int = 180) -> dict[str, Any]:
+    def wait(
+        self, predicate: Callable[[dict[str, Any]], bool], seconds: int = 180
+    ) -> dict[str, Any]:
         deadline = time.monotonic() + seconds
         while True:
             for index, event in enumerate(self.saved):
@@ -97,14 +102,61 @@ class AppServer:
             if "id" in event and "method" in event:
                 method = event["method"]
                 if method == "item/commandExecution/requestApproval":
+                    if not self._is_expected_approval(event.get("params", {})):
+                        self._send(
+                            {"id": event["id"], "result": {"decision": "decline"}}
+                        )
+                        raise AcceptanceError("unexpected command approval request")
                     self.approvals.append(self.approval_decision)
-                    self._send({"id": event["id"], "result": {"decision": self.approval_decision}})
+                    self._send(
+                        {
+                            "id": event["id"],
+                            "result": {"decision": self.approval_decision},
+                        }
+                    )
+                    self.expected_approval_command = None
+                    self.expected_approval_cwd = None
                 else:
-                    self._send({"id": event["id"], "error": {"code": -32601, "message": "Not supported by acceptance harness"}})
+                    self._send(
+                        {
+                            "id": event["id"],
+                            "error": {
+                                "code": -32601,
+                                "message": "Not supported by acceptance harness",
+                            },
+                        }
+                    )
                 continue
             if predicate(event):
                 return event
             self.saved.append(event)
+
+    def _is_expected_approval(self, params: dict[str, Any]) -> bool:
+        if self.expected_approval_command is None or self.expected_approval_cwd is None:
+            return False
+        try:
+            command = shlex.split(params.get("command", ""))
+        except (TypeError, ValueError):
+            return False
+        exact_command = (
+            len(command) == 3
+            and command[0] in {"/bin/bash", "/usr/bin/bash"}
+            and command[1] in {"-lc", "-c"}
+            and command[2] == self.expected_approval_command
+        )
+        amendment = params.get("proposedExecpolicyAmendment")
+        exact_amendment = amendment in (
+            ["/bin/bash", "-lc", self.expected_approval_command],
+            ["/bin/bash", "-c", self.expected_approval_command],
+            ["/usr/bin/bash", "-lc", self.expected_approval_command],
+            ["/usr/bin/bash", "-c", self.expected_approval_command],
+        )
+        return (
+            exact_command
+            and exact_amendment
+            and params.get("cwd") == str(self.expected_approval_cwd)
+            and params.get("kind") == "command"
+        )
 
     def call(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
         self.next_id += 1
@@ -128,17 +180,28 @@ class AppServer:
         )
         self._send({"method": "initialized"})
 
-    def start_thread(self, provider: str, model: str, workspace: Path, approval: str, sandbox: str) -> str:
+    def start_thread(
+        self,
+        provider: str,
+        model: str,
+        workspace: Path,
+        approval: str,
+        sandbox: str,
+        approvals_reviewer: str | None = None,
+    ) -> str:
+        params: dict[str, Any] = {
+            "modelProvider": provider,
+            "model": model,
+            "cwd": str(workspace),
+            "approvalPolicy": approval,
+            "sandbox": sandbox,
+            "baseInstructions": "Follow the user's requested acceptance check exactly. Be concise.",
+        }
+        if approvals_reviewer is not None:
+            params["approvalsReviewer"] = approvals_reviewer
         result = self.call(
             "thread/start",
-            {
-                "modelProvider": provider,
-                "model": model,
-                "cwd": str(workspace),
-                "approvalPolicy": approval,
-                "sandbox": sandbox,
-                "baseInstructions": "Follow the user's requested acceptance check exactly. Be concise.",
-            },
+            params,
         )
         thread = result.get("thread", {}).get("id")
         if not isinstance(thread, str):
@@ -158,15 +221,24 @@ class AppServer:
             raise AcceptanceError("turn did not start")
         return turn
 
-    def wait_turn(self, thread: str, turn: str, seconds: int = 180) -> str:
-        event = self.wait(
-            lambda item: item.get("method") == "turn/completed"
-            and item.get("params", {}).get("turn", {}).get("id") == turn,
+    def wait_turn_event(
+        self, thread: str, turn: str, seconds: int = 180
+    ) -> dict[str, Any]:
+        return self.wait(
+            lambda item: (
+                item.get("method") == "turn/completed"
+                and item.get("params", {}).get("turn", {}).get("id") == turn
+            ),
             seconds,
         )
+
+    def wait_turn(self, thread: str, turn: str, seconds: int = 180) -> str:
+        event = self.wait_turn_event(thread, turn, seconds)
         return str(event.get("params", {}).get("turn", {}).get("status", "unknown"))
 
-    def complete_turn(self, thread: str, prompt: str, seconds: int = 180, model: str | None = None) -> None:
+    def complete_turn(
+        self, thread: str, prompt: str, seconds: int = 180, model: str | None = None
+    ) -> None:
         turn = self.turn_start(thread, prompt, model)
         if self.wait_turn(thread, turn, seconds) != "completed":
             raise AcceptanceError("turn did not complete")
@@ -181,14 +253,19 @@ class AppServer:
             self.process.wait(timeout=5)
 
 
-def text_items(server: AppServer, thread: str) -> list[str]:
+def text_items(server: AppServer, thread: str, turn: str) -> list[str]:
     texts = []
     for event in server.saved:
         params = event.get("params", {})
         item = params.get("item", {})
-        if event.get("method") == "item/completed" and params.get("threadId") == thread:
-            if item.get("type") == "agentMessage" and isinstance(item.get("text"), str):
-                texts.append(item["text"])
+        if (
+            event.get("method") == "item/completed"
+            and params.get("threadId") == thread
+            and params.get("turnId") == turn
+            and item.get("type") == "agentMessage"
+            and isinstance(item.get("text"), str)
+        ):
+            texts.append(item["text"])
     return texts
 
 
@@ -198,35 +275,59 @@ def lifecycle(args: argparse.Namespace) -> None:
     server = AppServer(args.codex, args.codex_home, args.provider)
     try:
         server.initialize()
-        thread = server.start_thread(args.provider, args.model, workspace, "never", "workspace-write")
+        thread = server.start_thread(
+            args.provider, args.model, workspace, "never", "workspace-write"
+        )
         server.complete_turn(
             thread,
             f'Use exec_command exactly once with cmd="printf ACCEPTED_NATIVE_TOOL > {marker}". Then reply READY.',
         )
         if marker.read_text(encoding="utf-8") != "ACCEPTED_NATIVE_TOOL":
             raise AcceptanceError("authorized host tool result mismatch")
-        server.complete_turn(thread, "Remember the exact code word ORCHARD-725. Reply READY only.")
+        server.complete_turn(
+            thread, "Remember the exact code word ORCHARD-725. Reply READY only."
+        )
         fork_result = server.call("thread/fork", {"threadId": thread})
         fork = fork_result.get("thread", {}).get("id")
         if not isinstance(fork, str):
             raise AcceptanceError("thread fork failed")
-        server.complete_turn(fork, "What exact code word did I ask you to remember? Reply only that word.")
+        fork_turn = server.turn_start(
+            fork,
+            "What exact code word did I ask you to remember? Reply only that word.",
+        )
+        if server.wait_turn(fork, fork_turn) != "completed":
+            raise AcceptanceError("fork turn did not complete")
         server.call("thread/compact/start", {"threadId": thread})
         server.wait(
-            lambda event: event.get("method") == "item/completed"
-            and event.get("params", {}).get("threadId") == thread
-            and event.get("params", {}).get("item", {}).get("type") == "contextCompaction",
+            lambda event: (
+                event.get("method") == "item/completed"
+                and event.get("params", {}).get("threadId") == thread
+                and event.get("params", {}).get("item", {}).get("type")
+                == "contextCompaction"
+            ),
             240,
         )
         server.wait(
-            lambda event: event.get("method") == "turn/completed"
-            and event.get("params", {}).get("threadId") == thread,
+            lambda event: (
+                event.get("method") == "turn/completed"
+                and event.get("params", {}).get("threadId") == thread
+            ),
             120,
         )
-        server.complete_turn(thread, "What exact code word did I ask you to remember? Reply only that word.")
-        seen = text_items(server, thread) + text_items(server, fork)
-        if sum("ORCHARD-725" in text for text in seen) < 2:
-            raise AcceptanceError("branch or compaction lost remembered content")
+        compacted_turn = server.turn_start(
+            thread,
+            "What exact code word did I ask you to remember? Reply only that word.",
+        )
+        if server.wait_turn(thread, compacted_turn) != "completed":
+            raise AcceptanceError("post-compaction turn did not complete")
+        if not any(
+            "ORCHARD-725" in text for text in text_items(server, fork, fork_turn)
+        ):
+            raise AcceptanceError("fork did not preserve remembered content")
+        if not any(
+            "ORCHARD-725" in text for text in text_items(server, thread, compacted_turn)
+        ):
+            raise AcceptanceError("compaction did not preserve remembered content")
         print(f"PASS provider={args.provider} thread={thread} check=lifecycle")
     finally:
         server.close()
@@ -240,7 +341,9 @@ def interruption(args: argparse.Namespace) -> None:
     thread = ""
     try:
         server.initialize()
-        thread = server.start_thread(args.provider, args.model, workspace, "never", "workspace-write")
+        thread = server.start_thread(
+            args.provider, args.model, workspace, "never", "workspace-write"
+        )
         turn = server.turn_start(
             thread,
             f'Call exec_command with cmd="printf STARTED > {started}; sleep 45; printf COMPLETED > {completed}", yield_time_ms=1000. Wait for completion with write_stdin if needed. Do not modify the command.',
@@ -251,30 +354,53 @@ def interruption(args: argparse.Namespace) -> None:
                 raise AcceptanceError("app-server exited before tool started")
             time.sleep(0.1)
         if not started.exists():
-            raise AcceptanceError("host tool never started; interruption was not tested")
+            raise AcceptanceError(
+                "host tool never started; interruption was not tested"
+            )
         server.call("turn/interrupt", {"threadId": thread, "turnId": turn})
         if server.wait_turn(thread, turn, 30) != "interrupted":
             raise AcceptanceError("active turn was not interrupted")
         if completed.exists():
             raise AcceptanceError("interrupted host process completed")
-        print(f"PASS provider={args.provider} thread={thread} check=active-tool-interrupted")
+        print(
+            f"PASS provider={args.provider} thread={thread} check=active-tool-interrupted"
+        )
         server.close()
         server = AppServer(args.codex, args.codex_home, args.provider)
         server.initialize()
         server.call("thread/resume", {"threadId": thread})
-        turn = server.turn_start(thread, "Reply READY without tools.", args.alternate_model)
-        status = server.wait_turn(thread, turn, 90)
+        turn = server.turn_start(
+            thread, "Reply READY without tools.", args.alternate_model
+        )
+        event = server.wait_turn_event(thread, turn, 90)
+        status = str(event.get("params", {}).get("turn", {}).get("status", "unknown"))
         if status != "failed":
-            raise AcceptanceError("interrupted operation was not fenced after restart/model change")
-        fork = server.call("thread/fork", {"threadId": thread}).get("thread", {}).get("id")
+            raise AcceptanceError(
+                "interrupted operation was not fenced after restart/model change"
+            )
+        error = event.get("params", {}).get("turn", {}).get("error", {})
+        message = error.get("message", "") if isinstance(error, dict) else ""
+        if "explicitly branch" not in message:
+            raise AcceptanceError("failed turn was not the interrupted-operation fence")
+        fork = (
+            server.call("thread/fork", {"threadId": thread}).get("thread", {}).get("id")
+        )
         if not isinstance(fork, str):
             raise AcceptanceError("explicit recovery branch failed")
-        server.complete_turn(fork, "Do not run or retry any command. Reply BRANCH_RECOVERED only.")
-        if not any("BRANCH_RECOVERED" in text for text in text_items(server, fork)):
+        branch_turn = server.turn_start(
+            fork, "Do not run or retry any command. Reply BRANCH_RECOVERED only."
+        )
+        if server.wait_turn(fork, branch_turn) != "completed":
+            raise AcceptanceError("explicit recovery branch did not complete")
+        if not any(
+            "BRANCH_RECOVERED" in text for text in text_items(server, fork, branch_turn)
+        ):
             raise AcceptanceError("explicit recovery branch did not continue")
         if completed.exists():
             raise AcceptanceError("cancelled host process completed after restart")
-        print(f"PASS provider={args.provider} thread={thread} check=restart-fence-and-branch")
+        print(
+            f"PASS provider={args.provider} thread={thread} check=restart-fence-and-branch"
+        )
     finally:
         server.close()
 
@@ -285,7 +411,14 @@ def permissions(args: argparse.Namespace) -> None:
     server = AppServer(args.codex, args.codex_home, args.provider)
     try:
         server.initialize()
-        thread = server.start_thread(args.provider, args.model, workspace, "on-request", "read-only")
+        thread = server.start_thread(
+            args.provider,
+            args.model,
+            workspace,
+            "on-request",
+            "read-only",
+            approvals_reviewer="user",
+        )
 
         def prompt(marker: str) -> str:
             return (
@@ -297,8 +430,12 @@ def permissions(args: argparse.Namespace) -> None:
             )
 
         server.approval_decision = "decline"
+        server.expected_approval_command = f"printf DENIED_WRITE > {target}"
+        server.expected_approval_cwd = workspace
         server.complete_turn(thread, prompt("DENIED_WRITE"))
-        if not server.approvals or any(decision != "decline" for decision in server.approvals):
+        if not server.approvals or any(
+            decision != "decline" for decision in server.approvals
+        ):
             raise AcceptanceError("decline approval RPC was not exercised")
         if target.exists():
             raise AcceptanceError("declined command modified the temporary workspace")
@@ -306,6 +443,7 @@ def permissions(args: argparse.Namespace) -> None:
 
         before = len(server.approvals)
         server.approval_decision = "accept"
+        server.expected_approval_command = f"printf ACCEPTED_WRITE > {target}"
         server.complete_turn(thread, prompt("ACCEPTED_WRITE"))
         if len(server.approvals) <= before:
             raise AcceptanceError("accept approval RPC was not exercised")
@@ -328,12 +466,28 @@ def parse_args() -> argparse.Namespace:
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--codex", type=Path, required=True, help="absolute path to the codex executable")
-    parser.add_argument("--codex-home", type=Path, required=True, help="existing CODEX_HOME with a selected provider account")
+    parser.add_argument(
+        "--codex",
+        type=Path,
+        required=True,
+        help="absolute path to the codex executable",
+    )
+    parser.add_argument(
+        "--codex-home",
+        type=Path,
+        required=True,
+        help="existing CODEX_HOME with a selected provider account",
+    )
     parser.add_argument("--provider", choices=DEFAULT_MODELS, required=True)
-    parser.add_argument("--model", help="provider model; defaults to a known text-capable test model")
-    parser.add_argument("--alternate-model", help="alternate model for interruption fence check")
-    parser.add_argument("--check", choices=("lifecycle", "interruption", "permissions"), required=True)
+    parser.add_argument(
+        "--model", help="provider model; defaults to a known text-capable test model"
+    )
+    parser.add_argument(
+        "--alternate-model", help="alternate model for interruption fence check"
+    )
+    parser.add_argument(
+        "--check", choices=("lifecycle", "interruption", "permissions"), required=True
+    )
     args = parser.parse_args()
     if not args.codex.is_absolute() or not args.codex.is_file():
         parser.error("--codex must name an existing absolute executable path")
@@ -346,11 +500,17 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    checks = {"lifecycle": lifecycle, "interruption": interruption, "permissions": permissions}
+    checks = {
+        "lifecycle": lifecycle,
+        "interruption": interruption,
+        "permissions": permissions,
+    }
     try:
         checks[args.check](args)
-    except Exception as error:  # Deliberately avoid printing exception payloads.
-        print(f"FAIL provider={args.provider} check={args.check} error={type(error).__name__}")
+    except Exception as error:  # Deliberately avoid printing exception payloads.  # noqa: BLE001
+        print(
+            f"FAIL provider={args.provider} check={args.check} error={type(error).__name__}"
+        )
         return 1
     return 0
 
