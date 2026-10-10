@@ -81,7 +81,7 @@
       "packages": [
         "codex-app-server"
       ],
-      "test_target": "suite",
+      "test_target": "all",
       "filter": "native_account",
       "minimum_tests": 1
     },
@@ -92,9 +92,25 @@
       ],
       "filter": "schema_fixtures",
       "minimum_tests": 1
+    },
+    {
+      "name": "cli-provider-choices",
+      "packages": [
+        "codex-cli"
+      ],
+      "test_target": "bin:codex",
+      "filter": "provider_cli_parses_each_supported_provider_and_rejects_unknown_values",
+      "minimum_tests": 1
     }
   ],
   "provider_branch_scan": {
+    "scan_roots": [
+      "codex-rs/core/src",
+      "codex-rs/cli/src",
+      "codex-rs/app-server/src/request_processors",
+      "codex-rs/model-provider/src",
+      "codex-rs/tui/src"
+    ],
     "paths": [
       "codex-rs/config/src/thread_config/remote.rs",
       "codex-rs/model-provider/src/native.rs",
@@ -200,7 +216,7 @@
       "id": "generic-cli-metadata-choices",
       "path": "codex-rs/cli/src/provider_cmd.rs",
       "purpose": "CLI choices come from generic provider metadata rather than provider-specific branches.",
-      "regression_test_group": "cli-build"
+      "regression_test_group": "cli-provider-choices"
     }
   ],
   "registry_metadata_source": "codex-rs/providers/provider-registry/src/lib.rs"
