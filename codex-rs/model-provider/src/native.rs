@@ -45,7 +45,11 @@ impl ModelProvider for NativeModelProvider {
             .map_err(|_| crate::ProviderAccountError::NativeStateUnavailable)
     }
     fn capabilities(&self) -> ProviderCapabilities {
-        let capabilities = self.backend.descriptor().capabilities;
+        let capabilities = self
+            .backend
+            .descriptor()
+            .map(|descriptor| descriptor.capabilities)
+            .unwrap_or_default();
         ProviderCapabilities {
             image_generation: capabilities.image_generation,
             web_search: capabilities.web_search,
@@ -54,13 +58,22 @@ impl ModelProvider for NativeModelProvider {
         }
     }
     fn approval_review_preferred_model(&self) -> &'static str {
-        self.backend.descriptor().auxiliary_model
+        self.backend
+            .descriptor()
+            .map(|descriptor| descriptor.auxiliary_model)
+            .unwrap_or(crate::provider::DEFAULT_APPROVAL_REVIEW_PREFERRED_MODEL)
     }
     fn memory_extraction_preferred_model(&self) -> &'static str {
-        self.backend.descriptor().auxiliary_model
+        self.backend
+            .descriptor()
+            .map(|descriptor| descriptor.auxiliary_model)
+            .unwrap_or(crate::provider::DEFAULT_MEMORY_EXTRACTION_PREFERRED_MODEL)
     }
     fn memory_consolidation_preferred_model(&self) -> &'static str {
-        self.backend.descriptor().auxiliary_model
+        self.backend
+            .descriptor()
+            .map(|descriptor| descriptor.auxiliary_model)
+            .unwrap_or(crate::provider::DEFAULT_MEMORY_CONSOLIDATION_PREFERRED_MODEL)
     }
     fn models_manager(
         &self,
