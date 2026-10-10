@@ -995,3 +995,15 @@ fn legacy_native_wire_aliases_preserve_serialized_forms() {
         same_id.validate().unwrap();
     }
 }
+
+#[test]
+fn incomplete_native_configuration_never_uses_responses_transport_or_retries() {
+    let provider = ModelProviderInfo {
+        wire_api: WireApi::Native,
+        ..Default::default()
+    };
+    assert!(provider.validate().is_err());
+    assert!(provider.to_api_provider(None).is_err());
+    assert_eq!(provider.request_max_retries(), 0);
+    assert_eq!(provider.stream_max_retries(), 0);
+}
