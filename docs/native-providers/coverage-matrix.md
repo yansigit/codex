@@ -6,10 +6,26 @@ fixtures do not prove behavior against a provider service. Pinned upstream
 evidence is catalogued in [references.md](references.md). Reproduction commands
 for the reusable app-server checks are in [usage.md](usage.md).
 
+## Compiled boundary refactor
+
+Fresh results and exact receipt paths are in
+[refactor-validation.md](refactor-validation.md). All four providers passed
+new live discovery, lifecycle, approval, interruption, restart fencing, and
+explicit recovery checks. Seven CLI model routes passed tool execution and
+clean resume, including all three Go protocols and both Antigravity families.
+The [integration manifest](integration-manifest.json) maps retained hooks to
+regression groups; fixtures, architecture controls, and a fifth-provider test
+cover the new boundary.
+
+## Published implementation baseline
+
+The detailed counts and receipts below are the published baseline. They are
+kept for comparison and do not substitute for the fresh refactor results above.
+
 Implementation and regression entry points: [native core routing](../../codex-rs/core/src/native_provider.rs),
-[core tests](../../codex-rs/core/src/native_provider_tests.rs),
-[host-tool translation](../../codex-rs/core/src/native_provider_tools.rs),
-[shared driver tests](../../codex-rs/providers/provider-api/tests/driver.rs),
+[adapter tests](../../codex-rs/providers/provider-adapter/src/session.rs),
+[host-tool translation](../../codex-rs/providers/provider-adapter/src/host_operations.rs),
+[shared driver tests](../../codex-rs/providers/provider-runtime/tests/driver.rs),
 [auth security tests](../../codex-rs/providers/provider-auth/tests/security.rs),
 [codec tests](../../codex-rs/providers/provider-codecs/src/tests.rs),
 [Cursor transport tests](../../codex-rs/providers/provider-cursor/src/tests.rs),

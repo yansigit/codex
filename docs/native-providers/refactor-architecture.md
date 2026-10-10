@@ -81,17 +81,19 @@ paths are recorded as compatibility surfaces in the checker manifest.
 
 The provider API keeps tool completion separate from provider output. A host
 completion contains a call ID, ordinary output, optional structured execution
-data, and a `Success`, `Failure`, or `Denied` disposition. The adapter matches
-the completion to the pending call, preserves structured data independently,
-and records the ordinary result through the existing host history path.
+data, and a `Success`, `Failure`, or `Denied` disposition. Core records the
+actual truncated model-visible result through its existing history path before
+returning the typed completion. The adapter matches that completion to the
+pending call and preserves structured data independently.
 
 For tools that execute host operations, runtime ordering is:
 
 1. Persist the interrupted-execution fence before dispatching any host action.
 2. Journal the call before running it; replay a stored result for a repeated
    call ID instead of executing it twice.
-3. Wait for the host's typed completion. For shell operations, collect any
-   `write_stdin` continuations and the final structured process result.
+3. Dispatch through Codex's normal tool path and wait for its recorded result
+   and typed completion. For shell operations, collect any `write_stdin`
+   continuations and the final structured process result.
 4. Persist the resulting tool journal entry before returning the result to the
    provider session.
 5. On terminal turn completion, bind the checkpoint to the verified history

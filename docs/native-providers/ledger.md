@@ -1,18 +1,24 @@
 # Native provider implementation ledger
 
-The native provider implementation has live end-to-end evidence across all
-four provider families. The final CLI build, schema fixtures, and strict clippy
-checks passed on 2026-10-10. Provider source revisions and licenses are in
-[references.md](references.md); scenario-level receipts and limits are in the
-[coverage matrix](coverage-matrix.md).
+The compiled provider boundary refactor is on
+`refactor/compiled-native-providers`, starting from published baseline
+`29413a496e28042629125693b3d8c218e49be879` without rewriting it. Fresh verification,
+live acceptance, rollback compatibility, and CI activation are recorded in
+[refactor-validation.md](refactor-validation.md). The dependency diagram and
+retained host hooks are in [refactor-architecture.md](refactor-architecture.md)
+and the [integration manifest](integration-manifest.json).
+
+The publication and live receipts below describe the published implementation;
+they remain baseline evidence. Provider source revisions and licenses are in
+[references.md](references.md).
 
 ## Architecture and integration
 
 - Provider crates depend on `provider-api`, not `codex-core`.
 - Core supplies host execution through the normal tool router, preserving
   Codex-owned approvals, sandbox policy, hooks, and user-facing tool events.
-- `provider-auth` isolates credentials by provider/account and stores
-  checkpoints and tool journals with provider/account/model/thread identity.
+- `provider-auth` isolates credentials by provider/account. `provider-runtime`
+  stores checkpoints and tool journals with provider/account/model/thread identity.
   One account is selected per provider; automatic rotation and fallback are
   not performed.
 - OAuth uses PKCE/state, cancellable callbacks, atomic credential writes, and
