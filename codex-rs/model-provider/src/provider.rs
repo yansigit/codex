@@ -110,24 +110,8 @@ pub const DEFAULT_MEMORY_CONSOLIDATION_PREFERRED_MODEL: &str = "gpt-5.6-terra";
 /// `ModelProviderInfo` returned by `info` is the serialized/configured provider
 /// metadata used by the default OpenAI-compatible implementation.
 pub trait ModelProvider: fmt::Debug + Send + Sync {
-    fn native_state_home(&self) -> Option<PathBuf> {
+    fn backend(&self) -> Option<Arc<codex_provider_adapter::backend::NativeBackend>> {
         None
-    }
-    fn native_provider(&self) -> codex_provider_api::Result<Arc<dyn codex_provider_api::Provider>> {
-        Err(codex_provider_api::ProviderError::Unsupported(
-            "provider does not use native inference".into(),
-        ))
-    }
-
-    fn native_credentials(
-        &self,
-        _cancellation: tokio_util::sync::CancellationToken,
-    ) -> codex_provider_api::ProviderFuture<'_, codex_provider_api::Credentials> {
-        Box::pin(async {
-            Err(codex_provider_api::ProviderError::Unsupported(
-                "provider does not use native authentication".into(),
-            ))
-        })
     }
     /// Returns the configured provider metadata.
     fn info(&self) -> &ModelProviderInfo;
@@ -360,7 +344,7 @@ pub fn create_model_provider(
     provider_info: ModelProviderInfo,
     auth_manager: Option<Arc<AuthManager>>,
 ) -> SharedModelProvider {
-    if provider_info.wire_api.native_provider_id().is_some() {
+    if provider_info.native_provider_id().is_some() {
         let home = auth_manager
             .as_ref()
             .map(|manager| manager.runtime_config().codex_home);
@@ -673,6 +657,7 @@ mod tests {
             gateway_oauth: None,
             aws: None,
             wire_api: WireApi::Responses,
+            native_provider: None,
             query_params: None,
             http_headers: None,
             env_http_headers: None,

@@ -4080,12 +4080,7 @@ dependencies = [
  "codex-models-manager",
  "codex-otel",
  "codex-protocol",
- "codex-provider-antigravity",
- "codex-provider-api",
- "codex-provider-auth",
- "codex-provider-claude",
- "codex-provider-cursor",
- "codex-provider-opencode",
+ "codex-provider-adapter",
  "codex-response-debug-context",
  "codex-secrets",
  "codex-utils-cargo-bin",
@@ -4111,6 +4106,7 @@ version = "0.0.0"
 dependencies = [
  "codex-client",
  "codex-protocol",
+ "codex-provider-registry",
  "codex-utils-absolute-path",
  "codex-utils-redacted-string",
  "http 1.4.0",
@@ -4367,6 +4363,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "codex-provider-adapter"
+version = "0.0.0"
+dependencies = [
+ "base64 0.22.1",
+ "codex-api",
+ "codex-http-client",
+ "codex-model-provider-info",
+ "codex-models-manager",
+ "codex-protocol",
+ "codex-provider-api",
+ "codex-provider-auth",
+ "codex-provider-cursor",
+ "codex-provider-registry",
+ "codex-provider-runtime",
+ "codex-tools",
+ "futures",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "uuid",
+ "which 8.0.0",
+]
+
+[[package]]
 name = "codex-provider-antigravity"
 version = "0.0.0"
 dependencies = [
@@ -4386,11 +4407,9 @@ dependencies = [
 name = "codex-provider-api"
 version = "0.0.0"
 dependencies = [
- "futures",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
- "tokio",
  "tokio-util",
 ]
 
@@ -4479,6 +4498,34 @@ dependencies = [
  "tokio",
  "url",
  "wiremock",
+]
+
+[[package]]
+name = "codex-provider-registry"
+version = "0.0.0"
+dependencies = [
+ "codex-provider-antigravity",
+ "codex-provider-api",
+ "codex-provider-auth",
+ "codex-provider-claude",
+ "codex-provider-cursor",
+ "codex-provider-opencode",
+ "reqwest 0.12.28",
+ "serde_json",
+ "tokio-util",
+]
+
+[[package]]
+name = "codex-provider-runtime"
+version = "0.0.0"
+dependencies = [
+ "codex-provider-api",
+ "codex-provider-auth",
+ "futures",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-util",
 ]
 
 [[package]]

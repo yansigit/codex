@@ -14,18 +14,13 @@ workspace = true
 
 [features]
 default = ["provider-cursor", "provider-opencode", "provider-claude", "provider-antigravity"]
-provider-cursor = ["dep:codex-provider-cursor"]
-provider-opencode = ["dep:codex-provider-opencode"]
-provider-claude = ["dep:codex-provider-claude"]
-provider-antigravity = ["dep:codex-provider-antigravity"]
+provider-cursor = ["codex-provider-adapter/provider-cursor"]
+provider-opencode = ["codex-provider-adapter/provider-opencode"]
+provider-claude = ["codex-provider-adapter/provider-claude"]
+provider-antigravity = ["codex-provider-adapter/provider-antigravity"]
 
 [dependencies]
-codex-provider-api = { workspace = true }
-codex-provider-auth = { workspace = true }
-codex-provider-cursor = { workspace = true, optional = true }
-codex-provider-opencode = { workspace = true, optional = true }
-codex-provider-claude = { workspace = true, optional = true }
-codex-provider-antigravity = { workspace = true, optional = true }
+codex-provider-adapter = { workspace = true, default-features = false }
 reqwest = { workspace = true, features = ["json", "stream"] }
 tokio-util = { workspace = true }
 codex-utils-process = { workspace = true }
