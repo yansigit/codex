@@ -569,8 +569,8 @@ mod tests {
             .unwrap()
             .unwrap_err();
         assert!(matches!(
-            error,
-            codex_protocol::error::CodexErr::TurnAborted
+            error.details(),
+            codex_protocol::error::CodexErrorDetails::TurnAborted
         ));
     }
 
