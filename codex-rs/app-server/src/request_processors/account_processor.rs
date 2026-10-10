@@ -757,6 +757,9 @@ impl AccountRequestProcessor {
         })
     }
 
+    // Cancellation/replacement and credential commit must be serialized under
+    // the same active-login lock, including the credential store's async lock.
+    #[allow(clippy::await_holding_invalid_type)]
     async fn login_native(
         &self,
         provider: String,

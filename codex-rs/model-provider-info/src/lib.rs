@@ -337,6 +337,8 @@ other non-default provider fields are not supported"
                 || self.auth.is_some()
                 || self.gateway_oauth.is_some()
                 || self.supports_websockets
+                || self.supports_standalone_web_search
+                || self.capabilities.is_some()
                 || self.model_catalog_url.is_some()
                 || self.query_params.is_some()
                 || self.http_headers.is_some()
