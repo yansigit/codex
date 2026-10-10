@@ -2846,6 +2846,10 @@
           "description": "Friendly display name.",
           "type": "string"
         },
+        "native_provider": {
+          "description": "Registered provider ID required by `wire_api = \"native\"`.",
+          "type": "string"
+        },
         "query_params": {
           "additionalProperties": {
             "type": "string"
@@ -6850,6 +6854,13 @@
           "description": "The Responses API exposed by OpenAI at `/v1/responses`.",
           "enum": [
             "responses"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A provider selected by the registered `native_provider` ID.",
+          "enum": [
+            "native"
           ],
           "type": "string"
         }
