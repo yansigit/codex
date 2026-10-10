@@ -79,6 +79,8 @@ pub struct ModelProvider {
     pub supports_standalone_web_search: bool,
     #[prost(string, optional, tag = "19")]
     pub model_catalog_url: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, optional, tag = "20")]
+    pub native_provider: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StringMap {
@@ -108,6 +110,7 @@ pub enum WireApi {
     OpenCodeGo = 3,
     Claude = 4,
     Antigravity = 5,
+    Native = 6,
 }
 impl WireApi {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -122,6 +125,7 @@ impl WireApi {
             Self::OpenCodeGo => "WIRE_API_OPEN_CODE_GO",
             Self::Claude => "WIRE_API_CLAUDE",
             Self::Antigravity => "WIRE_API_ANTIGRAVITY",
+            Self::Native => "WIRE_API_NATIVE",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -133,6 +137,7 @@ impl WireApi {
             "WIRE_API_OPEN_CODE_GO" => Some(Self::OpenCodeGo),
             "WIRE_API_CLAUDE" => Some(Self::Claude),
             "WIRE_API_ANTIGRAVITY" => Some(Self::Antigravity),
+            "WIRE_API_NATIVE" => Some(Self::Native),
             _ => None,
         }
     }

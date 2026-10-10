@@ -10,7 +10,7 @@ fn native_provider_configuration_round_trips_without_responses_fallback() {
     for id in ["cursor", "opencode-go", "claude", "antigravity"] {
         let provider = built_in_model_providers(None).remove(id).unwrap();
         provider.validate().unwrap();
-        assert_eq!(provider.wire_api.native_provider_id(), Some(id));
+        assert_eq!(provider.native_provider_id(), Some(id));
         let encoded = toml::to_string(&provider).unwrap();
         assert_eq!(
             toml::from_str::<ModelProviderInfo>(&encoded).unwrap(),
@@ -115,6 +115,7 @@ base_url = "http://localhost:11434/v1"
         gateway_oauth: None,
         aws: None,
         wire_api: WireApi::Responses,
+        native_provider: None,
         query_params: None,
         http_headers: None,
         env_http_headers: None,
@@ -152,6 +153,7 @@ query_params = { api-version = "2025-04-01-preview" }
         gateway_oauth: None,
         aws: None,
         wire_api: WireApi::Responses,
+        native_provider: None,
         query_params: Some(maplit::hashmap! {
             "api-version".to_string() => "2025-04-01-preview".into(),
         }),
@@ -193,6 +195,7 @@ supports_standalone_web_search = true
         gateway_oauth: None,
         aws: None,
         wire_api: WireApi::Responses,
+        native_provider: None,
         query_params: None,
         http_headers: Some(maplit::hashmap! {
             "X-Example-Header".to_string() => "example-value".into(),
@@ -384,6 +387,7 @@ fn test_create_amazon_bedrock_provider() {
                 auth_refresh: None,
             }),
             wire_api: WireApi::Responses,
+            native_provider: None,
             query_params: None,
             http_headers: Some(maplit::hashmap! {
                 AMAZON_BEDROCK_MANTLE_CLIENT_AGENT_HEADER.to_string() =>
@@ -910,4 +914,84 @@ model_catalog_url = "https://gateway.example/codex/catalog?token=catalog-secret"
             .base_url,
         "https://gateway.example/v1"
     );
+}
+
+#[test]
+fn fifth_registered_provider_uses_generic_configuration_and_builtin_metadata() {
+    static FIFTH: codex_provider_registry::Descriptor = codex_provider_registry::Descriptor {
+        id: "fifth-provider",
+        display_name: "Fifth provider",
+        env_key: Some("FIFTH_API_KEY"),
+        auxiliary_model: "fifth-model",
+        legacy_wire_aliases: &[],
+        ..codex_provider_registry::OPENCODE
+    };
+    let mut registry = codex_provider_registry::registry().clone();
+    registry.register(&FIFTH).unwrap();
+    let configured: ModelProviderInfo = toml::from_str(
+        r#"
+name = "Custom fifth"
+wire_api = "native"
+native_provider = "fifth-provider"
+"#,
+    )
+    .unwrap();
+    configured.validate_with_registry(&registry).unwrap();
+    assert_eq!(configured.native_provider_id(), Some("fifth-provider"));
+    assert!(
+        configured
+            .validate()
+            .unwrap_err()
+            .contains("unknown native provider")
+    );
+    let encoded = toml::to_string(&configured).unwrap();
+    assert_eq!(
+        toml::from_str::<ModelProviderInfo>(&encoded).unwrap(),
+        configured
+    );
+    let builtin = built_in_model_providers_with_registry(None, &registry)
+        .remove("fifth-provider")
+        .unwrap();
+    assert_eq!(builtin.name, "Fifth provider");
+    assert_eq!(builtin.env_key.as_deref(), Some("FIFTH_API_KEY"));
+    builtin.validate_with_registry(&registry).unwrap();
+}
+
+#[test]
+fn native_provider_configuration_rejects_missing_unknown_and_conflicting_ids() {
+    for (wire, id, expected) in [
+        (WireApi::Native, None, "requires native_provider"),
+        (WireApi::Native, Some(""), "nonempty"),
+        (WireApi::Native, Some("   "), "nonempty"),
+        (WireApi::Native, Some(" cursor"), "surrounding whitespace"),
+        (WireApi::Native, Some("unknown"), "unknown native provider"),
+        (WireApi::Responses, Some("cursor"), "cannot be combined"),
+        (WireApi::Claude, Some("cursor"), "conflicts"),
+    ] {
+        let info = ModelProviderInfo {
+            wire_api: wire,
+            native_provider: id.map(str::to_owned),
+            ..Default::default()
+        };
+        assert!(info.validate().unwrap_err().contains(expected));
+    }
+}
+
+#[test]
+fn legacy_native_wire_aliases_preserve_serialized_forms() {
+    for id in ["cursor", "opencode-go", "claude", "antigravity"] {
+        let provider: ModelProviderInfo = toml::from_str(&format!("wire_api = {id:?}")).unwrap();
+        provider.validate().unwrap();
+        assert_eq!(provider.native_provider_id(), Some(id));
+        assert!(
+            toml::to_string(&provider)
+                .unwrap()
+                .contains(&format!("wire_api = {id:?}"))
+        );
+        let same_id = ModelProviderInfo {
+            native_provider: Some(id.into()),
+            ..provider
+        };
+        same_id.validate().unwrap();
+    }
 }
