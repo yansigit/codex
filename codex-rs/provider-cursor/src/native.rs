@@ -605,7 +605,6 @@ pub(crate) fn response(
                         })
                         .collect::<Result<_>>()?,
                     processed: true,
-                    ..Default::default()
                 };
                 ResultEnvelope {
                     success: Some(LsSuccess { root: Some(root) }.encode_to_vec()),

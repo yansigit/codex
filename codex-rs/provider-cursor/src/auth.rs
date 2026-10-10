@@ -108,9 +108,12 @@ impl AuthStore {
 
     pub async fn save(&self, auth: StoredAuth) -> Result<()> {
         let path = self.path.clone();
-        tokio::task::spawn_blocking(move || save_atomic(&path, &auth))
-            .await
-            .map_err(|_| ProviderError::Authentication("Cursor credential write failed".into()))?
+        tokio::task::spawn_blocking(move || {
+            let _lock = lock_file(&path)?;
+            save_atomic(&path, &auth)
+        })
+        .await
+        .map_err(|_| ProviderError::Authentication("Cursor credential write failed".into()))?
     }
 
     /// Refresh and durable write remain one critical section even if the caller
@@ -119,6 +122,12 @@ impl AuthStore {
         let store = self.clone();
         tokio::spawn(async move {
             let _guard = store.lock.lock().await;
+            let lock_path = store.path.clone();
+            let _file_lock = tokio::task::spawn_blocking(move || lock_file(&lock_path))
+                .await
+                .map_err(|_| {
+                    ProviderError::Authentication("Cursor credential lock task failed".into())
+                })??;
             let previous = store.load().await?;
             if !force_refresh && token_valid(&previous.access_token) {
                 return Ok(previous.access_token);
@@ -147,7 +156,12 @@ impl AuthStore {
                 auth.refresh_token = Some(refresh);
             }
             let token = auth.access_token.clone();
-            store.save(auth).await?;
+            let path = store.path.clone();
+            tokio::task::spawn_blocking(move || save_atomic(&path, &auth))
+                .await
+                .map_err(|_| {
+                    ProviderError::Authentication("Cursor credential write task failed".into())
+                })??;
             Ok(token)
         })
         .await
@@ -156,6 +170,12 @@ impl AuthStore {
 
     pub async fn logout(&self) -> Result<()> {
         let _guard = self.lock.lock().await;
+        let path = self.path.clone();
+        let _file_lock = tokio::task::spawn_blocking(move || lock_file(&path))
+            .await
+            .map_err(|_| {
+                ProviderError::Authentication("Cursor credential lock task failed".into())
+            })??;
         match tokio::fs::remove_file(&self.path).await {
             Ok(()) => Ok(()),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -178,6 +198,29 @@ impl AuthClient {
             base_url: crate::validate_endpoint(base_url)?,
             client: crate::http_client()?,
         })
+    }
+
+    /// User API keys are exchanged for a short-lived AgentService bearer token.
+    /// The API key itself is never sent to an inference RPC.
+    pub async fn exchange_api_key(
+        &self,
+        api_key: &str,
+        cancellation: CancellationToken,
+    ) -> Result<StoredAuth> {
+        let response = tokio::select! {
+            biased;
+            _ = cancellation.cancelled() => return Err(ProviderError::Cancelled),
+            response = self.client.post(format!("{}/auth/exchange_user_api_key", self.base_url))
+                .bearer_auth(api_key).header("content-type", "application/json").body("{}").send() =>
+                response.map_err(|_| ProviderError::Transport("Cursor API key exchange failed".into()))?,
+        };
+        if !response.status().is_success() {
+            return Err(ProviderError::Authentication(format!(
+                "Cursor API key exchange returned HTTP {}",
+                response.status().as_u16()
+            )));
+        }
+        parse_auth(&bounded_body(response, &cancellation).await?)
     }
     /// Finish the browser flow without persisting it, for a host that owns a
     /// shared account pool and credential store.
@@ -358,6 +401,28 @@ fn save_atomic(path: &Path, auth: &StoredAuth) -> Result<()> {
     result.map_err(|_| ProviderError::Authentication("cannot persist Cursor credentials".into()))
 }
 
+fn lock_file(path: &Path) -> Result<std::fs::File> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| ProviderError::Authentication("invalid Cursor credential path".into()))?;
+    std::fs::create_dir_all(parent).map_err(|_| {
+        ProviderError::Authentication("cannot create Cursor credential directory".into())
+    })?;
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).read(true).create(true).truncate(false);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let file = options
+        .open(path.with_extension("lock"))
+        .map_err(|_| ProviderError::Authentication("cannot open Cursor credential lock".into()))?;
+    file.lock()
+        .map_err(|_| ProviderError::Authentication("cannot lock Cursor credentials".into()))?;
+    Ok(file)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -394,5 +459,65 @@ mod tests {
                 0o600
             );
         }
+    }
+
+    #[tokio::test]
+    async fn api_key_exchange_and_refresh_preserve_original_refresh_token() {
+        use wiremock::Mock;
+        use wiremock::MockServer;
+        use wiremock::ResponseTemplate;
+        use wiremock::matchers::header;
+        use wiremock::matchers::method;
+        use wiremock::matchers::path;
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/auth/exchange_user_api_key"))
+            .and(header("authorization", "Bearer test-api-key"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({"accessToken":"test-access"})),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/auth/refresh"))
+            .and(header("authorization", "Bearer test-refresh"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({"accessToken":"new-access"})),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+        let client = AuthClient::new(&server.uri()).unwrap();
+        assert_eq!(
+            client
+                .exchange_api_key("test-api-key", CancellationToken::new())
+                .await
+                .unwrap()
+                .access_token,
+            "test-access"
+        );
+        let refreshed = client
+            .refresh_auth("test-refresh".into(), CancellationToken::new())
+            .await
+            .unwrap();
+        assert_eq!(refreshed.access_token, "new-access");
+        assert_eq!(refreshed.refresh_token.as_deref(), Some("test-refresh"));
+    }
+
+    #[tokio::test]
+    async fn cancelled_login_does_not_poll_or_persist() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("auth.json");
+        let store = AuthStore::new(path.clone(), "http://127.0.0.1:1").unwrap();
+        let cancellation = CancellationToken::new();
+        cancellation.cancel();
+        assert!(matches!(
+            store.login(LoginChallenge::new(), cancellation).await,
+            Err(ProviderError::Cancelled)
+        ));
+        assert!(!path.exists());
     }
 }
