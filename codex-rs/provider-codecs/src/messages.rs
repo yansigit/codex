@@ -98,10 +98,18 @@ impl MessagesCodec {
                 Content::ToolCall(call) => blocks.push(json!({"type":"tool_use","id":call.id,"name":self.wire_name(&call.name),"input":call.arguments})),
                 Content::ToolResult(result) => {
                     let content = if result.output.is_array() {
-                        json!(tool_output(&result.output)?.iter().map(|part| match part {
+                        let parts = tool_output(&result.output)?;
+                        let mut content = parts.iter().map(|part| match part {
                             ToolOutputPart::Text(text) => Ok(json!({"type":"text","text":text})),
                             ToolOutputPart::Image(image) => Ok(json!({"type":"image","source":image_source(tool_image_url(image)?)?})),
-                        }).collect::<Result<Vec<_>>>()?)
+                        }).collect::<Result<Vec<_>>>()?;
+                        // The pinned Pi Messages adapter adds this text for image-only results.
+                        if parts.iter().any(|part| matches!(part, ToolOutputPart::Image(_)))
+                            && !parts.iter().any(|part| matches!(part, ToolOutputPart::Text(_)))
+                        {
+                            content.insert(0, json!({"type":"text","text":"(see attached image)"}));
+                        }
+                        json!(content)
                     } else { json!(crate::output_text(&result.output)) };
                     blocks.push(json!({"type":"tool_result","tool_use_id":result.call_id,"content":content,"is_error":result.is_error}));
                 },
