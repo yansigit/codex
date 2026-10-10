@@ -23,8 +23,7 @@ doctest = false
 workspace = true
 
 [dependencies]
-codex-provider-api = { workspace = true }
-codex-provider-auth = { workspace = true }
+codex-provider-adapter = { workspace = true }
 codex-model-provider-info = { workspace = true }
 tokio-util = { workspace = true }
 codex-utils-process = { workspace = true }
