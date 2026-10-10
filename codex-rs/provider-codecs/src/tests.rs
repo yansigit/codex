@@ -884,6 +884,24 @@ fn messages_tool_results_keep_text_and_image_blocks() {
 }
 
 #[test]
+fn messages_image_only_tool_results_include_reference_text_placeholder() {
+    let mut req = multimodal_tool_request("opencode-go");
+    let Content::ToolResult(result) = &mut req.messages.last_mut().unwrap().content[0] else {
+        panic!("expected tool result");
+    };
+    result.output = json!([{"type":"input_image","image_url":"data:image/png;base64,aW1hZ2U="}]);
+    let codec = MessagesCodec::new("x".into(), BTreeMap::new(), false, &req.tools).unwrap();
+    let body = codec.request(&req, &context()).unwrap().body;
+    assert_eq!(
+        body["messages"][2]["content"][0]["content"],
+        json!([
+            {"type":"text","text":"(see attached image)"},
+            {"type":"image","source":{"type":"base64","media_type":"image/png","data":"aW1hZ2U="}}
+        ])
+    );
+}
+
+#[test]
 fn responses_tool_results_keep_content_items_and_image_detail() {
     let req = multimodal_tool_request("opencode-go");
     let codec = ResponsesCodec::new("x".into(), BTreeMap::new(), &req.tools);
