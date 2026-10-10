@@ -35,6 +35,27 @@ fn native_provider_configuration_round_trips_without_responses_fallback() {
 }
 
 #[test]
+fn native_builtin_metadata_preserves_legacy_serialized_forms() {
+    let providers = built_in_model_providers(None);
+    for (id, wire_api) in [
+        ("cursor", WireApi::Cursor),
+        ("opencode-go", WireApi::OpenCodeGo),
+        ("claude", WireApi::Claude),
+        ("antigravity", WireApi::Antigravity),
+    ] {
+        let provider = &providers[id];
+        assert_eq!(provider.wire_api, wire_api);
+        assert_eq!(provider.native_provider, None);
+        let encoded = serde_json::to_value(provider).unwrap();
+        assert_eq!(encoded["wire_api"], id);
+        assert!(encoded.get("native_provider").is_none());
+        let encoded = toml::to_string(provider).unwrap();
+        assert!(encoded.contains(&format!("wire_api = {id:?}")));
+        assert!(!encoded.contains("native_provider"));
+    }
+}
+
+#[test]
 fn runtime_internal_metadata_opt_in_is_not_serialized_or_configurable() {
     let trusted = ModelProviderInfo {
         include_internal_metadata: true,
@@ -954,7 +975,34 @@ native_provider = "fifth-provider"
         .unwrap();
     assert_eq!(builtin.name, "Fifth provider");
     assert_eq!(builtin.env_key.as_deref(), Some("FIFTH_API_KEY"));
+    assert_eq!(builtin.wire_api, WireApi::Native);
+    assert_eq!(builtin.native_provider.as_deref(), Some("fifth-provider"));
+    let encoded = serde_json::to_value(&builtin).unwrap();
+    assert_eq!(encoded["wire_api"], "native");
+    assert_eq!(encoded["native_provider"], "fifth-provider");
+    let encoded = toml::to_string(&builtin).unwrap();
+    assert_eq!(
+        toml::from_str::<ModelProviderInfo>(&encoded).unwrap(),
+        builtin
+    );
     builtin.validate_with_registry(&registry).unwrap();
+}
+
+#[test]
+fn builtin_metadata_uses_generic_form_without_a_matching_legacy_wire_alias() {
+    static FUTURE: codex_provider_registry::Descriptor = codex_provider_registry::Descriptor {
+        id: "future-provider",
+        legacy_wire_aliases: &["future-wire", "responses", "native", "claude"],
+        ..codex_provider_registry::OPENCODE
+    };
+    let mut registry = codex_provider_registry::Registry::new();
+    registry.register(&FUTURE).unwrap();
+    let provider = built_in_model_providers_with_registry(None, &registry)
+        .remove("future-provider")
+        .unwrap();
+    assert_eq!(provider.wire_api, WireApi::Native);
+    assert_eq!(provider.native_provider.as_deref(), Some("future-provider"));
+    provider.validate_with_registry(&registry).unwrap();
 }
 
 #[test]
