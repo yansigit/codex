@@ -1,14 +1,24 @@
 use codex_provider_api::ProviderError;
-use codex_provider_auth::{AuthStore, LoginFlow, OAuthConfig, Store, TokenRecord, digest};
+use codex_provider_auth::AuthStore;
+use codex_provider_auth::LoginFlow;
+use codex_provider_auth::OAuthConfig;
+use codex_provider_auth::Store;
+use codex_provider_auth::TokenRecord;
+use codex_provider_auth::digest;
 use serde_json::json;
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 use url::Url;
-use wiremock::matchers::{body_string_contains, method, path};
-use wiremock::{Mock, MockServer, ResponseTemplate};
+use wiremock::Mock;
+use wiremock::MockServer;
+use wiremock::ResponseTemplate;
+use wiremock::matchers::body_string_contains;
+use wiremock::matchers::method;
+use wiremock::matchers::path;
 
 fn config(base: &str) -> OAuthConfig {
     OAuthConfig {

@@ -1,14 +1,26 @@
 use codex_provider_runtime::drive_session;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 
-use codex_provider_api::{
-    Checkpoint, Event, Host, Namespace, ProviderError, ProviderFuture, ProviderSession, Request,
-    ToolCall, ToolDefinition, ToolResult,
-};
-use serde_json::{Value, json};
-use tokio::sync::{Barrier, Mutex, Notify, mpsc};
+use codex_provider_api::Checkpoint;
+use codex_provider_api::Event;
+use codex_provider_api::Host;
+use codex_provider_api::Namespace;
+use codex_provider_api::ProviderError;
+use codex_provider_api::ProviderFuture;
+use codex_provider_api::ProviderSession;
+use codex_provider_api::Request;
+use codex_provider_api::ToolCall;
+use codex_provider_api::ToolDefinition;
+use codex_provider_api::ToolResult;
+use serde_json::Value;
+use serde_json::json;
+use tokio::sync::Barrier;
+use tokio::sync::Mutex;
+use tokio::sync::Notify;
+use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 struct Session {

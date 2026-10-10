@@ -124,8 +124,13 @@ impl Provider for OpenCodeProvider {
 mod tests {
     use super::*;
     use serde_json::json;
-    use wiremock::matchers::{body_partial_json, header, method, path};
-    use wiremock::{Mock, MockServer, ResponseTemplate};
+    use wiremock::Mock;
+    use wiremock::MockServer;
+    use wiremock::ResponseTemplate;
+    use wiremock::matchers::body_partial_json;
+    use wiremock::matchers::header;
+    use wiremock::matchers::method;
+    use wiremock::matchers::path;
     #[tokio::test]
     async fn catalog_preserves_model_specific_image_capabilities() {
         let models = OpenCodeProvider::default()

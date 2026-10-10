@@ -1,11 +1,15 @@
 use std::time::Duration;
 
-use codex_provider_api::{ProviderError, Result};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use codex_provider_api::ProviderError;
+use codex_provider_api::Result;
+use tokio::io::AsyncReadExt;
+use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
-use crate::{LoginFlow, OAuthConfig, TokenRecord};
+use crate::LoginFlow;
+use crate::OAuthConfig;
+use crate::TokenRecord;
 
 pub struct LoopbackLogin {
     pub auth_url: String,

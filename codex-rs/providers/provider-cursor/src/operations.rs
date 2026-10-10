@@ -1,10 +1,14 @@
 //! Cursor protocol names and sandboxed host-operation result mapping.
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
-use codex_provider_api::{
-    HostOperation, NativeOperations, ProviderError, Result, ToolCall, ToolDefinition,
-};
-use serde_json::{Value, json};
+use codex_provider_api::HostOperation;
+use codex_provider_api::NativeOperations;
+use codex_provider_api::ProviderError;
+use codex_provider_api::Result;
+use codex_provider_api::ToolCall;
+use codex_provider_api::ToolDefinition;
+use serde_json::Value;
+use serde_json::json;
 
 const MARKER: &str = "CODEX_CURSOR_RESULT_V1:";
 
@@ -263,7 +267,8 @@ fn result(name: &str, args: &Value, structured: &Value) -> Result<Value> {
 
 #[cfg(test)]
 mod tests {
-    use super::{MARKER, result};
+    use super::MARKER;
+    use super::result;
     use base64::Engine;
     use base64::engine::general_purpose::STANDARD;
     use serde_json::json;

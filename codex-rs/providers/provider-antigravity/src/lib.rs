@@ -1,10 +1,12 @@
 //! Native Cloud Code Assist transport for Antigravity. Project onboarding is an RPC,
 //! not a delegated `agy` process. All signed parts stay with their exact assistant turn.
 use codex_provider_api::*;
-use codex_provider_auth::{Store, StoreLock};
+use codex_provider_auth::Store;
+use codex_provider_auth::StoreLock;
 use codex_provider_codecs::*;
 use reqwest::Client;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
+use serde::Serialize;
 use serde_json::Value;
 use serde_json::json;
 use std::collections::BTreeMap;
@@ -312,8 +314,13 @@ impl Provider for AntigravityProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wiremock::matchers::{body_json, header, method, path};
-    use wiremock::{Mock, MockServer, ResponseTemplate};
+    use wiremock::Mock;
+    use wiremock::MockServer;
+    use wiremock::ResponseTemplate;
+    use wiremock::matchers::body_json;
+    use wiremock::matchers::header;
+    use wiremock::matchers::method;
+    use wiremock::matchers::path;
     fn context() -> Context {
         Context {
             credentials: Credentials {

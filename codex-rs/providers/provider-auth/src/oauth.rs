@@ -1,14 +1,20 @@
 use std::collections::BTreeMap;
 use std::path::Path;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
+use std::time::SystemTime;
+use std::time::UNIX_EPOCH;
 
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use codex_provider_api::{Credentials, ProviderError, Result};
+use codex_provider_api::Credentials;
+use codex_provider_api::ProviderError;
+use codex_provider_api::Result;
 use rand::RngCore;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
+use serde::Serialize;
 use serde_json::Value;
-use sha2::{Digest, Sha256};
+use sha2::Digest;
+use sha2::Sha256;
 use tokio_util::sync::CancellationToken;
 use url::Url;
 
@@ -471,8 +477,11 @@ fn parse_token(value: Value, metadata: Value) -> Result<TokenRecord> {
 mod tests {
     use super::*;
     use serde_json::json;
-    use wiremock::matchers::{method, path};
-    use wiremock::{Mock, MockServer, ResponseTemplate};
+    use wiremock::Mock;
+    use wiremock::MockServer;
+    use wiremock::ResponseTemplate;
+    use wiremock::matchers::method;
+    use wiremock::matchers::path;
     fn config(base: &str) -> OAuthConfig {
         OAuthConfig {
             authorization_url: format!("{base}/authorize"),

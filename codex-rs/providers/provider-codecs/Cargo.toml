@@ -15,5 +15,6 @@ url = { workspace = true }
 tokio-util = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }
 [dev-dependencies]
+codex-provider-runtime = { workspace = true }
 wiremock = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "io-util"] }
