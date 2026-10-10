@@ -63,6 +63,18 @@ impl GoogleCodec {
                             && part["text"].as_str() == Some(""))
                     })
                     .cloned()
+                    .map(|mut part| {
+                        // Empty calls may omit args in the stream. The Cloud
+                        // Claude translator requires tool_use.input on replay,
+                        // matching the canonical args={} default. Preserve the
+                        // original signed part in checkpoint storage.
+                        if let Some(call) = part.get_mut("functionCall")
+                            && call.get("args").is_none()
+                        {
+                            call["args"] = json!({});
+                        }
+                        part
+                    })
                     .collect());
             }
         }

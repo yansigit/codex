@@ -1020,3 +1020,35 @@ async fn terminal_events_with_partial_trailing_sse_never_checkpoint() {
         );
     }
 }
+
+#[test]
+fn google_empty_tool_arguments_are_explicit_on_replay_without_mutating_checkpoint_parts() {
+    let mut req = request("antigravity");
+    req.namespace.model = "claude-sonnet-4-6".into();
+    let mut codec = GoogleCodec::new("x".into(), BTreeMap::new(), "project".into(), &req.tools);
+    feed(
+        &mut codec,
+        json!({"response":{"candidates":[{"content":{"role":"model","parts":[{"functionCall":{"name":"read","id":"empty-call"},"thoughtSignature":"fixture-signature"}]},"finishReason":"STOP"}]}}),
+    );
+    let assistant = codec.assistant(&req.namespace).unwrap();
+    assert!(
+        assistant
+            .content
+            .iter()
+            .any(|part| matches!(part, Content::ToolCall(call) if call.arguments == json!({})))
+    );
+    let raw = assistant
+        .content
+        .iter()
+        .find_map(|part| match part {
+            Content::Opaque { value, .. } => Some(value),
+            _ => None,
+        })
+        .unwrap();
+    assert!(raw["google_parts"][0]["functionCall"].get("args").is_none());
+    req.messages.push(assistant);
+    let wire = codec.request(&req, &context()).unwrap();
+    let replay = &wire.body["request"]["contents"][1]["parts"][0];
+    assert_eq!(replay["functionCall"]["args"], json!({}));
+    assert_eq!(replay["thoughtSignature"], "fixture-signature");
+}
