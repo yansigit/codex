@@ -20,6 +20,7 @@ use super::UserThreadConfig;
 use proto::thread_config_loader_client::ThreadConfigLoaderClient;
 
 #[path = "proto/codex.thread_config.v1.rs"]
+#[allow(clippy::trivially_copy_pass_by_ref)]
 mod proto;
 
 const REMOTE_THREAD_CONFIG_LOAD_TIMEOUT: Duration = Duration::from_secs(5);
