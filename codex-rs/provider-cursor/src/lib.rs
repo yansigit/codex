@@ -370,7 +370,7 @@ fn prepare(
             sandbox: request
                 .metadata
                 .get("sandbox_enabled")
-                .and_then(|v| v.as_bool())
+                .and_then(Value::as_bool)
                 .unwrap_or(true),
             timezone: request
                 .metadata
@@ -461,12 +461,11 @@ fn prepare(
     if encoded_state.is_empty() {
         let mut roots = Vec::new();
         if !request.system.is_empty() {
-            roots.push(
-                state.put_blob(
-                    &serde_json::to_vec(&json!({"role":"system","content":request.system}))
-                        .expect("JSON value"),
+            roots.push(state.put_blob(
+                &serde_json::to_vec(&json!({"role":"system","content":request.system})).map_err(
+                    |_| ProviderError::Checkpoint("cannot encode Cursor bootstrap history".into()),
                 )?,
-            );
+            )?);
         }
         for (index, message) in request.messages.iter().enumerate() {
             if Some(index) == new_user {
@@ -501,7 +500,7 @@ fn prepare(
                 }
             }
             if !text.is_empty() {
-                roots.push(state.put_blob(&serde_json::to_vec(&json!({"role":role,"content":[{"type":"text","text":text.join("\n")}]})).expect("JSON value"))?);
+                roots.push(state.put_blob(&serde_json::to_vec(&json!({"role":role,"content":[{"type":"text","text":text.join("\n")}]})).map_err(|_| ProviderError::Checkpoint("cannot encode Cursor bootstrap history".into()))?)?);
             }
         }
         if roots.len() > 192 {
@@ -754,7 +753,7 @@ impl Session {
                 self.deferred.push_back(wire::ClientMessage {
                     exec: Some(wire::ExecClient {
                         id: exec.id,
-                        exec_id: exec.exec_id.clone(),
+                        exec_id: exec.exec_id,
                         request_context: Some(wire::ContextResult {
                             success: Some(wire::ContextSuccess {
                                 context: Some(self.request_context.clone()),

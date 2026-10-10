@@ -1,11 +1,7 @@
-//! Cursor's browser PKCE polling flow and provider-scoped credential storage.
+//! Cursor's native browser PKCE polling, API-key exchange, and OAuth refresh.
+//! The host owns credential locking and durable storage.
 //! No desktop credential database or third-party runtime is used.
-use std::path::Path;
-use std::path::PathBuf;
-use std::sync::Arc;
 use std::time::Duration;
-use std::time::SystemTime;
-use std::time::UNIX_EPOCH;
 
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -15,7 +11,6 @@ use rand::RngCore;
 use serde::Deserialize;
 use serde::Serialize;
 use sha2::Digest;
-use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
 use crate::connect::bounded_body;
@@ -54,135 +49,6 @@ impl LoginChallenge {
 impl Default for LoginChallenge {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-#[derive(Clone)]
-pub struct AuthStore {
-    path: PathBuf,
-    base_url: String,
-    client: reqwest::Client,
-    lock: Arc<Mutex<()>>,
-}
-
-impl AuthStore {
-    pub fn new(path: PathBuf, base_url: &str) -> Result<Self> {
-        let base_url = crate::validate_endpoint(base_url)?;
-        Ok(Self {
-            path,
-            base_url,
-            client: crate::http_client()?,
-            lock: Arc::new(Mutex::new(())),
-        })
-    }
-
-    /// The caller presents challenge.url in its existing login UI.
-    pub async fn login(
-        &self,
-        challenge: LoginChallenge,
-        cancellation: CancellationToken,
-    ) -> Result<()> {
-        let auth = self.poll(challenge, cancellation).await?;
-        self.save(auth).await
-    }
-
-    pub async fn poll(
-        &self,
-        challenge: LoginChallenge,
-        cancellation: CancellationToken,
-    ) -> Result<StoredAuth> {
-        AuthClient {
-            base_url: self.base_url.clone(),
-            client: self.client.clone(),
-        }
-        .poll_auth(challenge, cancellation)
-        .await
-    }
-
-    pub async fn load(&self) -> Result<StoredAuth> {
-        let bytes = tokio::fs::read(&self.path).await.map_err(|_| {
-            ProviderError::Authentication("Cursor credentials are missing or unreadable".into())
-        })?;
-        parse_auth(&bytes)
-    }
-
-    pub async fn save(&self, auth: StoredAuth) -> Result<()> {
-        let path = self.path.clone();
-        tokio::task::spawn_blocking(move || {
-            let _lock = lock_file(&path)?;
-            save_atomic(&path, &auth)
-        })
-        .await
-        .map_err(|_| ProviderError::Authentication("Cursor credential write failed".into()))?
-    }
-
-    /// Refresh and durable write remain one critical section even if the caller
-    /// drops its future after Cursor has rotated a refresh token.
-    pub async fn token(&self, force_refresh: bool) -> Result<String> {
-        let store = self.clone();
-        tokio::spawn(async move {
-            let _guard = store.lock.lock().await;
-            let lock_path = store.path.clone();
-            let _file_lock = tokio::task::spawn_blocking(move || lock_file(&lock_path))
-                .await
-                .map_err(|_| {
-                    ProviderError::Authentication("Cursor credential lock task failed".into())
-                })??;
-            let previous = store.load().await?;
-            if !force_refresh && token_valid(&previous.access_token) {
-                return Ok(previous.access_token);
-            }
-            let refresh = previous.refresh_token.ok_or_else(|| {
-                ProviderError::Authentication(
-                    "Cursor login required: token expired without refresh credentials".into(),
-                )
-            })?;
-            let response = store
-                .client
-                .post(format!("{}/auth/refresh", store.base_url))
-                .bearer_auth(&refresh)
-                .header("content-type", "application/json")
-                .body("{}")
-                .send()
-                .await
-                .map_err(|_| ProviderError::Authentication("Cursor refresh failed".into()))?;
-            if !response.status().is_success() {
-                return Err(ProviderError::Authentication(
-                    "Cursor refresh rejected; log in again".into(),
-                ));
-            }
-            let mut auth = parse_auth(&bounded_body(response, &CancellationToken::new()).await?)?;
-            if auth.refresh_token.is_none() {
-                auth.refresh_token = Some(refresh);
-            }
-            let token = auth.access_token.clone();
-            let path = store.path.clone();
-            tokio::task::spawn_blocking(move || save_atomic(&path, &auth))
-                .await
-                .map_err(|_| {
-                    ProviderError::Authentication("Cursor credential write task failed".into())
-                })??;
-            Ok(token)
-        })
-        .await
-        .map_err(|_| ProviderError::Authentication("Cursor refresh task failed".into()))?
-    }
-
-    pub async fn logout(&self) -> Result<()> {
-        let _guard = self.lock.lock().await;
-        let path = self.path.clone();
-        let _file_lock = tokio::task::spawn_blocking(move || lock_file(&path))
-            .await
-            .map_err(|_| {
-                ProviderError::Authentication("Cursor credential lock task failed".into())
-            })??;
-        match tokio::fs::remove_file(&self.path).await {
-            Ok(()) => Ok(()),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(_) => Err(ProviderError::Authentication(
-                "Cursor logout could not remove credentials".into(),
-            )),
-        }
     }
 }
 
@@ -229,30 +95,22 @@ impl AuthClient {
         challenge: LoginChallenge,
         cancellation: CancellationToken,
     ) -> Result<StoredAuth> {
-        let deadline = tokio::time::Instant::now() + Duration::from_secs(600);
+        // Pinned CLI implementations poll up to 150 times with a ten-second
+        // backoff ceiling. A ten-minute deadline can expire during browser login.
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(25 * 60);
+        let mut interval = Duration::from_secs(1);
         loop {
             let request = self
                 .client
-                .post(format!("{}/auth/poll", self.base_url))
-                .json(&serde_json::json!({"uuid": challenge.uuid, "verifier": challenge.verifier}));
+                .get(format!("{}/auth/poll", self.base_url))
+                .query(&[("uuid", &challenge.uuid), ("verifier", &challenge.verifier)])
+                .header("accept", "application/json")
+                .header("content-type", "application/json")
+                .timeout(Duration::from_secs(30));
             let response = tokio::select! {
                 biased;
                 _ = cancellation.cancelled() => return Err(ProviderError::Cancelled),
                 response = request.send() => response.map_err(|_| ProviderError::Transport("Cursor login poll failed".into()))?,
-            };
-            let status = response.status();
-            // Existing CLI servers expose only GET; use the same single-use
-            // verifier without printing it or including request URLs in errors.
-            let response = if status == reqwest::StatusCode::NOT_FOUND {
-                tokio::select! {
-                    biased;
-                    _ = cancellation.cancelled() => return Err(ProviderError::Cancelled),
-                    response = self.client.get(format!("{}/auth/poll", self.base_url))
-                        .query(&[("uuid", &challenge.uuid), ("verifier", &challenge.verifier)]).send() =>
-                        response.map_err(|_| ProviderError::Transport("Cursor login poll failed".into()))?,
-                }
-            } else {
-                response
             };
             if response.status().is_success() {
                 let auth = parse_auth(&bounded_body(response, &cancellation).await?)?;
@@ -272,8 +130,9 @@ impl AuthClient {
             tokio::select! {
                 biased;
                 _ = cancellation.cancelled() => return Err(ProviderError::Cancelled),
-                _ = tokio::time::sleep(Duration::from_secs(1)) => {},
+                _ = tokio::time::sleep(interval) => {},
             }
+            interval = (interval.mul_f64(1.2)).min(Duration::from_secs(10));
         }
     }
 
@@ -307,20 +166,44 @@ pub async fn refresh(base_url: &str, previous: StoredAuth) -> Result<StoredAuth>
     let token = previous.refresh_token.ok_or_else(|| {
         ProviderError::Authentication("Cursor refresh credentials missing".into())
     })?;
-    let response = crate::http_client()?
-        .post(format!("{base_url}/auth/refresh"))
-        .bearer_auth(&token)
-        .header("content-type", "application/json")
-        .body("{}")
+    let client = crate::http_client()?;
+    let request = if token.starts_with("crsr_") {
+        // User API keys returned as refresh credentials remain stable; exchange
+        // them for the AgentService bearer as in the pinned OpenCodex client.
+        client
+            .post(format!("{base_url}/auth/exchange_user_api_key"))
+            .bearer_auth(&token)
+            .header("content-type", "application/json")
+            .body("{}")
+    } else {
+        // Cursor's desktop OAuth registration is public client metadata.
+        client.post(format!("{base_url}/oauth/token"))
+            .json(&serde_json::json!({"grant_type":"refresh_token","client_id":"KbZUR41cY7W6zRSdpSUJ7I7mLYBKOCmB","refresh_token":token}))
+    };
+    let response = request
+        .timeout(Duration::from_secs(30))
         .send()
         .await
         .map_err(|_| ProviderError::Authentication("Cursor refresh failed".into()))?;
-    if !response.status().is_success() {
-        return Err(ProviderError::Authentication(
-            "Cursor refresh rejected; log in again".into(),
-        ));
+    if matches!(response.status().as_u16(), 401 | 403) {
+        return Err(ProviderError::Authentication("invalid_grant".into()));
     }
-    let mut auth = parse_auth(&bounded_body(response, &CancellationToken::new()).await?)?;
+    if !response.status().is_success() {
+        return Err(ProviderError::Authentication(format!(
+            "Cursor refresh returned HTTP {}",
+            response.status().as_u16()
+        )));
+    }
+    let bytes = bounded_body(response, &CancellationToken::new()).await?;
+    let value: serde_json::Value = serde_json::from_slice(&bytes)
+        .map_err(|_| ProviderError::Authentication("invalid Cursor refresh response".into()))?;
+    if value["shouldLogout"] == true
+        || value["should_logout"] == true
+        || value["error"] == "invalid_grant"
+    {
+        return Err(ProviderError::Authentication("invalid_grant".into()));
+    }
+    let mut auth = parse_auth(&bytes)?;
     if auth.refresh_token.is_none() {
         auth.refresh_token = Some(token);
     }
@@ -333,7 +216,7 @@ fn parse_auth(bytes: &[u8]) -> Result<StoredAuth> {
     let access_token = value
         .get("accessToken")
         .or_else(|| value.get("access_token"))
-        .and_then(|token| token.as_str())
+        .and_then(serde_json::Value::as_str)
         .filter(|token| !token.is_empty())
         .ok_or_else(|| {
             ProviderError::Authentication("Cursor response missing access token".into())
@@ -341,86 +224,13 @@ fn parse_auth(bytes: &[u8]) -> Result<StoredAuth> {
     let refresh_token = value
         .get("refreshToken")
         .or_else(|| value.get("refresh_token"))
-        .and_then(|token| token.as_str())
+        .and_then(serde_json::Value::as_str)
         .filter(|token| !token.is_empty())
         .map(str::to_owned);
     Ok(StoredAuth {
         access_token: access_token.to_string(),
         refresh_token,
     })
-}
-
-fn token_valid(token: &str) -> bool {
-    let Some(payload) = token.split('.').nth(1) else {
-        return true;
-    }; // API keys have no JWT expiry.
-    let Ok(payload) = URL_SAFE_NO_PAD.decode(payload) else {
-        return false;
-    };
-    let Ok(payload) = serde_json::from_slice::<serde_json::Value>(&payload) else {
-        return false;
-    };
-    let Some(expiry) = payload.get("exp").and_then(|v| v.as_u64()) else {
-        return false;
-    };
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|v| v.as_secs())
-        .unwrap_or(u64::MAX);
-    expiry > now.saturating_add(60)
-}
-
-fn save_atomic(path: &Path, auth: &StoredAuth) -> Result<()> {
-    use std::io::Write;
-    let parent = path
-        .parent()
-        .ok_or_else(|| ProviderError::Authentication("invalid Cursor credential path".into()))?;
-    std::fs::create_dir_all(parent).map_err(|_| {
-        ProviderError::Authentication("cannot create Cursor credential directory".into())
-    })?;
-    let temp = parent.join(format!(".cursor-auth-{}", uuid::Uuid::new_v4()));
-    let result = (|| {
-        let mut options = std::fs::OpenOptions::new();
-        options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
-        let mut file = options.open(&temp)?;
-        file.write_all(&serde_json::to_vec(auth)?)?;
-        file.sync_all()?;
-        std::fs::rename(&temp, path)?;
-        #[cfg(unix)]
-        std::fs::File::open(parent)?.sync_all()?;
-        Ok::<(), Box<dyn std::error::Error>>(())
-    })();
-    if result.is_err() {
-        let _ = std::fs::remove_file(&temp);
-    }
-    result.map_err(|_| ProviderError::Authentication("cannot persist Cursor credentials".into()))
-}
-
-fn lock_file(path: &Path) -> Result<std::fs::File> {
-    let parent = path
-        .parent()
-        .ok_or_else(|| ProviderError::Authentication("invalid Cursor credential path".into()))?;
-    std::fs::create_dir_all(parent).map_err(|_| {
-        ProviderError::Authentication("cannot create Cursor credential directory".into())
-    })?;
-    let mut options = std::fs::OpenOptions::new();
-    options.write(true).read(true).create(true).truncate(false);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
-    let file = options
-        .open(path.with_extension("lock"))
-        .map_err(|_| ProviderError::Authentication("cannot open Cursor credential lock".into()))?;
-    file.lock()
-        .map_err(|_| ProviderError::Authentication("cannot lock Cursor credentials".into()))?;
-    Ok(file)
 }
 
 #[cfg(test)]
@@ -433,34 +243,6 @@ mod tests {
         assert_eq!(auth.refresh_token.as_deref(), Some("refresh"));
         assert!(parse_auth(br#"{"accessToken":""}"#).is_err());
     }
-    #[test]
-    fn atomic_store_has_private_permissions() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("cursor.json");
-        save_atomic(
-            &path,
-            &StoredAuth {
-                access_token: "access".into(),
-                refresh_token: None,
-            },
-        )
-        .unwrap();
-        assert_eq!(
-            parse_auth(&std::fs::read(&path).unwrap())
-                .unwrap()
-                .access_token,
-            "access"
-        );
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            assert_eq!(
-                std::fs::metadata(path).unwrap().permissions().mode() & 0o777,
-                0o600
-            );
-        }
-    }
-
     #[tokio::test]
     async fn api_key_exchange_and_refresh_preserve_original_refresh_token() {
         use wiremock::Mock;
@@ -481,8 +263,8 @@ mod tests {
             .mount(&server)
             .await;
         Mock::given(method("POST"))
-            .and(path("/auth/refresh"))
-            .and(header("authorization", "Bearer test-refresh"))
+            .and(path("/oauth/token"))
+            .and(wiremock::matchers::body_json(serde_json::json!({"grant_type":"refresh_token","client_id":"KbZUR41cY7W6zRSdpSUJ7I7mLYBKOCmB","refresh_token":"test-refresh"})))
             .respond_with(
                 ResponseTemplate::new(200)
                     .set_body_json(serde_json::json!({"accessToken":"new-access"})),
@@ -508,16 +290,120 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn cancelled_login_does_not_poll_or_persist() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("auth.json");
-        let store = AuthStore::new(path.clone(), "http://127.0.0.1:1").unwrap();
+    async fn cancelled_login_does_not_poll() {
+        let client = AuthClient::new("http://127.0.0.1:1").unwrap();
         let cancellation = CancellationToken::new();
         cancellation.cancel();
         assert!(matches!(
-            store.login(LoginChallenge::new(), cancellation).await,
+            client.poll_auth(LoginChallenge::new(), cancellation).await,
             Err(ProviderError::Cancelled)
         ));
-        assert!(!path.exists());
+    }
+
+    #[test]
+    fn jwt_expiry_is_only_a_hint() {
+        let payload = URL_SAFE_NO_PAD.encode(br#"{"exp":123}"#);
+        assert_eq!(
+            token_expires_at(&format!("e30.{payload}.signature")),
+            Some(123)
+        );
+        assert_eq!(token_expires_at("invalid"), None);
+    }
+    #[tokio::test]
+    async fn browser_login_uses_one_get_poll_with_matching_pkce_values() {
+        use wiremock::matchers::{method, path, query_param};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+        let server = MockServer::start().await;
+        let challenge = LoginChallenge::new();
+        let url = url::Url::parse(&challenge.url).unwrap();
+        let values: std::collections::HashMap<_, _> = url.query_pairs().into_owned().collect();
+        assert_eq!(
+            values["challenge"],
+            URL_SAFE_NO_PAD.encode(sha2::Sha256::digest(challenge.verifier.as_bytes()))
+        );
+        assert_eq!(values["uuid"], challenge.uuid);
+        assert_eq!(values["redirectTarget"], "cli");
+        Mock::given(method("GET"))
+            .and(path("/auth/poll"))
+            .and(query_param("uuid", &challenge.uuid))
+            .and(query_param("verifier", &challenge.verifier))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({"accessToken":"access","refreshToken":"refresh"}),
+            ))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let record = AuthClient::new(&server.uri())
+            .unwrap()
+            .poll_auth(challenge, CancellationToken::new())
+            .await
+            .unwrap();
+        assert_eq!(record.access_token, "access");
+    }
+
+    #[tokio::test]
+    async fn pending_browser_login_repolls_get_until_credentials_arrive() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+        let server = MockServer::start().await;
+        let count = Arc::new(AtomicUsize::new(0));
+        let requests = count.clone();
+        Mock::given(method("GET"))
+            .and(path("/auth/poll"))
+            .respond_with(move |_: &wiremock::Request| {
+                if requests.fetch_add(1, Ordering::Relaxed) == 0 {
+                    ResponseTemplate::new(404).set_body_string("Not found")
+                } else {
+                    ResponseTemplate::new(200)
+                        .set_body_json(serde_json::json!({"accessToken":"authorized"}))
+                }
+            })
+            .expect(2)
+            .mount(&server)
+            .await;
+        let record = AuthClient::new(&server.uri())
+            .unwrap()
+            .poll_auth(LoginChallenge::new(), CancellationToken::new())
+            .await
+            .unwrap();
+        assert_eq!(record.access_token, "authorized");
+        assert_eq!(count.load(Ordering::Relaxed), 2);
+    }
+
+    #[tokio::test]
+    async fn oauth_logout_signal_is_revocation_and_key_refresh_uses_exchange() {
+        use wiremock::matchers::{header, method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/oauth/token"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({"shouldLogout":true,"access_token":""})),
+            )
+            .mount(&server)
+            .await;
+        let client = AuthClient::new(&server.uri()).unwrap();
+        assert!(
+            matches!(client.refresh_auth("expired-refresh".into(),CancellationToken::new()).await,Err(ProviderError::Authentication(message)) if message=="invalid_grant")
+        );
+        Mock::given(method("POST"))
+            .and(path("/auth/exchange_user_api_key"))
+            .and(header("authorization", "Bearer crsr_test-refresh"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({"accessToken":"fresh"})),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+        let record = client
+            .refresh_auth("crsr_test-refresh".into(), CancellationToken::new())
+            .await
+            .unwrap();
+        assert_eq!(record.access_token, "fresh");
+        assert_eq!(record.refresh_token.as_deref(), Some("crsr_test-refresh"));
     }
 }

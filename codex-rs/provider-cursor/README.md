@@ -22,9 +22,11 @@ The host can use `auth::AuthClient` with its shared account store:
 - `token_expires_at(token)` supplies an unverified JWT expiry hint.
 
 API keys beginning with `crsr_` are exchanged before discovery and inference;
-the original API key is retained by the host. The optional `auth::AuthStore`
-provides private atomic credential writes and a cross-process refresh lock for
-standalone consumers. Credential structs deliberately omit `Debug`.
+the original API key is retained by the host. Credential storage, locking,
+rotation writeback, and account selection belong to `codex-provider-auth`. This
+crate returns native authentication records and owns no credential files.
+Browser login polls the native CLI GET endpoint for up to 25 minutes. OAuth
+refresh uses `/oauth/token`; API-key refresh uses `/auth/exchange_user_api_key`.
 
 ## Checkpoints and tool execution
 
@@ -85,9 +87,9 @@ The implementation was checked against pinned sources:
   the Cursor SDK; this crate does not use that runtime.
 
 Targeted tests cover fragmented/truncated/oversized/error Connect envelopes,
-native argument codecs, credential exchange and refresh, private credential
-writes, cancellation, foreign or corrupted checkpoints, unknown execution
-outcomes, image blob encoding, and real in-process bidirectional HTTP/2 tool
+native argument codecs, credential exchange and refresh, cancellation, foreign
+or corrupted checkpoints, unknown execution outcomes, image blob encoding, and
+real in-process bidirectional HTTP/2 tool
 requests with duplicate redelivery and trailing checkpoints, plus a native
 shell stream that continues only after the structured result and close.
 
