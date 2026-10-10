@@ -58,11 +58,16 @@ checks passed on 2026-10-10. Provider source revisions and licenses are in
 
 ## Publication rebase
 
-The `feature/native-rust-providers` branch is based on upstream main at
+The `feature/native-rust-providers` branch was rebased onto upstream main at
 `34f33e4ada8f417203d87f3b5858c97add8dad6b`. The rebase preserved provider
 implementations, regenerated both compressed protocol export bundles, and
 adapted native assistant messages to upstream's new optional response metadata.
-Regenerating the Python SDK produced no additional changes.
+Regenerating the Python SDK produced no additional changes. A final upstream
+sync also incorporated `de8fab6d7adfcef8b4ce6f02f3b5c8be4092015a`, which upgrades
+the MCP SDK to 3.5.1, through a clean merge after the initial branch push.
+The CLI rebuilt successfully on this final upstream revision
+(`/tmp/native-latest-upstream-build.log`), and the focused MCP connection-closure
+test passed (`/tmp/native-latest-upstream-mcp-tests.log`).
 
 - The rebased CLI build passed: `/tmp/native-rebase-build-final.log`.
 - All 22 native core tests passed: `/tmp/native-rebase-core-tests.log`.
