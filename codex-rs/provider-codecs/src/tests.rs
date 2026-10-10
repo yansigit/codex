@@ -939,10 +939,17 @@ fn google_gemini_three_tool_results_nest_inline_image_parts() {
         json!([{"inlineData":{"mimeType":"image/png","data":"aW1hZ2U="}}])
     );
     req.namespace.model = "claude-sonnet-4-6".into();
-    assert!(matches!(
-        codec.request(&req, &context()),
-        Err(ProviderError::Unsupported(_))
-    ));
+    let claude = codec.request(&req, &context()).unwrap().body;
+    let parts = &claude["request"]["contents"][2]["parts"];
+    assert_eq!(parts[0]["functionResponse"]["id"], "image-call");
+    assert!(parts[0]["functionResponse"].get("parts").is_none());
+    assert_eq!(
+        parts[1],
+        json!({"inlineData":{"mimeType":"image/png","data":"aW1hZ2U="}})
+    );
+    req.namespace.model = "gemini-2.5-pro".into();
+    let older_gemini = codec.request(&req, &context()).unwrap().body;
+    assert_eq!(older_gemini["request"]["contents"][2]["parts"][1], parts[1]);
 }
 
 #[test]
