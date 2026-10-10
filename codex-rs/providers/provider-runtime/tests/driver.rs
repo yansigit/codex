@@ -165,7 +165,7 @@ impl Host for SerialHost {
         Box::pin(async move {
             started
                 .send(call.id.clone())
-                .expect("test observes host start");
+                .map_err(|_| ProviderError::Host("test host observer closed".into()))?;
             if call.id == "one" {
                 release_first.notified().await;
             }
