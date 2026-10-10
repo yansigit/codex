@@ -1,0 +1,84 @@
+name: Native providers
+
+on:
+  pull_request:
+    paths:
+      - "codex-rs/**"
+      - "scripts/native_provider_*.py"
+      - "scripts/tests/test_native_provider_*.py"
+      - "docs/native-providers/**"
+      - ".github/workflows/native-providers.yml"
+  push:
+    paths:
+      - "codex-rs/**"
+      - "scripts/native_provider_*.py"
+      - "scripts/tests/test_native_provider_*.py"
+      - "docs/native-providers/**"
+      - ".github/workflows/native-providers.yml"
+  workflow_dispatch:
+    inputs:
+      upstream_ref:
+        description: Upstream ref to probe
+        required: false
+        default: main
+        type: string
+  schedule:
+    - cron: "17 4 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  deterministic-linux:
+    name: Linux architecture, tests, and features
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - name: Install hosted Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake libclang-dev libssl-dev pkg-config protobuf-compiler
+      - name: Run focused native-provider checks and CLI build
+        run: >-
+          python3 scripts/native_provider_checks.py
+          --artifact-dir /tmp/native-provider-checks
+      - name: Upload stage logs and summary
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: native-provider-ci-${{ github.run_id }}
+          path: /tmp/native-provider-checks/
+          if-no-files-found: warn
+          retention-days: 30
+
+  upstream-merge-probe:
+    name: Upstream merge drift probe
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'schedule' && github.event.repository.default_branch == 'main')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Probe upstream merge in a temporary worktree
+        env:
+          UPSTREAM_REF: ${{ inputs.upstream_ref || 'main' }}
+        run: >-
+          python3 scripts/native_provider_upstream_probe.py
+          --upstream-url https://github.com/openai/codex.git
+          --upstream-ref "$UPSTREAM_REF"
+          --output-dir /tmp/native-provider-upstream-probe
+      - name: Upload hashes, logs, and conflict lists
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: native-provider-upstream-probe-${{ github.run_id }}
+          path: /tmp/native-provider-upstream-probe/
+          if-no-files-found: error
+          retention-days: 30
