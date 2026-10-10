@@ -738,3 +738,63 @@ fn protobuf_integral_numbers_deserialize_into_integer_host_fields() {
     assert_eq!(host.delta, -2);
     assert_eq!(host.ratio, 0.5);
 }
+
+#[test]
+fn mcp_results_preserve_typed_text_images_and_failure() {
+    let data = STANDARD.encode(b"fixture-image-bytes");
+    for output in [
+        json!({"content":[{"type":"text","text":"echo"},{"type":"image","data":data,"mimeType":"image/png"}],"isError":true}),
+        json!([{"type":"input_text","text":"echo"},{"type":"input_image","image_url":format!("data:image/png;base64,{data}")}]),
+    ] {
+        let messages = native::response(
+            9,
+            "mcp-exec",
+            &native::Operation::Mcp,
+            &ToolResult {
+                call_id: "call".into(),
+                output: output.clone(),
+                is_error: true,
+            },
+        )
+        .unwrap();
+        let result = messages[0]
+            .exec
+            .as_ref()
+            .unwrap()
+            .mcp
+            .as_ref()
+            .unwrap()
+            .success
+            .as_ref()
+            .unwrap();
+        assert!(result.is_error);
+        assert_eq!(result.content.len(), 2);
+        assert_eq!(result.content[0].text.as_ref().unwrap().text, "echo");
+        assert_eq!(
+            result.content[1].image.as_ref().unwrap().data,
+            b"fixture-image-bytes"
+        );
+        assert_eq!(result.content[1].image.as_ref().unwrap().mime, "image/png");
+        let roundtrip = wire::McpSuccess::decode(result.encode_to_vec().as_slice()).unwrap();
+        assert_eq!(roundtrip, *result);
+    }
+    for output in [
+        json!({"content":[{"type":"audio","data":"AA==","mimeType":"audio/wav"}]}),
+        json!([{"type":"input_image","image_url":"https://example.com/a.png"}]),
+        json!({"content":[{"type":"resource","resource":{"uri":"file:///example"}}]}),
+    ] {
+        assert!(matches!(
+            native::response(
+                9,
+                "exec",
+                &native::Operation::Mcp,
+                &ToolResult {
+                    call_id: "call".into(),
+                    output,
+                    is_error: false
+                }
+            ),
+            Err(ProviderError::Unsupported(_))
+        ));
+    }
+}

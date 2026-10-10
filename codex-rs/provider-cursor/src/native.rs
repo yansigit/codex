@@ -1,5 +1,7 @@
 //! Native execution codecs. These requests are translated into host calls;
 //! this module has no filesystem/process/network execution primitives.
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD;
 use codex_provider_api::ProviderError;
 use codex_provider_api::Result;
 use codex_provider_api::ToolCall;
@@ -314,6 +316,7 @@ pub(crate) fn response(
                         is_error: true,
                         content: vec![wire::McpContent {
                             text: Some(wire::Text { text: reason }),
+                            ..Default::default()
                         }],
                     }),
                 });
@@ -425,16 +428,8 @@ pub(crate) fn response(
         Operation::Mcp => {
             response.mcp = Some(wire::McpResult {
                 success: Some(wire::McpSuccess {
-                    is_error: result.is_error,
-                    content: vec![wire::McpContent {
-                        text: Some(wire::Text {
-                            text: result
-                                .output
-                                .as_str()
-                                .map(str::to_string)
-                                .unwrap_or_else(|| result.output.to_string()),
-                        }),
-                    }],
+                    is_error: result.is_error || result.output["isError"].as_bool() == Some(true),
+                    content: mcp_content(&result.output)?,
                 }),
             });
         }
@@ -804,6 +799,49 @@ pub(crate) fn response(
         exec: Some(response),
         ..Default::default()
     }])
+}
+
+fn mcp_content(output: &serde_json::Value) -> Result<Vec<wire::McpContent>> {
+    let content = output
+        .get("content")
+        .and_then(serde_json::Value::as_array)
+        .or_else(|| {
+            output
+                .as_array()
+                .filter(|items| items.iter().any(|item| item.get("type").is_some()))
+        });
+    let Some(content) = content else {
+        return Ok(vec![wire::McpContent {
+            text: Some(wire::Text {
+                text: output
+                    .as_str()
+                    .map(str::to_owned)
+                    .unwrap_or_else(|| output.to_string()),
+            }),
+            ..Default::default()
+        }]);
+    };
+    content.iter().map(|item| {
+        match item["type"].as_str() {
+            Some("text" | "input_text" | "output_text") => Ok(wire::McpContent {text:Some(wire::Text {text:string(&item["text"], "MCP text content")?}),..Default::default()}),
+            Some("image" | "input_image") => {
+                let (encoded, mime) = if item["type"] == "image" {
+                    (item["data"].as_str().ok_or_else(|| ProviderError::Protocol("MCP image data missing".into()))?,item["mimeType"].as_str().ok_or_else(|| ProviderError::Protocol("MCP image MIME type missing".into()))?)
+                } else {
+                    let url = item["image_url"].as_str().ok_or_else(|| ProviderError::Protocol("MCP image URL missing".into()))?;
+                    let (header, encoded) = url.strip_prefix("data:").and_then(|value|value.split_once(',')).ok_or_else(|| ProviderError::Unsupported("Cursor tool result images require inline data URLs".into()))?;
+                    let mime = header.strip_suffix(";base64").ok_or_else(|| ProviderError::Unsupported("Cursor tool result image data must be base64".into()))?;
+                    (encoded,mime)
+                };
+                if !matches!(mime,"image/png" | "image/jpeg" | "image/webp" | "image/gif") { return Err(ProviderError::Unsupported("Cursor tool result image MIME type".into())); }
+                if encoded.len() > 12 * 1024 * 1024 { return Err(ProviderError::Unsupported("Cursor tool result image exceeds 8 MiB".into())); }
+                let data = STANDARD.decode(encoded).map_err(|_|ProviderError::Protocol("invalid Cursor tool result image base64".into()))?;
+                if data.len() > 8 * 1024 * 1024 { return Err(ProviderError::Unsupported("Cursor tool result image exceeds 8 MiB".into())); }
+                Ok(wire::McpContent {image:Some(wire::McpImage {data,mime:mime.into()}),..Default::default()})
+            }
+            _ => Err(ProviderError::Unsupported("Cursor tool result content must be text or an inline image; audio and resources require native adapters".into())),
+        }
+    }).collect()
 }
 
 fn stream_close(id: u32) -> wire::ClientMessage {

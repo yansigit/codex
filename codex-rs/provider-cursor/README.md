@@ -56,6 +56,12 @@ Grep counts contain `{file,count}`. Content matches contain
 `{file,lines:[{line_number,content,is_context_line}]}`. A failed host operation
 sets `ToolResult::is_error`. Approval rejection additionally supplies
 `{rejected:true,reason:...}`, which native codecs convert to rejection variants.
+MCP and ordinary Codex tool results preserve typed text and inline PNG, JPEG,
+WebP, or GIF images as native MCP content. Audio, resources, and remote tool
+result image URLs require native adapters and return explicit unsupported
+errors. Protobuf double arguments that represent exact integers retain integer
+JSON syntax for host fields such as `yield_time_ms`.
+
 The provider does not read, write, search, delete, or execute host files itself.
 Absent protobuf options are omitted from host arguments. Shell hard timeouts use
 the protocol `hard_timeout` field in milliseconds. Foreground shell streams
