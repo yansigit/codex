@@ -263,7 +263,7 @@ pub trait Provider: Send + Sync {
     ) -> ProviderFuture<'_, Box<dyn ProviderSession>>;
 }
 
-/// Implemented by core. This is the ONLY route to filesystem, shell and MCP.
+/// Host execution boundary. This is the only route to filesystem, shell and MCP.
 /// Execution must preserve approvals, sandbox, hooks and normal tool presentation.
 pub trait Host: Send + Sync {
     /// Durably journal the call before execution and its result before returning.
