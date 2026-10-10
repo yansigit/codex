@@ -1070,3 +1070,62 @@ fn google_empty_tool_arguments_are_explicit_on_replay_without_mutating_checkpoin
     assert_eq!(replay["functionCall"]["args"], json!({}));
     assert_eq!(replay["thoughtSignature"], "fixture-signature");
 }
+
+#[test]
+fn antigravity_claude_fresh_branch_omits_empty_canonical_text_before_interrupted_tool() {
+    let mut req = request("antigravity");
+    req.namespace.model = "claude-sonnet-4-6".into();
+    req.messages.extend([
+        Message {
+            role: Role::Assistant,
+            content: vec![
+                Content::Text {
+                    text: String::new(),
+                },
+                Content::Thinking {
+                    text: String::new(),
+                    signature: None,
+                },
+                Content::ToolCall(ToolCall {
+                    id: "interrupted-call".into(),
+                    name: "read".into(),
+                    arguments: json!({"path":"fixture"}),
+                }),
+            ],
+        },
+        Message {
+            role: Role::Tool,
+            content: vec![Content::ToolResult(ToolResult {
+                call_id: "interrupted-call".into(),
+                output: json!("aborted by user"),
+                is_error: true,
+            })],
+        },
+        Message {
+            role: Role::User,
+            content: vec![Content::Text {
+                text: "Continue this explicit branch without retrying tools.".into(),
+            }],
+        },
+    ]);
+    let codec = GoogleCodec::new("x".into(), BTreeMap::new(), "project".into(), &req.tools);
+    let body = codec.request(&req, &context()).unwrap().body;
+    let contents = body["request"]["contents"].as_array().unwrap();
+    let model_parts = contents[1]["parts"].as_array().unwrap();
+    assert_eq!(model_parts.len(), 1);
+    assert_eq!(model_parts[0]["functionCall"]["id"], "interrupted-call");
+    assert_eq!(
+        model_parts[0]["functionCall"]["args"],
+        json!({"path":"fixture"})
+    );
+    assert_eq!(
+        contents[2]["parts"][0]["functionResponse"]["response"],
+        json!({"error":"aborted by user"})
+    );
+    assert!(
+        contents
+            .iter()
+            .flat_map(|content| content["parts"].as_array().unwrap())
+            .all(|part| part.get("text").is_none_or(|text| text != ""))
+    );
+}

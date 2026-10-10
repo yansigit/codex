@@ -81,7 +81,14 @@ impl GoogleCodec {
         let mut parts = Vec::new();
         for block in &message.content {
             match block {
-                Content::Text { text } => parts.push(json!({"text":text})),
+                Content::Text { text } => {
+                    // A fresh host-history bootstrap can retain empty streamed
+                    // assistant delimiters. Cloud's Claude translator rejects
+                    // them, just as it rejects empty plain-text opaque parts.
+                    if !text.is_empty() {
+                        parts.push(json!({"text":text}));
+                    }
+                }
                 Content::Image { url } => {
                     if let Some(data) = url.strip_prefix("data:") {
                         let (mime, data) = data.split_once(";base64,").ok_or_else(|| {
