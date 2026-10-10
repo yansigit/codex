@@ -1,8 +1,11 @@
+use crate::ToolOutputPart;
 use crate::WireCodec;
 use crate::WireRequest;
-use crate::output_text;
+use crate::image_source;
 use crate::protocol;
 use crate::string;
+use crate::tool_image_url;
+use crate::tool_output;
 use codex_provider_api::*;
 use serde_json::Value;
 use serde_json::json;
@@ -93,7 +96,15 @@ impl MessagesCodec {
                 Content::Thinking { text, signature: Some(signature) } => blocks.push(json!({"type":"thinking","thinking":text,"signature":signature})),
                 Content::Thinking { .. } => {}, // An interrupted, unsigned thought is not valid signed replay.
                 Content::ToolCall(call) => blocks.push(json!({"type":"tool_use","id":call.id,"name":self.wire_name(&call.name),"input":call.arguments})),
-                Content::ToolResult(result) => blocks.push(json!({"type":"tool_result","tool_use_id":result.call_id,"content":output_text(&result.output),"is_error":result.is_error})),
+                Content::ToolResult(result) => {
+                    let content = if result.output.is_array() {
+                        json!(tool_output(&result.output)?.iter().map(|part| match part {
+                            ToolOutputPart::Text(text) => Ok(json!({"type":"text","text":text})),
+                            ToolOutputPart::Image(image) => Ok(json!({"type":"image","source":image_source(tool_image_url(image)?)?})),
+                        }).collect::<Result<Vec<_>>>()?)
+                    } else { json!(crate::output_text(&result.output)) };
+                    blocks.push(json!({"type":"tool_result","tool_use_id":result.call_id,"content":content,"is_error":result.is_error}));
+                },
                 Content::Opaque { .. } => {},
             }
         }

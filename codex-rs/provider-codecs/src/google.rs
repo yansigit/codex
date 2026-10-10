@@ -1,8 +1,10 @@
+use crate::ToolOutputPart;
 use crate::WireCodec;
 use crate::WireRequest;
-use crate::output_text;
 use crate::protocol;
 use crate::string;
+use crate::tool_image_url;
+use crate::tool_output;
 use codex_provider_api::*;
 use serde_json::Value;
 use serde_json::json;
@@ -98,12 +100,52 @@ impl GoogleCodec {
                     let name = names.get(&result.call_id).ok_or_else(|| {
                         protocol("Antigravity tool result has no matching tool call")
                     })?;
+                    let mut text = Vec::new();
+                    let mut images = Vec::new();
+                    for part in tool_output(&result.output)? {
+                        match part {
+                            ToolOutputPart::Text(value) => text.push(value),
+                            ToolOutputPart::Image(image) => {
+                                let url = tool_image_url(&image)?;
+                                let data = url.strip_prefix("data:").ok_or_else(|| {
+                                    ProviderError::Unsupported(
+                                        "Antigravity tool images require inline data".into(),
+                                    )
+                                })?;
+                                let (mime, data) =
+                                    data.split_once(";base64,").ok_or_else(|| {
+                                        protocol("Antigravity tool image must be a base64 data URL")
+                                    })?;
+                                images.push(json!({"inlineData":{"mimeType":mime,"data":data}}));
+                            }
+                        }
+                    }
+                    let mut text = text.join("\n");
+                    if text.is_empty() && !images.is_empty() {
+                        text = "(see attached image)".into();
+                    }
                     let response = if result.is_error {
-                        json!({"error":output_text(&result.output)})
+                        json!({"error":text})
                     } else {
-                        json!({"output":output_text(&result.output)})
+                        json!({"output":text})
                     };
                     let mut part = json!({"functionResponse":{"name":name,"response":response}});
+                    if !images.is_empty() {
+                        // Cloud Code Assist model adapters differ; only Gemini 3+ is
+                        // known to support images nested in function responses.
+                        let version = request
+                            .namespace
+                            .model
+                            .strip_prefix("gemini-")
+                            .and_then(|value| value.split(['.', '-']).next())
+                            .and_then(|value| value.parse::<u32>().ok());
+                        if version.is_none_or(|version| version < 3) {
+                            return Err(ProviderError::Unsupported(
+                                "Antigravity tool images require a Gemini 3+ model".into(),
+                            ));
+                        }
+                        part["functionResponse"]["parts"] = json!(images);
+                    }
                     if request.namespace.model.starts_with("claude-")
                         || request.namespace.model.starts_with("gpt-oss-")
                     {

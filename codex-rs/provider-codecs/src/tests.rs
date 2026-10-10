@@ -841,3 +841,128 @@ fn antigravity_claude_ignores_empty_stream_delimiters_and_preserves_tool_ids() {
         "contents"
     );
 }
+
+fn multimodal_tool_request(provider: &str) -> Request {
+    let mut req = request(provider);
+    req.messages.push(Message {
+        role: Role::Assistant,
+        content: vec![Content::ToolCall(ToolCall {
+            id: "image-call".into(),
+            name: "read".into(),
+            arguments: json!({}),
+        })],
+    });
+    req.messages.push(Message {
+        role: Role::Tool,
+        content: vec![Content::ToolResult(ToolResult {
+            call_id: "image-call".into(),
+            output: json!([
+                {"type":"input_text","text":"image caption"},
+                {"type":"input_image","image_url":"data:image/png;base64,aW1hZ2U=","detail":"high"}
+            ]),
+            is_error: false,
+        })],
+    });
+    req
+}
+
+#[test]
+fn messages_tool_results_keep_text_and_image_blocks() {
+    let req = multimodal_tool_request("claude");
+    let codec = MessagesCodec::new("x".into(), BTreeMap::new(), true, &req.tools).unwrap();
+    let body = codec.request(&req, &context()).unwrap().body;
+    let result = &body["messages"][2]["content"][0];
+    assert_eq!(result["type"], "tool_result");
+    assert_eq!(result["tool_use_id"], "image-call");
+    assert_eq!(
+        result["content"],
+        json!([
+            {"type":"text","text":"image caption"},
+            {"type":"image","source":{"type":"base64","media_type":"image/png","data":"aW1hZ2U="}}
+        ])
+    );
+}
+
+#[test]
+fn responses_tool_results_keep_content_items_and_image_detail() {
+    let req = multimodal_tool_request("opencode-go");
+    let codec = ResponsesCodec::new("x".into(), BTreeMap::new(), &req.tools);
+    let body = codec.request(&req, &context()).unwrap().body;
+    assert_eq!(
+        body["input"][2]["output"],
+        json!([
+            {"type":"input_text","text":"image caption"},
+            {"type":"input_image","image_url":"data:image/png;base64,aW1hZ2U=","detail":"high"}
+        ])
+    );
+}
+
+#[test]
+fn chat_tool_images_follow_all_parallel_tool_responses() {
+    let mut req = multimodal_tool_request("opencode-go");
+    req.messages[1].content.push(Content::ToolCall(ToolCall {
+        id: "second-call".into(),
+        name: "read".into(),
+        arguments: json!({}),
+    }));
+    req.messages.push(Message {
+        role: Role::Tool,
+        content: vec![Content::ToolResult(ToolResult {
+            call_id: "second-call".into(),
+            output: json!("second result"),
+            is_error: false,
+        })],
+    });
+    let codec = ChatCodec::new("x".into(), BTreeMap::new(), false, &req.tools);
+    let body = codec.request(&req, &context()).unwrap().body;
+    assert_eq!(body["messages"][3]["role"], "tool");
+    assert_eq!(body["messages"][3]["content"], "image caption");
+    assert_eq!(body["messages"][4]["role"], "tool");
+    assert_eq!(body["messages"][5]["role"], "user");
+    assert_eq!(
+        body["messages"][5]["content"][0]["image_url"]["url"],
+        "data:image/png;base64,aW1hZ2U="
+    );
+}
+
+#[test]
+fn google_gemini_three_tool_results_nest_inline_image_parts() {
+    let mut req = multimodal_tool_request("antigravity");
+    req.namespace.model = "gemini-3.5-flash-lite".into();
+    let codec = GoogleCodec::new("x".into(), BTreeMap::new(), "project".into(), &req.tools);
+    let body = codec.request(&req, &context()).unwrap().body;
+    let response = &body["request"]["contents"][2]["parts"][0]["functionResponse"];
+    assert_eq!(response["name"], "read");
+    assert_eq!(response["response"]["output"], "image caption");
+    assert_eq!(
+        response["parts"],
+        json!([{"inlineData":{"mimeType":"image/png","data":"aW1hZ2U="}}])
+    );
+    req.namespace.model = "claude-sonnet-4-6".into();
+    assert!(matches!(
+        codec.request(&req, &context()),
+        Err(ProviderError::Unsupported(_))
+    ));
+}
+
+#[test]
+fn unsupported_tool_content_is_not_silently_stringified() {
+    assert!(matches!(
+        tool_output(&json!([{"type":"input_audio","audio_url":"data:audio/wav;base64,eA=="}])),
+        Err(ProviderError::Unsupported(_))
+    ));
+    let mut req = multimodal_tool_request("claude");
+    if let Content::ToolResult(result) = &mut req.messages[2].content[0] {
+        result.output = json!([{"type":"input_image","file_id":"fixture-file"}]);
+    }
+    let messages = MessagesCodec::new("x".into(), BTreeMap::new(), true, &req.tools).unwrap();
+    assert!(matches!(
+        messages.request(&req, &context()),
+        Err(ProviderError::Unsupported(_))
+    ));
+    let responses = ResponsesCodec::new("x".into(), BTreeMap::new(), &req.tools);
+    assert_eq!(
+        responses.request(&req, &context()).unwrap().body["input"][2]["output"],
+        json!([{"type":"input_image","file_id":"fixture-file"}])
+    );
+}

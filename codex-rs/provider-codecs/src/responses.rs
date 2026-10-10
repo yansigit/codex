@@ -1,8 +1,9 @@
+use crate::ToolOutputPart;
 use crate::WireCodec;
 use crate::WireRequest;
-use crate::output_text;
 use crate::protocol;
 use crate::string;
+use crate::tool_output;
 use codex_provider_api::*;
 use serde_json::Value;
 use serde_json::json;
@@ -61,7 +62,15 @@ impl WireCodec for ResponsesCodec {
                     Content::Text { text } => content.push(json!({"type":if message.role == Role::Assistant {"output_text"} else {"input_text"},"text":text})),
                     Content::Image { url } => content.push(json!({"type":"input_image","image_url":url})),
                     Content::ToolCall(call) => input.push(json!({"type":"function_call","call_id":call.id,"name":call.name,"arguments":call.arguments.to_string()})),
-                    Content::ToolResult(result) => input.push(json!({"type":"function_call_output","call_id":result.call_id,"output":output_text(&result.output)})),
+                    Content::ToolResult(result) => {
+                        let output = if result.output.is_array() {
+                            json!(tool_output(&result.output)?.into_iter().map(|part| match part {
+                                ToolOutputPart::Text(text) => json!({"type":"input_text","text":text}),
+                                ToolOutputPart::Image(image) => image,
+                            }).collect::<Vec<_>>())
+                        } else { json!(crate::output_text(&result.output)) };
+                        input.push(json!({"type":"function_call_output","call_id":result.call_id,"output":output}));
+                    },
                     Content::Thinking { .. } | Content::Opaque { .. } => {},
                 }
             }
