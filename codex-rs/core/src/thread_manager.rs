@@ -2304,12 +2304,7 @@ impl ThreadManagerState {
             forked_from_thread_id.filter(|_| matches!(&initial_history, InitialHistory::Forked(_)));
         // Per-thread native selections must not inherit the global provider's
         // model catalog (including OpenAI-only tool modes and capabilities).
-        let models_manager = if config
-            .model_provider
-            .wire_api
-            .native_provider_id()
-            .is_some()
-        {
+        let models_manager = if config.model_provider.native_provider_id().is_some() {
             build_models_manager(&config, Arc::clone(&auth_manager))
         } else {
             Arc::clone(&self.models_manager)

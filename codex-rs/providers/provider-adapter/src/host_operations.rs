@@ -2,8 +2,11 @@
 //! This module generates commands; all execution stays in the host tool runtime.
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
-use codex_provider_api::{HostOperation, ProviderError, Result};
-use serde_json::{Value, json};
+use codex_provider_api::HostOperation;
+use codex_provider_api::ProviderError;
+use codex_provider_api::Result;
+use serde_json::Value;
+use serde_json::json;
 
 const MARKER: &str = "CODEX_CURSOR_RESULT_V1:";
 
@@ -220,7 +223,8 @@ pub(crate) fn command(operation: &HostOperation) -> Result<Value> {
 #[cfg(all(test, feature = "provider-cursor"))]
 mod tests {
     use super::MARKER;
-    use codex_provider_api::{NativeOperations, ToolCall};
+    use codex_provider_api::NativeOperations;
+    use codex_provider_api::ToolCall;
     use codex_provider_cursor::operations::CursorOperations;
     fn command(name: &str, args: &Value) -> codex_provider_api::Result<Value> {
         let call = ToolCall {
@@ -242,7 +246,8 @@ mod tests {
     }
     use base64::Engine;
     use base64::engine::general_purpose::STANDARD;
-    use serde_json::{Value, json};
+    use serde_json::Value;
+    use serde_json::json;
     use std::process::Command;
 
     fn run_generated(
