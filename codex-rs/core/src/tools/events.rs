@@ -464,7 +464,7 @@ impl ToolEmitter {
                     message: normalized.clone(),
                     applied_patch_delta,
                 });
-                let result = Err(FunctionCallError::RespondToModel(normalized));
+                let result = Err(FunctionCallError::Rejected(normalized));
                 (event, result)
             }
         };
@@ -688,7 +688,7 @@ mod tests {
         .await
         .expect("apply patch");
 
-        ToolEmitter::ApplyPatch {
+        let error = ToolEmitter::ApplyPatch {
             changes: HashMap::new(),
             auto_approved: false,
             environment_id: None,
@@ -706,6 +706,10 @@ mod tests {
         )
         .await
         .expect_err("failed patch");
+        assert_eq!(
+            matches!(error, FunctionCallError::Rejected(_)),
+            expected_status == PatchApplyStatus::Declined
+        );
 
         let completed = rx_event.recv().await.expect("item completed event");
         assert!(matches!(

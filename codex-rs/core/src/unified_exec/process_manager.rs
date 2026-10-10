@@ -1544,7 +1544,7 @@ impl UnifiedExecProcessManager {
                     }
                     _ => UnifiedExecError::create_process(format!("{err:?}")),
                 },
-                other => UnifiedExecError::create_process(format!("{other:?}")),
+                ToolError::Rejected(message) => UnifiedExecError::Rejected { message },
             });
         let outcome = match &result {
             Ok(_) => "completed",
