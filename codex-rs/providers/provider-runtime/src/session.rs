@@ -15,6 +15,7 @@ pub struct HostCall {
     pub call: api::ToolCall,
     pub reply: oneshot::Sender<api::HostCompletion>,
 }
+#[derive(Clone)]
 pub struct TurnCheckpoint {
     pub namespace: api::Namespace,
     pub latest: Option<api::Checkpoint>,
