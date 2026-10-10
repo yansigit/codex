@@ -204,6 +204,7 @@ pub struct ModelProviderInfo {
     #[serde(default)]
     pub wire_api: WireApi,
     /// Registered provider ID required by `wire_api = "native"`.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub native_provider: Option<String>,
     /// Optional API capability overrides for a custom Responses-compatible provider.
     /// Unspecified capabilities retain their existing provider defaults.
@@ -811,12 +812,25 @@ pub fn built_in_model_providers_with_registry(
     .map(|(k, v)| (k.to_string(), v))
     .collect();
     for descriptor in registry.iter() {
+        // Preserve existing builtin config and remote wire representations.
+        // Providers without a recognized legacy alias use the generic form.
+        let wire_api = descriptor
+            .legacy_wire_aliases
+            .iter()
+            .find_map(|alias| {
+                WireApi::deserialize(
+                    serde::de::value::StrDeserializer::<serde::de::value::Error>::new(alias),
+                )
+                .ok()
+                .filter(|wire| wire.native_provider_id() == Some(descriptor.id))
+            })
+            .unwrap_or(WireApi::Native);
         providers.insert(
             descriptor.id.to_owned(),
             P {
                 name: descriptor.display_name.into(),
-                wire_api: WireApi::Native,
-                native_provider: Some(descriptor.id.into()),
+                wire_api,
+                native_provider: (wire_api == WireApi::Native).then(|| descriptor.id.into()),
                 env_key: descriptor.env_key.map(str::to_owned),
                 ..P::default()
             },
