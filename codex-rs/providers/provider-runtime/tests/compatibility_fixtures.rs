@@ -50,29 +50,29 @@ fn baseline_key(value: serde_json::Value) -> String {
     value.to_string()
 }
 
-fn install_fixture(root: &Path, key: &str, bytes: &[u8]) {
+fn install_fixture(root: &Path, key: &str, bytes: &[u8]) -> std::io::Result<()> {
     let directory = root.join("native-providers");
-    fs::create_dir_all(&directory).unwrap();
+    fs::create_dir_all(&directory)?;
     fs::write(
         directory.join(format!("{}.json", digest(key.as_bytes()))),
         bytes,
     )
-    .unwrap();
 }
 
-fn expected_identities() -> serde_json::Value {
-    serde_json::from_slice(&fixture("identities.json")).unwrap()
+fn expected_identities() -> serde_json::Result<serde_json::Value> {
+    serde_json::from_slice(&fixture("identities.json"))
 }
 
 #[tokio::test]
 async fn baseline_persisted_state_fixtures_remain_readable_and_writable() {
     let read_root = tempfile::tempdir().unwrap();
-    install_fixture(read_root.path(), SELECTED_KEY, &fixture("selected.json"));
+    install_fixture(read_root.path(), SELECTED_KEY, &fixture("selected.json")).unwrap();
     install_fixture(
         read_root.path(),
         CREDENTIAL_KEY,
         &fixture("credentials.json"),
-    );
+    )
+    .unwrap();
     let auth = AuthStore::new(read_root.path());
     assert_eq!(
         auth.selected("fixture-provider").unwrap().as_deref(),
@@ -93,7 +93,8 @@ async fn baseline_persisted_state_fixtures_remain_readable_and_writable() {
         read_root.path(),
         &checkpoint_key,
         &fixture("checkpoint.json"),
-    );
+    )
+    .unwrap();
     let session = SessionStore::new(read_root.path(), ns.clone());
     assert_eq!(
         session.load().unwrap().unwrap().context_hash,
@@ -104,7 +105,7 @@ async fn baseline_persisted_state_fixtures_remain_readable_and_writable() {
         1
     );
     let tool_key = baseline_key(json!(("tool", &ns, "fixture-call-1")));
-    install_fixture(read_root.path(), &tool_key, &fixture("journal.json"));
+    install_fixture(read_root.path(), &tool_key, &fixture("journal.json")).unwrap();
     let call = ToolCall {
         id: "fixture-call-1".into(),
         name: "shell".into(),
@@ -176,7 +177,7 @@ async fn baseline_persisted_state_fixtures_remain_readable_and_writable() {
     assert_eq!(
         fs::read(output.join(format!(
             "{}.json",
-            expected_identities()["selected"].as_str().unwrap()
+            expected_identities().unwrap()["selected"].as_str().unwrap()
         )))
         .unwrap(),
         fixture("selected.json")
@@ -184,7 +185,7 @@ async fn baseline_persisted_state_fixtures_remain_readable_and_writable() {
     assert_eq!(
         fs::read(output.join(format!(
             "{}.json",
-            expected_identities()["credentials"].as_str().unwrap()
+            expected_identities().unwrap()["credentials"].as_str().unwrap()
         )))
         .unwrap(),
         fixture("credentials.json")
@@ -192,7 +193,7 @@ async fn baseline_persisted_state_fixtures_remain_readable_and_writable() {
     assert_eq!(
         fs::read(output.join(format!(
             "{}.json",
-            expected_identities()["checkpoint"].as_str().unwrap()
+            expected_identities().unwrap()["checkpoint"].as_str().unwrap()
         )))
         .unwrap(),
         fixture("checkpoint.json")
@@ -200,7 +201,7 @@ async fn baseline_persisted_state_fixtures_remain_readable_and_writable() {
     assert_eq!(
         fs::read(output.join(format!(
             "{}.json",
-            expected_identities()["tool"].as_str().unwrap()
+            expected_identities().unwrap()["tool"].as_str().unwrap()
         )))
         .unwrap(),
         fixture("journal.json")
@@ -211,8 +212,12 @@ async fn baseline_persisted_state_fixtures_remain_readable_and_writable() {
         .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
         .filter(|name| name.ends_with(".lock"))
         .collect();
-    let mut expected_lock_names = ["selected", "credentials", "checkpoint", "tool"]
-        .map(|key| format!("{}.lock", expected_identities()[key].as_str().unwrap()));
+    let mut expected_lock_names = ["selected", "credentials", "checkpoint", "tool"].map(|key| {
+        format!(
+            "{}.lock",
+            expected_identities().unwrap()[key].as_str().unwrap()
+        )
+    });
     expected_lock_names.sort();
     let mut actual_lock_names = lock_names;
     actual_lock_names.sort();
@@ -221,7 +226,7 @@ async fn baseline_persisted_state_fixtures_remain_readable_and_writable() {
 
 #[tokio::test]
 async fn provider_namespaces_and_interrupted_execution_keep_baseline_identity() {
-    let identities = expected_identities();
+    let identities = expected_identities().unwrap();
     for provider in ["cursor", "opencode-go", "claude", "antigravity"] {
         let mut ns = namespace();
         ns.provider = provider.into();
