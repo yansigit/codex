@@ -55,6 +55,20 @@ fn public_message(message: &Message) -> Message {
             _ => content.push(block),
         }
     }
+    // Parallel hosts persist results as they finish; wire requests retain call
+    // order. The same identified result batch has identical replay semantics.
+    if message.role == Role::Tool
+        && content
+            .iter()
+            .all(|block| matches!(block, Content::ToolResult(_)))
+    {
+        content.sort_by(|left, right| match (left, right) {
+            (Content::ToolResult(left), Content::ToolResult(right)) => {
+                left.call_id.cmp(&right.call_id)
+            }
+            _ => std::cmp::Ordering::Equal,
+        });
+    }
     Message {
         role: message.role.clone(),
         content,
