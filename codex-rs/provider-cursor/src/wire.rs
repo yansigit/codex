@@ -302,6 +302,16 @@ pub(crate) struct McpSuccess {
 pub(crate) struct McpContent {
     #[prost(message, optional, tag = "1")]
     pub text: Option<Text>,
+    #[prost(message, optional, tag = "2")]
+    pub image: Option<McpImage>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub(crate) struct McpImage {
+    #[prost(bytes = "vec", tag = "1")]
+    pub data: Vec<u8>,
+    #[prost(string, tag = "2")]
+    pub mime: String,
 }
 
 #[derive(Clone, PartialEq, Message)]
