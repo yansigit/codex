@@ -9,6 +9,26 @@ model_provider = "claude"
 model = "claude-haiku-5-5"
 ```
 
+Custom provider entries may use the generic native protocol with a registered
+provider ID:
+
+```toml
+model_provider = "my_cursor"
+model = "gpt-5.6-luna-none"
+
+[model_providers.my_cursor]
+name = "Cursor native"
+wire_api = "native"
+native_provider = "cursor"
+```
+
+The existing `cursor`, `opencode-go`, `claude`, and `antigravity` wire values
+remain accepted and retain their serialized spelling. A legacy wire value may
+only be paired with its matching `native_provider`. The generic form requires
+a nonempty registered ID; `native_provider` cannot accompany `responses`.
+An installed build may recognize a provider whose transport feature was omitted;
+attempting to use it reports that it was not compiled into the binary.
+
 Use a model ID printed by `codex provider models <provider>`. Discovery reports
 the catalog visible to the selected account; it is not an entitlement check.
 Availability and supported features can vary by account and model.
