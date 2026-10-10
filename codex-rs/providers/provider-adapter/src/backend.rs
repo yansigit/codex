@@ -376,4 +376,128 @@ mod tests {
                 .is_none()
         );
     }
+    struct FifthProvider;
+    impl Provider for FifthProvider {
+        fn id(&self) -> &'static str {
+            "fifth-provider"
+        }
+        fn models(&self, context: Context) -> ProviderFuture<'_, Vec<codex_provider_api::Model>> {
+            assert_eq!(context.credentials.access_token, "fixture-token");
+            Box::pin(async {
+                Ok(vec![codex_provider_api::Model {
+                    id: "fifth-model".into(),
+                    name: "Fifth model".into(),
+                    context_window: Some(120_000),
+                    supports_images: Some(true),
+                }])
+            })
+        }
+        fn start(
+            &self,
+            _request: codex_provider_api::Request,
+            _context: Context,
+        ) -> ProviderFuture<'_, Box<dyn codex_provider_api::ProviderSession>> {
+            Box::pin(async {
+                Err(ProviderError::Unsupported(
+                    "catalog fixture does not infer".into(),
+                ))
+            })
+        }
+    }
+    fn fifth_factory(
+        options: TransportOptions<'_>,
+    ) -> codex_provider_api::Result<Arc<dyn Provider>> {
+        assert_eq!(options.base_url, Some("https://fifth.example.test"));
+        assert!(options.state_home.is_some());
+        Ok(Arc::new(FifthProvider))
+    }
+    static FIFTH: Descriptor = Descriptor {
+        id: "fifth-provider",
+        display_name: "Fifth provider",
+        env_key: None,
+        auxiliary_model: "fifth-model",
+        legacy_wire_aliases: &[],
+        factory: Some(fifth_factory),
+        auth_driver: Some(&codex_provider_registry::AuthDriver::ApiKey),
+        ..codex_provider_registry::OPENCODE
+    };
+
+    #[tokio::test]
+    async fn registered_fifth_provider_uses_factory_catalog_credentials_and_account() {
+        let mut registry = registry().clone();
+        registry.register(&FIFTH).unwrap();
+        let home = tempfile::tempdir().unwrap();
+        let info = ModelProviderInfo {
+            name: "Fifth".into(),
+            wire_api: codex_model_provider_info::WireApi::Native,
+            native_provider: Some("fifth-provider".into()),
+            base_url: Some("https://fifth.example.test".into()),
+            ..Default::default()
+        };
+        info.validate_with_registry(&registry).unwrap();
+        let descriptor = registry.get(info.native_provider_id().unwrap()).unwrap();
+        let backend = NativeBackend::with_descriptor(info, Some(home.path().into()), descriptor);
+        let cancellation = CancellationToken::new();
+        backend
+            .login_token("account-five", "fixture-token".into(), &cancellation)
+            .await
+            .unwrap();
+        assert_eq!(backend.id(), "fifth-provider");
+        assert_eq!(backend.descriptor().unwrap().auxiliary_model, "fifth-model");
+        assert!(Arc::ptr_eq(
+            &backend.provider().unwrap(),
+            &backend.provider().unwrap()
+        ));
+        assert_eq!(
+            backend.account().unwrap(),
+            Some(codex_protocol::account::ProviderAccount::Native {
+                provider: "fifth-provider".into(),
+                account_id: "account-five".into()
+            })
+        );
+        let factory = codex_http_client::HttpClientFactory::new(
+            codex_http_client::OutboundProxyPolicy::ReqwestDefault,
+        );
+        let response = backend.list_models("fixture", factory).await.unwrap();
+        assert_eq!(response.models[0].slug, "fifth-model");
+        assert_eq!(response.models[0].display_name, "Fifth model");
+        assert_eq!(response.models[0].context_window, Some(120_000));
+        assert!(
+            response.models[0]
+                .input_modalities
+                .contains(&codex_protocol::openai_models::InputModality::Image)
+        );
+        assert_eq!(
+            backend.identity().as_deref(),
+            Some(response.identity.as_str())
+        );
+        backend.logout(&cancellation).await.unwrap();
+        assert_eq!(backend.account().unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn unknown_native_provider_operations_return_errors_without_panicking() {
+        let home = tempfile::tempdir().unwrap();
+        let info = ModelProviderInfo {
+            wire_api: codex_model_provider_info::WireApi::Native,
+            native_provider: Some("unknown".into()),
+            experimental_bearer_token: Some("configured-token".into()),
+            ..Default::default()
+        };
+        let backend = NativeBackend::new(info, Some(home.path().into()));
+        let cancellation = CancellationToken::new();
+        assert!(backend.descriptor().is_err());
+        assert!(backend.provider().is_err());
+        assert!(backend.status().is_err());
+        assert!(backend.account().is_err());
+        assert!(backend.credentials(cancellation.clone()).await.is_err());
+        assert!(backend.begin_login().await.is_err());
+        assert!(
+            backend
+                .login_token("account", "token".into(), &cancellation)
+                .await
+                .is_err()
+        );
+        assert!(backend.logout(&cancellation).await.is_err());
+    }
 }
