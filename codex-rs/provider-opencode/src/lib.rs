@@ -1,0 +1,120 @@
+//! Native OpenCode Go HTTP provider. Route families come from the pinned provider catalog.
+use codex_provider_api::*;
+use codex_provider_codecs::*;
+use reqwest::Client;
+use serde_json::Value;
+use std::collections::BTreeMap;
+
+pub struct OpenCodeProvider {
+    client: Client,
+    base_url: String,
+}
+impl Default for OpenCodeProvider {
+    fn default() -> Self {
+        Self::new(Client::new())
+    }
+}
+impl OpenCodeProvider {
+    pub fn new(client: Client) -> Self {
+        Self {
+            client,
+            base_url: "https://opencode.ai/zen/go".into(),
+        }
+    }
+    pub fn with_base_url(client: Client, base_url: String) -> Result<Self> {
+        let url = url::Url::parse(&base_url)
+            .map_err(|_| ProviderError::Protocol("invalid OpenCode endpoint".into()))?;
+        if url.scheme() != "https"
+            && !(url.scheme() == "http"
+                && matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "::1")))
+        {
+            return Err(ProviderError::Protocol(
+                "OpenCode endpoint must use HTTPS".into(),
+            ));
+        }
+        Ok(Self {
+            client,
+            base_url: base_url.trim_end_matches('/').to_owned(),
+        })
+    }
+    fn catalog() -> Result<Vec<Value>> {
+        serde_json::from_str(include_str!("catalog.json"))
+            .map_err(|_| ProviderError::Protocol("invalid OpenCode catalog".into()))
+    }
+}
+impl Provider for OpenCodeProvider {
+    fn id(&self) -> &'static str {
+        "opencode-go"
+    }
+    fn models(&self, context: Context) -> ProviderFuture<'_, Vec<Model>> {
+        Box::pin(async move {
+            if context.cancellation.is_cancelled() {
+                return Err(ProviderError::Cancelled);
+            }
+            // This is a source-pinned routing catalog, not an entitlement check.
+            Ok(Self::catalog()?
+                .into_iter()
+                .map(|model| Model {
+                    id: model["id"].as_str().unwrap_or_default().into(),
+                    name: model["name"].as_str().unwrap_or_default().into(),
+                    context_window: model["context_window"].as_u64(),
+                })
+                .collect())
+        })
+    }
+    fn start(
+        &self,
+        request: Request,
+        context: Context,
+    ) -> ProviderFuture<'_, Box<dyn ProviderSession>> {
+        Box::pin(async move {
+            if request.namespace.provider != self.id() {
+                return Err(ProviderError::Protocol(
+                    "OpenCode provider namespace mismatch".into(),
+                ));
+            }
+            let model = Self::catalog()?
+                .into_iter()
+                .find(|model| model["id"] == request.namespace.model)
+                .ok_or_else(|| {
+                    ProviderError::Unsupported(format!(
+                        "OpenCode Go model {} has no verified route",
+                        request.namespace.model
+                    ))
+                })?;
+            let mut headers = BTreeMap::new();
+            headers.insert(
+                "x-opencode-session".into(),
+                request.namespace.thread.clone(),
+            );
+            let codec: Box<dyn WireCodec> = match model["api"].as_str() {
+                Some("anthropic-messages") => Box::new(MessagesCodec::new(
+                    format!("{}/messages", self.base_url),
+                    headers,
+                    false,
+                    &request.tools,
+                )?),
+                Some("openai-completions") => Box::new(ChatCodec::new(
+                    format!("{}/v1/chat/completions", self.base_url),
+                    headers,
+                    model["reasoning_content"] == true,
+                    &request.tools,
+                )),
+                Some("openai-responses") => Box::new(ResponsesCodec::new(
+                    format!("{}/v1/responses", self.base_url),
+                    headers,
+                    &request.tools,
+                )),
+                _ => {
+                    return Err(ProviderError::Unsupported(
+                        "OpenCode model wire family".into(),
+                    ));
+                }
+            };
+            Ok(
+                Box::new(HttpSession::start(self.client.clone(), codec, request, context).await?)
+                    as Box<dyn ProviderSession>,
+            )
+        })
+    }
+}
