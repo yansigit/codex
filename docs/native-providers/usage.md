@@ -33,6 +33,22 @@ codex provider status claude
 codex provider models claude
 ```
 
+Antigravity requires the OAuth application's registration credentials in the
+CLI or app-server process environment, including when using a stored account:
+
+```sh
+export ANTIGRAVITY_OAUTH_CLIENT_ID="<OAuth application client ID>"
+export ANTIGRAVITY_OAUTH_CLIENT_SECRET="<OAuth application client secret>"
+codex provider login antigravity
+```
+
+Load the real values from a secret manager or a protected environment file
+outside the repository. They identify the OAuth application, not your account's
+access or refresh token. Use the same registration that issued any existing
+refresh token, with the callback `http://localhost:51121/oauth-callback`.
+Missing configuration produces an error before credentials are refreshed;
+application credentials are excluded from debug output.
+
 OpenCode Go accepts an API key from stdin. Keep the key in a protected file or
 pipe it from a secret manager; do not put it in a command argument:
 

@@ -176,10 +176,29 @@ pub fn provider_for(
     )))
 }
 
-pub fn oauth_config(id: &str) -> Option<OAuthConfig> {
+pub fn oauth_config(id: &str) -> codex_provider_api::Result<Option<OAuthConfig>> {
+    oauth_config_with_environment(id, |name| std::env::var(name).ok())
+}
+
+fn oauth_config_with_environment(
+    id: &str,
+    environment: impl Fn(&str) -> Option<String>,
+) -> codex_provider_api::Result<Option<OAuthConfig>> {
     #[cfg(any(feature = "provider-claude", feature = "provider-antigravity"))]
     use std::collections::BTreeMap;
-    match id {
+    #[cfg(not(feature = "provider-antigravity"))]
+    let _ = environment;
+    #[cfg(feature = "provider-antigravity")]
+    let required = |name: &str| {
+        environment(name)
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| {
+                ProviderError::Authentication(format!(
+                    "set {name} to configure the Antigravity OAuth application"
+                ))
+            })
+    };
+    Ok(match id {
         #[cfg(feature = "provider-claude")]
         "claude" => Some(OAuthConfig {
             authorization_url: codex_provider_claude::AUTHORIZE_URL.into(),
@@ -199,7 +218,7 @@ pub fn oauth_config(id: &str) -> Option<OAuthConfig> {
         "antigravity" => Some(OAuthConfig {
             authorization_url: codex_provider_antigravity::AUTHORIZE_URL.into(),
             token_url: codex_provider_antigravity::TOKEN_URL.into(),
-            client_id: codex_provider_antigravity::CLIENT_ID.into(),
+            client_id: required(codex_provider_antigravity::CLIENT_ID_ENV)?,
             redirect_uri: codex_provider_antigravity::REDIRECT_URI.into(),
             scopes: codex_provider_antigravity::SCOPES
                 .iter()
@@ -209,16 +228,15 @@ pub fn oauth_config(id: &str) -> Option<OAuthConfig> {
                 ("access_type".into(), "offline".into()),
                 ("prompt".into(), "consent".into()),
             ]),
-            // Public desktop OAuth registration, as published by the pinned Antigravity auth reference.
             token_params: BTreeMap::from([(
                 "client_secret".into(),
-                codex_provider_antigravity::CLIENT_SECRET.into(),
+                required(codex_provider_antigravity::CLIENT_SECRET_ENV)?,
             )]),
             token_json: false,
             exchange_state: false,
         }),
         _ => None,
-    }
+    })
 }
 
 pub enum NativeLogin {
@@ -234,7 +252,7 @@ impl NativeLogin {
                 codex_provider_cursor::auth::LoginChallenge::new(),
             ));
         }
-        let config = oauth_config(id)
+        let config = oauth_config(id)?
             .ok_or_else(|| ProviderError::Unsupported(format!("{id} requires an API key")))?;
         Ok(Self::OAuth(Box::new(
             codex_provider_auth::LoopbackLogin::begin(config).await?,
@@ -332,7 +350,7 @@ impl ModelProvider for NativeModelProvider {
                     .map(|credentials| self.scope_credentials(credentials));
             }
             self.auth_store()?
-                .credentials(self.id(), oauth_config(self.id()).as_ref(), &cancellation)
+                .credentials(self.id(), oauth_config(self.id())?.as_ref(), &cancellation)
                 .await
                 .map(|credentials| self.scope_credentials(credentials))
         })
@@ -479,6 +497,48 @@ mod tests {
     use codex_provider_api::{Checkpoint, Namespace};
     use codex_provider_auth::SessionStore;
     use serde_json::json;
+
+    #[cfg(feature = "provider-antigravity")]
+    #[test]
+    fn antigravity_oauth_requires_explicit_application_configuration() {
+        for missing_secret in [None, Some("   ".to_owned())] {
+            let error = oauth_config_with_environment("antigravity", |name| {
+                if name == codex_provider_antigravity::CLIENT_ID_ENV {
+                    Some("fixture-client".into())
+                } else {
+                    missing_secret.clone()
+                }
+            })
+            .unwrap_err();
+            assert!(
+                error
+                    .to_string()
+                    .contains("ANTIGRAVITY_OAUTH_CLIENT_SECRET")
+            );
+            assert!(!error.to_string().contains("fixture-client"));
+        }
+        assert!(
+            oauth_config_with_environment("antigravity", |_| None)
+                .unwrap_err()
+                .to_string()
+                .contains("ANTIGRAVITY_OAUTH_CLIENT_ID")
+        );
+        let config = oauth_config_with_environment("antigravity", |name| match name {
+            codex_provider_antigravity::CLIENT_ID_ENV => Some("fixture-client".into()),
+            codex_provider_antigravity::CLIENT_SECRET_ENV => Some("fixture-secret".into()),
+            _ => None,
+        })
+        .unwrap()
+        .unwrap();
+        assert_eq!(config.client_id, "fixture-client");
+        assert_eq!(config.token_params["client_secret"], "fixture-secret");
+        assert!(!format!("{config:?}").contains("fixture-secret"));
+        assert!(
+            oauth_config_with_environment("opencode-go", |_| None)
+                .unwrap()
+                .is_none()
+        );
+    }
 
     #[tokio::test]
     async fn changing_native_endpoint_cannot_restore_another_endpoints_checkpoint() {

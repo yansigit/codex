@@ -14,8 +14,8 @@ use url::Url;
 
 use crate::Store;
 
-/// Public OAuth client metadata. Never store confidential client secrets here.
-#[derive(Clone, Debug)]
+/// Runtime OAuth configuration. Token parameter values are excluded from Debug.
+#[derive(Clone)]
 pub struct OAuthConfig {
     pub authorization_url: String,
     pub token_url: String,
@@ -26,6 +26,20 @@ pub struct OAuthConfig {
     pub token_params: BTreeMap<String, String>,
     pub token_json: bool,
     pub exchange_state: bool,
+}
+
+impl std::fmt::Debug for OAuthConfig {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("OAuthConfig")
+            .field("authorization_url", &self.authorization_url)
+            .field("token_url", &self.token_url)
+            .field("redirect_uri", &self.redirect_uri)
+            .field("scopes", &self.scopes)
+            .field("token_json", &self.token_json)
+            .field("exchange_state", &self.exchange_state)
+            .finish_non_exhaustive()
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -481,6 +495,21 @@ mod tests {
             revoked: false,
         }
     }
+    #[test]
+    fn oauth_debug_omits_application_credentials_and_parameter_values() {
+        let mut config = config("https://example.test");
+        config.client_id = "fixture-private-client".into();
+        config
+            .token_params
+            .insert("client_secret".into(), "fixture-private-secret".into());
+        config
+            .authorization_params
+            .insert("login_hint".into(), "fixture-private-hint".into());
+        let debug = format!("{config:?}");
+        assert!(!debug.contains("fixture-private"));
+        assert!(debug.contains("OAuthConfig"));
+    }
+
     #[tokio::test]
     async fn invalid_state_and_cancel_do_not_exchange_tokens() {
         let server = MockServer::start().await;
