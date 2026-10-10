@@ -3506,8 +3506,25 @@ async fn interrupted_fork_snapshot_uses_persisted_mid_turn_history_without_live_
     );
 }
 
-#[tokio::test]
-async fn per_thread_native_provider_avoids_global_openai_metadata_and_honors_catalog() {
+#[test]
+fn per_thread_native_provider_avoids_global_openai_metadata_and_honors_catalog() {
+    // Starting a full session exceeds libtest's default stack in debug builds.
+    std::thread::Builder::new()
+        .name("native_model_metadata".into())
+        .stack_size(16 * 1024 * 1024)
+        .spawn(|| {
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("build test runtime")
+                .block_on(Box::pin(check_native_model_metadata()));
+        })
+        .expect("start test thread")
+        .join()
+        .expect("native model metadata test panicked");
+}
+
+async fn check_native_model_metadata() {
     use codex_protocol::openai_models::ToolMode;
 
     let model = "gpt-5.6-luna";
