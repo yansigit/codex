@@ -45,7 +45,7 @@ operations are accepted only when the corresponding host alias is executable:
 
 | Alias | Arguments | Successful result |
 | --- | --- | --- |
-| `cursor_shell` | `command`, `working_directory`, `timeout_ms` | `stdout`, `stderr`, `exit_code` |
+| `cursor_shell` | `command`, optional `working_directory`, `timeout_ms` | `stdout`, `stderr`, `exit_code` |
 | `cursor_read_file` | `path`, optional `offset`, `limit` | `content`, `total_lines`, `file_size`, optional `truncated`, `range_applied` |
 | `cursor_write_file` | `path`, `content` | `lines_created`, `file_size` |
 | `cursor_delete_file` | `path` | object |
@@ -57,6 +57,11 @@ Grep counts contain `{file,count}`. Content matches contain
 sets `ToolResult::is_error`. Approval rejection additionally supplies
 `{rejected:true,reason:...}`, which native codecs convert to rejection variants.
 The provider does not read, write, search, delete, or execute host files itself.
+Absent protobuf options are omitted from host arguments. Shell hard timeouts use
+the protocol `hard_timeout` field in milliseconds. Foreground shell streams
+finish with a structured shell result and an explicit exec stream close,
+including when execution is denied. Background shells require a host process
+lifecycle adapter and return an explicit unsupported error.
 
 ## Protocol references and validation
 
@@ -77,7 +82,8 @@ Targeted tests cover fragmented/truncated/oversized/error Connect envelopes,
 native argument codecs, credential exchange and refresh, private credential
 writes, cancellation, foreign or corrupted checkpoints, unknown execution
 outcomes, image blob encoding, and real in-process bidirectional HTTP/2 tool
-requests with duplicate redelivery and trailing checkpoints.
+requests with duplicate redelivery and trailing checkpoints, plus a native
+shell stream that continues only after the structured result and close.
 
 An authorized live probe with one existing account and
 `gpt-5.6-luna-none` verified 256 discovered models, exact text completion, two

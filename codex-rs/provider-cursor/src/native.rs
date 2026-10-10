@@ -44,13 +44,18 @@ pub(crate) enum Operation {
 }
 
 pub(crate) fn call(exec: &wire::ExecServer) -> Result<Option<(ToolCall, Operation)>> {
-    let (name, id, arguments, operation) = if let Some(shell) =
+    let (name, id, mut arguments, operation) = if let Some(shell) =
         exec.shell.as_ref().or(exec.shell_stream.as_ref())
     {
+        if shell.background {
+            return Err(ProviderError::Unsupported(
+                "Cursor background shell requires an executable host lifecycle adapter".into(),
+            ));
+        }
         (
             SHELL,
             &shell.call_id,
-            json!({"command":shell.command, "working_directory":shell.cwd, "timeout_ms":shell.timeout}),
+            json!({"command":shell.command, "working_directory":shell.cwd, "timeout_ms":shell.hard_timeout.filter(|timeout| *timeout > 0)}),
             Operation::Shell {
                 command: shell.command.clone(),
                 cwd: shell.cwd.clone(),
@@ -118,6 +123,16 @@ pub(crate) fn call(exec: &wire::ExecServer) -> Result<Option<(ToolCall, Operatio
         return Err(ProviderError::Protocol(
             "Cursor native tool request missing call ID".into(),
         ));
+    }
+    arguments
+        .as_object_mut()
+        .expect("native arguments are an object")
+        .retain(|_, value| !value.is_null());
+    if name == SHELL && arguments["working_directory"] == "" {
+        arguments
+            .as_object_mut()
+            .expect("native arguments are an object")
+            .remove("working_directory");
     }
     Ok(Some((
         ToolCall {
@@ -211,8 +226,8 @@ struct ShellStream {
     stderr: Option<wire::Text>,
     #[prost(message, optional, tag = "3")]
     exit: Option<ShellExit>,
-    #[prost(message, optional, tag = "5")]
-    rejected: Option<ShellRejected>,
+    #[prost(bytes = "vec", optional, tag = "4")]
+    start: Option<Vec<u8>>,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -239,6 +254,30 @@ pub(crate) fn response(
     operation: &Operation,
     result: &ToolResult,
 ) -> Result<Vec<wire::ClientMessage>> {
+    if !result.is_error {
+        let (texts, ints): (&[&str], &[&str]) = match operation {
+            Operation::Shell { .. } => (&["stdout", "stderr"], &["exit_code"]),
+            Operation::Read { .. } => (&["content"], &["total_lines", "file_size"]),
+            Operation::Write { .. } => (&[], &["lines_created", "file_size"]),
+            _ => (&[], &[]),
+        };
+        for field in texts {
+            string(&result.output[*field], field)?;
+        }
+        for field in ints {
+            let number = result.output[*field].as_i64().ok_or_else(|| {
+                ProviderError::Protocol(format!("host Cursor result has invalid {field}"))
+            })?;
+            if *field != "exit_code" && number < 0 {
+                return Err(ProviderError::Protocol(format!(
+                    "host Cursor result has negative {field}"
+                )));
+            }
+            if *field != "file_size" || matches!(operation, Operation::Write { .. }) {
+                integer(&result.output[*field], field)?;
+            }
+        }
+    }
     let text = |field: &str| {
         result
             .output
@@ -289,22 +328,22 @@ pub(crate) fn response(
                     cwd: cwd.clone(),
                     reason,
                 };
+                response.shell = Some(
+                    ResultEnvelope {
+                        shell_rejected: Some(rejected.encode_to_vec()),
+                        ..Default::default()
+                    }
+                    .encode_to_vec(),
+                );
                 if *stream {
-                    response.shell_stream = Some(
-                        ShellStream {
-                            rejected: Some(rejected),
-                            ..Default::default()
-                        }
-                        .encode_to_vec(),
-                    );
-                } else {
-                    response.shell = Some(
-                        ResultEnvelope {
-                            shell_rejected: Some(rejected.encode_to_vec()),
-                            ..Default::default()
-                        }
-                        .encode_to_vec(),
-                    );
+                    let mut messages =
+                        shell_stream_messages(&base, cwd, String::new(), rejected.reason, 1);
+                    messages.push(wire::ClientMessage {
+                        exec: Some(response),
+                        ..Default::default()
+                    });
+                    messages.push(stream_close(id));
+                    return Ok(messages);
                 }
             }
             Operation::Read { path } => {
@@ -416,40 +455,12 @@ pub(crate) fn response(
             } else {
                 text("stderr")
             };
-            if *stream {
-                let mut messages = Vec::new();
-                for part in [
-                    ShellStream {
-                        stdout: Some(wire::Text { text: stdout }),
-                        ..Default::default()
-                    },
-                    ShellStream {
-                        stderr: Some(wire::Text { text: stderr }),
-                        ..Default::default()
-                    },
-                    ShellStream {
-                        exit: Some(ShellExit {
-                            code: code as u32,
-                            cwd: cwd.clone(),
-                        }),
-                        ..Default::default()
-                    },
-                ] {
-                    let mut response = base.clone();
-                    response.shell_stream = Some(part.encode_to_vec());
-                    messages.push(wire::ClientMessage {
-                        exec: Some(response),
-                        ..Default::default()
-                    });
-                }
-                return Ok(messages);
-            }
             let success = ShellSuccess {
                 command: command.clone(),
                 cwd: cwd.clone(),
                 code,
-                stdout,
-                stderr,
+                stdout: stdout.clone(),
+                stderr: stderr.clone(),
             }
             .encode_to_vec();
             let envelope = if code == 0 {
@@ -464,6 +475,15 @@ pub(crate) fn response(
                 }
             };
             response.shell = Some(envelope.encode_to_vec());
+            if *stream {
+                let mut messages = shell_stream_messages(&base, cwd, stdout, stderr, code);
+                messages.push(wire::ClientMessage {
+                    exec: Some(response),
+                    ..Default::default()
+                });
+                messages.push(stream_close(id));
+                return Ok(messages);
+            }
         }
         Operation::Read { path } => {
             let envelope = if result.is_error {
@@ -674,7 +694,14 @@ pub(crate) fn response(
                         GrepUnion {
                             count: Some(GrepCounts {
                                 files: counts.len() as i32,
-                                total: counts.iter().map(|v| v.count).sum(),
+                                total: counts
+                                    .iter()
+                                    .try_fold(0i32, |sum, v| sum.checked_add(v.count))
+                                    .ok_or_else(|| {
+                                        ProviderError::Protocol(
+                                            "host Cursor grep count overflow".into(),
+                                        )
+                                    })?,
                                 counts,
                             }),
                             ..Default::default()
@@ -721,12 +748,32 @@ pub(crate) fn response(
                                 })
                             })
                             .collect::<Result<Vec<_>>>()?;
-                        let count = matches.iter().map(|v| v.matches.len() as i32).sum();
+                        let count = matches
+                            .iter()
+                            .try_fold(0i32, |sum, v| {
+                                i32::try_from(v.matches.len())
+                                    .ok()
+                                    .and_then(|count| sum.checked_add(count))
+                            })
+                            .ok_or_else(|| {
+                                ProviderError::Protocol(
+                                    "host Cursor grep content count overflow".into(),
+                                )
+                            })?;
+                        let matched = matches
+                            .iter()
+                            .flat_map(|v| &v.matches)
+                            .filter(|line| !line.context)
+                            .count();
                         GrepUnion {
                             content: Some(GrepContent {
                                 matches,
                                 total_lines: count,
-                                matched_lines: count,
+                                matched_lines: i32::try_from(matched).map_err(|_| {
+                                    ProviderError::Protocol(
+                                        "host Cursor grep matched count overflow".into(),
+                                    )
+                                })?,
                             }),
                             ..Default::default()
                         }
@@ -757,6 +804,55 @@ pub(crate) fn response(
         exec: Some(response),
         ..Default::default()
     }])
+}
+
+fn stream_close(id: u32) -> wire::ClientMessage {
+    wire::ClientMessage {
+        exec_control: Some(wire::ExecClientControl {
+            stream_close: Some(wire::ExecStreamClose { id }),
+        }),
+        ..Default::default()
+    }
+}
+
+fn shell_stream_messages(
+    base: &wire::ExecClient,
+    cwd: &str,
+    stdout: String,
+    stderr: String,
+    code: i32,
+) -> Vec<wire::ClientMessage> {
+    [
+        ShellStream {
+            start: Some(Vec::new()),
+            ..Default::default()
+        },
+        ShellStream {
+            stdout: Some(wire::Text { text: stdout }),
+            ..Default::default()
+        },
+        ShellStream {
+            stderr: Some(wire::Text { text: stderr }),
+            ..Default::default()
+        },
+        ShellStream {
+            exit: Some(ShellExit {
+                code: code as u32,
+                cwd: cwd.into(),
+            }),
+            ..Default::default()
+        },
+    ]
+    .into_iter()
+    .map(|part| {
+        let mut exec = base.clone();
+        exec.shell_stream = Some(part.encode_to_vec());
+        wire::ClientMessage {
+            exec: Some(exec),
+            ..Default::default()
+        }
+    })
+    .collect()
 }
 
 fn string(value: &serde_json::Value, field: &str) -> Result<String> {
