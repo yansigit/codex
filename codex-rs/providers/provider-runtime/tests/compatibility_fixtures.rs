@@ -1,22 +1,34 @@
-use codex_provider_api::{Checkpoint, Namespace, ToolCall, ToolResult};
-use codex_provider_auth::{AuthStore, Store, TokenRecord, digest};
-use codex_provider_runtime::{SessionStore, ToolDisposition};
+use codex_provider_api::Checkpoint;
+use codex_provider_api::Namespace;
+use codex_provider_api::ToolCall;
+use codex_provider_api::ToolResult;
+use codex_provider_auth::AuthStore;
+use codex_provider_auth::Store;
+use codex_provider_auth::TokenRecord;
+use codex_provider_auth::digest;
+use codex_provider_runtime::SessionStore;
+use codex_provider_runtime::ToolDisposition;
 use serde_json::json;
 use std::fs;
 use std::path::Path;
 use tokio_util::sync::CancellationToken;
 
-const FIXTURES: &str = "tests/fixtures/compatibility-v1";
 const SELECTED_KEY: &str = "[\"selected\",\"fixture-provider\"]";
 const CREDENTIAL_KEY: &str = "[\"credentials\",\"fixture-provider\",\"fixture-account\"]";
 
 fn fixture(name: &str) -> Vec<u8> {
-    let mut bytes = fs::read(
-        Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join(FIXTURES)
-            .join(name),
-    )
-    .unwrap();
+    let mut bytes = match name {
+        "identities.json" => include_bytes!("fixtures/compatibility-v1/identities.json").as_slice(),
+        "selected.json" => include_bytes!("fixtures/compatibility-v1/selected.json").as_slice(),
+        "credentials.json" => {
+            include_bytes!("fixtures/compatibility-v1/credentials.json").as_slice()
+        }
+        "checkpoint.json" => include_bytes!("fixtures/compatibility-v1/checkpoint.json").as_slice(),
+        "journal.json" => include_bytes!("fixtures/compatibility-v1/journal.json").as_slice(),
+        "execution.json" => include_bytes!("fixtures/compatibility-v1/execution.json").as_slice(),
+        _ => unreachable!("unknown compatibility fixture"),
+    }
+    .to_vec();
     if bytes.last() == Some(&b'\n') {
         bytes.pop();
     }
@@ -30,6 +42,12 @@ fn namespace() -> Namespace {
         model: "fixture-model".into(),
         thread: "fixture-thread".into(),
     }
+}
+
+fn baseline_key(value: serde_json::Value) -> String {
+    let mut value = value;
+    value.sort_all_objects();
+    value.to_string()
 }
 
 fn install_fixture(root: &Path, key: &str, bytes: &[u8]) {
@@ -70,7 +88,7 @@ async fn baseline_persisted_state_fixtures_remain_readable_and_writable() {
     );
 
     let ns = namespace();
-    let checkpoint_key = serde_json::json!(("checkpoint", &ns, "latest")).to_string();
+    let checkpoint_key = baseline_key(json!(("checkpoint", &ns, "latest")));
     install_fixture(
         read_root.path(),
         &checkpoint_key,
@@ -85,7 +103,7 @@ async fn baseline_persisted_state_fixtures_remain_readable_and_writable() {
         session.load().unwrap().unwrap().state["codex_host_lineage"]["length"],
         1
     );
-    let tool_key = serde_json::json!(("tool", &ns, "fixture-call-1")).to_string();
+    let tool_key = baseline_key(json!(("tool", &ns, "fixture-call-1")));
     install_fixture(read_root.path(), &tool_key, &fixture("journal.json"));
     let call = ToolCall {
         id: "fixture-call-1".into(),
@@ -219,12 +237,9 @@ async fn provider_namespaces_and_interrupted_execution_keep_baseline_identity() 
             ),
             (
                 "checkpoint",
-                serde_json::json!(("checkpoint", &ns, "latest")).to_string(),
+                baseline_key(json!(("checkpoint", &ns, "latest"))),
             ),
-            (
-                "tool",
-                serde_json::json!(("tool", &ns, "fixture-call-1")).to_string(),
-            ),
+            ("tool", baseline_key(json!(("tool", &ns, "fixture-call-1")))),
         ];
         for (kind, key) in keys {
             assert_eq!(

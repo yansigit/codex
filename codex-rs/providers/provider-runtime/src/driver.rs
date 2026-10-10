@@ -103,7 +103,8 @@ pub async fn drive_session(
 mod tests {
     use super::*;
     use serde_json::json;
-    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::atomic::AtomicBool;
+    use std::sync::atomic::Ordering;
     use tokio::sync::Mutex;
 
     struct TestHost;

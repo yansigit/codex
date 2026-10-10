@@ -1,8 +1,15 @@
 //! Durable checkpoint, tool journal, and thread execution ownership.
 //! Keys and serialized bytes are preserved across the auth/runtime split.
-use codex_provider_api::{Checkpoint, Namespace, ProviderError, Result, ToolCall, ToolResult};
-use codex_provider_auth::{Store, StoreLock};
-use serde::{Deserialize, Serialize};
+use codex_provider_api::Checkpoint;
+use codex_provider_api::Namespace;
+use codex_provider_api::ProviderError;
+use codex_provider_api::Result;
+use codex_provider_api::ToolCall;
+use codex_provider_api::ToolResult;
+use codex_provider_auth::Store;
+use codex_provider_auth::StoreLock;
+use serde::Deserialize;
+use serde::Serialize;
 use std::path::Path;
 use tokio_util::sync::CancellationToken;
 
@@ -88,7 +95,11 @@ impl SessionStore {
         Ok(ExecutionLease { lock })
     }
     fn key(&self, kind: &str, id: &str) -> String {
-        serde_json::json!((kind, &self.namespace, id)).to_string()
+        // The published storage identity uses lexically ordered object keys.
+        // Keep it stable when another crate enables serde_json/preserve_order.
+        let mut key = serde_json::json!((kind, &self.namespace, id));
+        key.sort_all_objects();
+        key.to_string()
     }
     pub async fn begin_tool(
         &self,

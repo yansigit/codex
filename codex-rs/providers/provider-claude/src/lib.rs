@@ -3,9 +3,11 @@ use codex_provider_api::*;
 use codex_provider_codecs::*;
 use reqwest::Client;
 use serde_json::Value;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::sync::OnceLock;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use std::time::Instant;
 use tokio::sync::Mutex;
 
 pub const AUTHORIZE_URL: &str = "https://claude.ai/oauth/authorize";
@@ -220,8 +222,14 @@ impl Provider for ClaudeProvider {
 mod tests {
     use super::*;
     use serde_json::json;
-    use wiremock::matchers::{body_partial_json, header, method, path, query_param};
-    use wiremock::{Mock, MockServer, ResponseTemplate};
+    use wiremock::Mock;
+    use wiremock::MockServer;
+    use wiremock::ResponseTemplate;
+    use wiremock::matchers::body_partial_json;
+    use wiremock::matchers::header;
+    use wiremock::matchers::method;
+    use wiremock::matchers::path;
+    use wiremock::matchers::query_param;
     #[tokio::test]
     async fn slow_capability_discovery_does_not_block_another_model() {
         let server = MockServer::start().await;

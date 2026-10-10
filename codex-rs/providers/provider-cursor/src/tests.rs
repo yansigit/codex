@@ -805,8 +805,8 @@ fn protobuf_integral_numbers_deserialize_into_integer_host_fields() {
     )
     .unwrap();
     assert_eq!(
-        args.to_string(),
-        "{\"delta\":-2,\"ratio\":0.5,\"yield_time_ms\":1000}"
+        args,
+        json!({"delta": -2, "ratio": 0.5, "yield_time_ms": 1000})
     );
     let host: HostArgs = serde_json::from_value(args).unwrap();
     assert_eq!(host.yield_time_ms, 1000);

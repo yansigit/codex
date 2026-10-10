@@ -2,6 +2,7 @@
 //! deterministic interoperability tests, not a record of authenticated live traffic.
 use crate::*;
 use codex_provider_api::*;
+use codex_provider_runtime::drive_session;
 use serde_json::json;
 use std::collections::BTreeMap;
 use tokio_util::sync::CancellationToken;
@@ -294,8 +295,12 @@ fn checkpoint_cumulative_replay_rejects_namespace_and_history_changes() {
 
 #[tokio::test]
 async fn native_http_session_continues_tool_round_and_checkpoints_before_execution() {
-    use wiremock::matchers::{body_partial_json, method, path};
-    use wiremock::{Mock, MockServer, ResponseTemplate};
+    use wiremock::Mock;
+    use wiremock::MockServer;
+    use wiremock::ResponseTemplate;
+    use wiremock::matchers::body_partial_json;
+    use wiremock::matchers::method;
+    use wiremock::matchers::path;
     let server = MockServer::start().await;
     let first = concat!(
         "data: {\"id\":\"r1\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"c1\",\"function\":{\"name\":\"read\",\"arguments\":\"{\\\"path\\\":\\\"a\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\n",
@@ -593,8 +598,11 @@ fn chat_assistant_history_uses_plain_text_and_deepseek_thinking_enablement() {
 }
 #[tokio::test]
 async fn parallel_tool_results_preserve_original_call_order_and_wait_for_full_batch() {
-    use wiremock::matchers::{body_string_contains, method};
-    use wiremock::{Mock, MockServer, ResponseTemplate};
+    use wiremock::Mock;
+    use wiremock::MockServer;
+    use wiremock::ResponseTemplate;
+    use wiremock::matchers::body_string_contains;
+    use wiremock::matchers::method;
     let server = MockServer::start().await;
     let first = "data: {\"id\":\"r1\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"z-call\",\"function\":{\"name\":\"read\",\"arguments\":\"{\\\"path\\\":\\\"a\\\"}\"}},{\"index\":1,\"id\":\"a-call\",\"function\":{\"name\":\"read\",\"arguments\":\"{\\\"path\\\":\\\"b\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\ndata: [DONE]\n\n";
     Mock::given(method("POST"))
@@ -654,10 +662,14 @@ async fn parallel_tool_results_preserve_original_call_order_and_wait_for_full_ba
 #[tokio::test]
 async fn driver_waits_for_staggered_async_host_results_before_http_continuation() {
     use std::sync::Arc;
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::atomic::AtomicUsize;
+    use std::sync::atomic::Ordering;
     use std::time::Duration;
-    use wiremock::matchers::{body_string_contains, method};
-    use wiremock::{Mock, MockServer, ResponseTemplate};
+    use wiremock::Mock;
+    use wiremock::MockServer;
+    use wiremock::ResponseTemplate;
+    use wiremock::matchers::body_string_contains;
+    use wiremock::matchers::method;
     struct DelayedHost(AtomicUsize);
     impl Host for DelayedHost {
         fn execute(
@@ -730,7 +742,8 @@ async fn driver_waits_for_staggered_async_host_results_before_http_continuation(
 #[tokio::test]
 async fn antigravity_drains_usage_after_finish_in_a_separate_network_chunk() {
     use std::time::Duration;
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::io::AsyncReadExt;
+    use tokio::io::AsyncWriteExt;
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
     let upstream = tokio::spawn(async move {

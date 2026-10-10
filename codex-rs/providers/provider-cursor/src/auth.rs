@@ -311,8 +311,12 @@ mod tests {
     }
     #[tokio::test]
     async fn browser_login_uses_one_get_poll_with_matching_pkce_values() {
-        use wiremock::matchers::{method, path, query_param};
-        use wiremock::{Mock, MockServer, ResponseTemplate};
+        use wiremock::Mock;
+        use wiremock::MockServer;
+        use wiremock::ResponseTemplate;
+        use wiremock::matchers::method;
+        use wiremock::matchers::path;
+        use wiremock::matchers::query_param;
         let server = MockServer::start().await;
         let challenge = LoginChallenge::new();
         let url = url::Url::parse(&challenge.url).unwrap();
@@ -344,9 +348,13 @@ mod tests {
     #[tokio::test]
     async fn pending_browser_login_repolls_get_until_credentials_arrive() {
         use std::sync::Arc;
-        use std::sync::atomic::{AtomicUsize, Ordering};
-        use wiremock::matchers::{method, path};
-        use wiremock::{Mock, MockServer, ResponseTemplate};
+        use std::sync::atomic::AtomicUsize;
+        use std::sync::atomic::Ordering;
+        use wiremock::Mock;
+        use wiremock::MockServer;
+        use wiremock::ResponseTemplate;
+        use wiremock::matchers::method;
+        use wiremock::matchers::path;
         let server = MockServer::start().await;
         let count = Arc::new(AtomicUsize::new(0));
         let requests = count.clone();
@@ -374,8 +382,12 @@ mod tests {
 
     #[tokio::test]
     async fn oauth_logout_signal_is_revocation_and_key_refresh_uses_exchange() {
-        use wiremock::matchers::{header, method, path};
-        use wiremock::{Mock, MockServer, ResponseTemplate};
+        use wiremock::Mock;
+        use wiremock::MockServer;
+        use wiremock::ResponseTemplate;
+        use wiremock::matchers::header;
+        use wiremock::matchers::method;
+        use wiremock::matchers::path;
         let server = MockServer::start().await;
         Mock::given(method("POST"))
             .and(path("/oauth/token"))
