@@ -4,7 +4,12 @@ use sha2::Digest;
 use sha2::Sha256;
 
 fn hash(request: &Request, messages: &[Message]) -> Result<String> {
-    let bytes = serde_json::to_vec(&json!({"system":request.system,"messages":messages.iter().map(public_message).collect::<Vec<_>>()})).map_err(|_| ProviderError::Checkpoint("invalid history".into()))?;
+    // Match the original sorted JSON bytes even when another workspace target
+    // enables serde_json's preserve_order feature. Wire requests stay unchanged.
+    let mut history = json!({"system":request.system,"messages":messages.iter().map(public_message).collect::<Vec<_>>()});
+    history.sort_all_objects();
+    let bytes = serde_json::to_vec(&history)
+        .map_err(|_| ProviderError::Checkpoint("invalid history".into()))?;
     Ok(format!("{:x}", Sha256::digest(bytes)))
 }
 pub(crate) fn checkpoint(request: &Request, assistant: &Message) -> Result<Checkpoint> {
@@ -160,4 +165,44 @@ pub fn restore_checkpoint(request: &mut Request) -> Result<()> {
     }
     request.checkpoint = None;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn history_hashes_keep_baseline_bytes_across_json_map_features() {
+        let messages = serde_json::from_str(r#"[{"role":"assistant","content":[{"type":"tool_call","id":"call","name":"lookup","arguments":{"z":{"b":2,"a":1},"a":"first"}}]},{"role":"tool","content":[{"type":"tool_result","call_id":"call","output":{"z":[{"b":2,"a":1}],"a":1},"is_error":true}]}]"#).unwrap();
+        let mut request = Request {
+            namespace: Namespace {
+                provider: "claude".into(),
+                account: "a".into(),
+                model: "m".into(),
+                thread: "t".into(),
+            },
+            system: "rules".into(),
+            messages,
+            tools: vec![],
+            parallel_tool_calls: false,
+            max_output_tokens: None,
+            reasoning_effort: None,
+            output_schema: None,
+            checkpoint: None,
+            metadata: json!({}),
+        };
+        assert_eq!(
+            hash(&request, &request.messages).unwrap(),
+            "8377e32212ac08e30e751146fc78f2475380643531d221efb88e4e63f69e21c8"
+        );
+        let assistant = Message {
+            role: Role::Assistant,
+            content: vec![Content::Text {
+                text: "done".into(),
+            }],
+        };
+        request.checkpoint = Some(checkpoint(&request, &assistant).unwrap());
+        restore_checkpoint(&mut request).unwrap();
+        assert_eq!(request.messages.last(), Some(&assistant));
+    }
 }

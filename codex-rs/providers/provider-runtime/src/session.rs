@@ -210,11 +210,18 @@ impl api::Host for ChannelHost {
     }
 }
 
-pub fn lineage_hash(system: &str, history: &[api::Message]) -> api::Result<String> {
+// Keep the original sorted JSON representation independent of serde_json's
+// preserve_order feature, which other workspace targets can enable globally.
+fn hash_value(mut value: serde_json::Value) -> api::Result<String> {
+    value.sort_all_objects();
     Ok(codex_provider_auth::digest(
-        &serde_json::to_vec(&json!({"system":system,"messages":history}))
+        &serde_json::to_vec(&value)
             .map_err(|error| api::ProviderError::Checkpoint(error.to_string()))?,
     ))
+}
+
+pub fn lineage_hash(system: &str, history: &[api::Message]) -> api::Result<String> {
+    hash_value(json!({"system":system,"messages":history}))
 }
 
 pub fn failed_result_bindings(history: &[api::Message]) -> api::Result<BTreeMap<String, String>> {
@@ -225,15 +232,7 @@ pub fn failed_result_bindings(history: &[api::Message]) -> api::Result<BTreeMap<
             api::Content::ToolResult(result) if result.is_error => Some(result),
             _ => None,
         })
-        .map(|result| {
-            Ok((
-                result.call_id.clone(),
-                codex_provider_auth::digest(
-                    &serde_json::to_vec(&result.output)
-                        .map_err(|error| api::ProviderError::Checkpoint(error.to_string()))?,
-                ),
-            ))
-        })
+        .map(|result| Ok((result.call_id.clone(), hash_value(result.output.clone())?)))
         .collect()
 }
 
@@ -292,12 +291,7 @@ pub fn validate_lineage(
                     && let Some(hash) = failed
                         .get(&result.call_id)
                         .and_then(serde_json::Value::as_str)
-                    && hash
-                        == codex_provider_auth::digest(
-                            &serde_json::to_vec(&result.output).map_err(|error| {
-                                api::ProviderError::Checkpoint(error.to_string())
-                            })?,
-                        )
+                    && hash == hash_value(result.output.clone())?
                 {
                     result.is_error = true;
                 }

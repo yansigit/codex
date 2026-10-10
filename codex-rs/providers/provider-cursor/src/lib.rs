@@ -155,7 +155,7 @@ impl CursorProvider {
         let mut state = state::State::restore(&request)?;
         let (run, request_context) = prepare(&request, &mut state)?;
         state.message_count = request.messages.len();
-        let context_hash = state::hash(&request.messages)?;
+        let context_hash = state::hash_messages(&request.messages)?;
         let bearer = self.bearer(&context).await?;
         let (writer, receiver) = mpsc::channel::<std::result::Result<Bytes, std::io::Error>>(16);
         writer
@@ -451,13 +451,14 @@ fn prepare(
     if encoded_state.is_empty() {
         let mut roots = Vec::new();
         if !request.system.is_empty() {
-            roots.push(state.put_blob(
-                &serde_json::to_vec(&json!({"role":"system","content":request.system})).map_err(
-                    |_| ProviderError::Checkpoint("cannot encode Cursor bootstrap history".into()),
-                )?,
-            )?);
+            roots.push(state.put_json_blob(json!({"role":"system","content":request.system}))?);
         }
-        for (index, message) in request.messages.iter().enumerate() {
+        // Bootstrap blobs are content addressed. Their tool text must use the
+        // same sorted embedded JSON as the baseline blob representation.
+        for (index, message) in state::canonical_messages(&request.messages)
+            .iter()
+            .enumerate()
+        {
             if Some(index) == new_user {
                 continue;
             }
@@ -519,7 +520,9 @@ fn prepare(
                 }
             }
             if !text.is_empty() {
-                roots.push(state.put_blob(&serde_json::to_vec(&json!({"role":role,"content":[{"type":"text","text":text.join("\n")}]})).map_err(|_| ProviderError::Checkpoint("cannot encode Cursor bootstrap history".into()))?)?);
+                roots.push(state.put_json_blob(
+                    json!({"role":role,"content":[{"type":"text","text":text.join("\n")}]}),
+                )?);
             }
         }
         if roots.len() > 192 {
