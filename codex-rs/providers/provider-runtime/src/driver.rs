@@ -8,7 +8,7 @@ use futures::stream::FuturesUnordered;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
-use crate::*;
+use codex_provider_api::*;
 
 /// Drives a bidirectional session without closing the transport while tools run.
 /// Dropping the consumer cancels both upstream work and host operations.
