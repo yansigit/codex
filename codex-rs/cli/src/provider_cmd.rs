@@ -3,7 +3,6 @@ use std::io::Read;
 
 use clap::Args;
 use clap::Subcommand;
-use codex_provider_adapter::auth::TokenRecord;
 use codex_provider_adapter::backend::NativeBackend;
 use tokio_util::sync::CancellationToken;
 
@@ -110,8 +109,9 @@ impl ProviderCommand {
                     with_token,
                 } => {
                     anyhow::ensure!(!account.trim().is_empty(), "account name must not be empty");
-                    anyhow::ensure!(!provider_for(&provider)?.has_configured_token(), "remove the configured environment or bearer token override before logging in");
-                    let record = if with_token {
+                    let backend = provider_for(&provider)?;
+                    anyhow::ensure!(!backend.has_configured_token(), "remove the configured environment or bearer token override before logging in");
+                    if with_token {
                         anyhow::ensure!(
                             !std::io::stdin().is_terminal(),
                             "pipe the token into stdin when using --with-token"
@@ -123,22 +123,13 @@ impl ProviderCommand {
                         anyhow::ensure!(token.len() <= 1024 * 1024, "token exceeds 1 MiB");
                         let token = token.trim().to_owned();
                         anyhow::ensure!(!token.is_empty(), "empty token");
-                        TokenRecord {
-                            access_token: token,
-                            refresh_token: None,
-                            expires_at: None,
-                            metadata: serde_json::Value::Null,
-                            revoked: false,
-                        }
+                        backend.login_token(&account, token, &cancellation).await?;
                     } else {
-                        let login =
-                            provider_for(&provider)?.begin_login().await?;
+                        let login = backend.begin_login().await?;
                         println!("Open this URL to log in to {provider}:\n{}", login.url());
-                        login.finish(&cancellation).await?
-                    };
-                    provider_for(&provider)?
-                        .commit_login(&account, record, &cancellation)
-                        .await?;
+                        let record = login.finish(&cancellation).await?;
+                        backend.commit_login(&account, record, &cancellation).await?;
+                    }
                     println!("Logged in to {provider} as {account}");
                 }
                 ProviderAction::Models { provider } => {
