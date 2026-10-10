@@ -245,20 +245,29 @@ mod tests {
     use serde_json::{Value, json};
     use std::process::Command;
 
-    fn run_generated(name: &str, args: &Value, cwd: &std::path::Path) -> Value {
-        let generated = command(name, args).expect("operation command generation");
+    fn run_generated(
+        name: &str,
+        args: &Value,
+        cwd: &std::path::Path,
+    ) -> codex_provider_api::Result<Value> {
+        let generated = command(name, args)?;
+        let script = generated["cmd"].as_str().ok_or_else(|| {
+            codex_provider_api::ProviderError::Host("fixture command has no script".into())
+        })?;
         let output = Command::new("/bin/bash")
             .arg("-c")
-            .arg(generated["cmd"].as_str().expect("generated shell command"))
+            .arg(script)
             .current_dir(cwd)
             .output()
-            .expect("run known operation against temp fixture");
+            .map_err(|error| codex_provider_api::ProviderError::Host(error.to_string()))?;
         assert!(
             output.status.success(),
             "{}",
             String::from_utf8_lossy(&output.stderr)
         );
-        json!({"exit_code":output.status.code(),"output":String::from_utf8(output.stdout).expect("command output is UTF-8")})
+        let text = String::from_utf8(output.stdout)
+            .map_err(|error| codex_provider_api::ProviderError::Host(error.to_string()))?;
+        Ok(json!({"exit_code":output.status.code(),"output":text}))
     }
 
     #[test]
@@ -368,7 +377,8 @@ mod tests {
         let path = temp.path().join("file'quoted.txt");
         std::fs::write(&path, b"one\nlast").expect("fixture");
         let args = json!({"path":path.to_string_lossy(), "offset":1, "limit":10});
-        let structured = run_generated("cursor_read_file", &args, temp.path());
+        let structured = run_generated("cursor_read_file", &args, temp.path())
+            .expect("run generated fixture command");
         let parsed = result("cursor_read_file", &args, &structured).expect("read result");
         assert_eq!(parsed["content"], "one\nlast");
         assert_eq!(parsed["total_lines"], 2);
@@ -376,7 +386,8 @@ mod tests {
 
         let content = "written\nlast without newline";
         let write_args = json!({"path":path.to_string_lossy(), "content":content});
-        let structured = run_generated("cursor_write_file", &write_args, temp.path());
+        let structured = run_generated("cursor_write_file", &write_args, temp.path())
+            .expect("run generated fixture command");
         let parsed = result("cursor_write_file", &write_args, &structured).expect("write result");
         assert_eq!(
             std::fs::read_to_string(path).expect("written fixture"),
@@ -393,13 +404,15 @@ mod tests {
         bytes.extend_from_slice("é".as_bytes());
         std::fs::write(&path, &bytes).expect("unicode fixture");
         let args = json!({"path":path.to_string_lossy()});
-        let structured = run_generated("cursor_read_file", &args, temp.path());
+        let structured = run_generated("cursor_read_file", &args, temp.path())
+            .expect("run generated fixture command");
         let parsed = result("cursor_read_file", &args, &structured).expect("bounded utf8 read");
         assert_eq!(parsed["content"].as_str().unwrap().len(), 65_535);
         assert_eq!(parsed["truncated"], true);
 
         std::fs::write(&path, [b'a', 0xff, b'b']).expect("binary fixture");
-        let structured = run_generated("cursor_read_file", &args, temp.path());
+        let structured = run_generated("cursor_read_file", &args, temp.path())
+            .expect("run generated fixture command");
         assert!(result("cursor_read_file", &args, &structured).is_err());
     }
 
@@ -414,7 +427,8 @@ mod tests {
             "context_before":1, "context_after":1, "case_insensitive":true, "type":"rust",
             "head_limit":10, "multiline":false, "sort":"path", "output_mode":"content"
         });
-        let structured = run_generated("cursor_grep", &grep_args, temp.path());
+        let structured = run_generated("cursor_grep", &grep_args, temp.path())
+            .expect("run generated fixture command");
         let parsed = result("cursor_grep", &grep_args, &structured).expect("grep result");
         assert_eq!(
             parsed["matches"][0]["file"],
@@ -425,13 +439,15 @@ mod tests {
         assert_eq!(rows[1]["is_context_line"], false);
 
         let count_args = json!({"pattern":"needle", "path":temp.path().to_string_lossy(), "glob":"*.rs", "context":1, "case_insensitive":true, "type":"rust", "output_mode":"count"});
-        let structured = run_generated("cursor_grep", &count_args, temp.path());
+        let structured = run_generated("cursor_grep", &count_args, temp.path())
+            .expect("run generated fixture command");
         let parsed = result("cursor_grep", &count_args, &structured).expect("count result");
         assert_eq!(parsed["counts"][0]["count"], 1);
 
         std::fs::create_dir(temp.path().join("child")).expect("child directory");
         let ls_args = json!({"path":temp.path().to_string_lossy(), "ignore":["ignored.txt"]});
-        let structured = run_generated("cursor_ls", &ls_args, temp.path());
+        let structured = run_generated("cursor_ls", &ls_args, temp.path())
+            .expect("run generated fixture command");
         let parsed = result("cursor_ls", &ls_args, &structured).expect("ls result");
         assert!(
             !parsed["files"]
