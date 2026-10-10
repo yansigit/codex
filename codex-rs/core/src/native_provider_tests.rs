@@ -147,6 +147,70 @@ async fn checkpoint_after_tool_dispatch_cannot_clear_interruption_fence() {
     assert!(executing.await.unwrap().is_err());
 }
 
+#[tokio::test]
+async fn oversized_native_output_drains_the_foreground_process_before_returning_error() {
+    use api::Host;
+    let home = tempfile::tempdir().unwrap();
+    let request = bound_request();
+    let store = codex_provider_auth::SessionStore::new(home.path(), request.namespace.clone());
+    let cancel = tokio_util::sync::CancellationToken::new();
+    let (calls, mut receive) = tokio::sync::mpsc::channel(1);
+    let host = super::ChannelHost {
+        store: store.clone(),
+        calls,
+        cancellation: cancel.clone(),
+        poll_tool: Some("write_stdin".into()),
+        native_tools: ["cursor_shell".into()].into_iter().collect(),
+        checkpoint: Arc::new(tokio::sync::Mutex::new(super::TurnCheckpoint {
+            namespace: request.namespace,
+            latest: None,
+            previous: None,
+            tools_started: false,
+        })),
+        execution: Arc::new(store.begin_execution("turn", &cancel).await.unwrap()),
+    };
+    let executing = tokio::spawn(async move {
+        host.execute(
+            api::ToolCall {
+                id: "large-output".into(),
+                name: "cursor_shell".into(),
+                arguments: json!({"command":"fixture"}),
+            },
+            cancel,
+        )
+        .await
+    });
+    for (index, (output, session_id)) in [
+        ("x".repeat(2 * 1024 * 1024 + 1), Some(7)),
+        ("still running".into(), Some(7)),
+        ("finished".into(), None),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let call = tokio::time::timeout(std::time::Duration::from_secs(2), receive.recv())
+            .await
+            .expect("host must keep draining")
+            .expect("foreground operation must not return before exit");
+        if index > 0 {
+            assert_eq!(call.call.name, "write_stdin");
+            assert_eq!(call.call.arguments["session_id"], 7);
+        }
+        call.reply
+            .send(api::ToolResult {
+                call_id: call.call.id,
+                output: json!({"codex_native_structured":{
+                    "output":output,"session_id":session_id,"exit_code":0
+                }}),
+                is_error: false,
+            })
+            .unwrap();
+    }
+    let result = executing.await.unwrap().unwrap();
+    assert!(result.is_error);
+    assert_eq!(result.output, "native operation output exceeded 2 MiB");
+}
+
 #[test]
 fn messages_map_roles_images_and_adjacent_assistant_items() {
     let input = vec![

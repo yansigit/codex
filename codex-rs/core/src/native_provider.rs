@@ -293,6 +293,10 @@ impl api::Host for ChannelHost {
                 if !result.is_error {
                     let mut structured = result.output["codex_native_structured"].clone();
                     let mut output = structured["output"].as_str().unwrap_or_default().to_owned();
+                    let mut output_exceeded = output.len() > 2 * 1024 * 1024;
+                    if output_exceeded {
+                        output.clear();
+                    }
                     let mut polls = 0;
                     while let Some(session_id) = structured["session_id"].as_i64() {
                         polls += 1;
@@ -308,14 +312,23 @@ impl api::Host for ChannelHost {
                             break;
                         }
                         structured = polled.output["codex_native_structured"].clone();
-                        output.push_str(structured["output"].as_str().unwrap_or_default());
-                        if output.len() > 2 * 1024 * 1024 {
-                            result.is_error = true;
-                            result.output = json!("native operation output exceeded 2 MiB");
-                            break;
+                        if !output_exceeded {
+                            let chunk = structured["output"].as_str().unwrap_or_default();
+                            if chunk.len() > 2 * 1024 * 1024 - output.len() {
+                                output_exceeded = true;
+                                output.clear();
+                            } else {
+                                output.push_str(chunk);
+                            }
                         }
+                        // Drain a foreground operation through its exit (or
+                        // normal cancellation/timeout) even after the cap. An
+                        // early error would leave its child running unnoticed.
                     }
-                    if !result.is_error {
+                    if !result.is_error && output_exceeded {
+                        result.is_error = true;
+                        result.output = json!("native operation output exceeded 2 MiB");
+                    } else if !result.is_error {
                         structured["output"] = json!(output);
                         match native_tools::result(&call.name, &call.arguments, &structured) {
                             Ok(output) => result.output = output,
