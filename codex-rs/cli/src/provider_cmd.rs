@@ -79,7 +79,7 @@ impl ProviderCommand {
                     for id in provider
                         .as_deref()
                         .map(|id| vec![id])
-                        .unwrap_or_else(|| provider_choices())
+                        .unwrap_or_else(provider_choices)
                     {
                         if provider_for(id)?.has_configured_token() {
                             println!("{id}: configured token (environment or configuration)");

@@ -34,21 +34,19 @@ fn config(base: &str) -> OAuthConfig {
     }
 }
 
-fn callback_state(authorization_url: &str) -> String {
+fn callback_state(authorization_url: &str) -> Option<String> {
     Url::parse(authorization_url)
-        .unwrap()
+        .ok()?
         .query_pairs()
         .find(|(key, _)| key == "state")
-        .unwrap()
-        .1
-        .into_owned()
+        .map(|(_, value)| value.into_owned())
 }
 
 #[tokio::test]
 async fn duplicate_oauth_state_is_rejected_without_token_exchange() {
     let server = MockServer::start().await;
     let (flow, authorization_url) = LoginFlow::begin(config(&server.uri())).unwrap();
-    let state = callback_state(&authorization_url);
+    let state = callback_state(&authorization_url).unwrap();
     let callback =
         format!("http://127.0.0.1:53692/callback?code=code-1&state={state}&state={state}");
 
@@ -72,7 +70,7 @@ async fn oauth_success_exchanges_the_verified_code_and_returns_tokens() {
         .mount(&server)
         .await;
     let (flow, authorization_url) = LoginFlow::begin(config(&server.uri())).unwrap();
-    let state = callback_state(&authorization_url);
+    let state = callback_state(&authorization_url).unwrap();
     let record = flow
         .finish(
             &format!("http://127.0.0.1:53692/callback?code=valid-code&state={state}"),
