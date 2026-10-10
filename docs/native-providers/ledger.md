@@ -81,6 +81,26 @@ Regenerating the Python SDK produced no additional changes.
   passed: `/tmp/native-rebase-clippy.log`. The adapter also compiled with
   default provider features disabled: `/tmp/native-rebase-feature-check.log`.
 
+## Publication credential handling
+
+GitHub push protection rejected the initial publication because the Antigravity
+reference implementation's OAuth application client ID and secret were embedded
+in source history. These are now runtime environment configuration
+(`ANTIGRAVITY_OAUTH_CLIENT_ID` and `ANTIGRAVITY_OAUTH_CLIENT_SECRET`), and the
+literals are removed from the unpublished branch history. OAuth debug output
+also excludes application credentials and parameter values. Existing account
+tokens were not committed. See [usage.md](usage.md) for the required setup.
+
+The affected auth/provider suites passed 127 tests after this change
+(`/tmp/native-publication-oauth-tests.log`), and the CLI rebuilt successfully
+(`/tmp/native-publication-build.log`). A live check confirmed missing app
+configuration leaves the saved account unchanged, while the external
+configuration supports refresh, discovery, and exact text generation without
+changing account identity (`/tmp/native-publication-live.log`).
+Strict clippy and the feature-disabled adapter check passed again in
+`/tmp/native-publication-clippy.log` and
+`/tmp/native-publication-feature-check.log`.
+
 ## Live provider acceptance
 
 All checks used explicitly selected accounts in private test homes and did not

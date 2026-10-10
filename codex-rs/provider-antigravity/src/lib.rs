@@ -14,10 +14,9 @@ use tokio::sync::Mutex;
 
 pub const AUTHORIZE_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 pub const TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
-pub const CLIENT_ID: &str =
-    "REMOVED_OAUTH_CLIENT_ID";
+pub const CLIENT_ID_ENV: &str = "ANTIGRAVITY_OAUTH_CLIENT_ID";
 // Public desktop OAuth registration, observed in the pinned Antigravity clients.
-pub const CLIENT_SECRET: &str = "REMOVED_OAUTH_CLIENT_SECRET";
+pub const CLIENT_SECRET_ENV: &str = "ANTIGRAVITY_OAUTH_CLIENT_SECRET";
 pub const REDIRECT_URI: &str = "http://localhost:51121/oauth-callback";
 pub const SCOPES: &[&str] = &[
     "https://www.googleapis.com/auth/cloud-platform",
