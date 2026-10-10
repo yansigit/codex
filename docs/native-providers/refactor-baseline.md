@@ -23,15 +23,15 @@ Cargo metadata was captured in
 That snapshot lists the seven baseline provider packages and their direct
 dependency declarations:
 
-| Package | Direct dependency entries |
-| --- | ---: |
-| `codex-provider-api` | 7 |
-| `codex-provider-auth` | 14 |
-| `codex-provider-codecs` | 10 |
-| `codex-provider-cursor` | 22 |
-| `codex-provider-opencode` | 8 |
-| `codex-provider-claude` | 8 |
-| `codex-provider-antigravity` | 11 |
+| Package                      | Direct dependency entries |
+| ---------------------------- | ------------------------: |
+| `codex-provider-api`         |                         7 |
+| `codex-provider-auth`        |                        14 |
+| `codex-provider-codecs`      |                        10 |
+| `codex-provider-cursor`      |                        22 |
+| `codex-provider-opencode`    |                         8 |
+| `codex-provider-claude`      |                         8 |
+| `codex-provider-antigravity` |                        11 |
 
 These counts include repeated dependencies enabled for different targets or
 features. The baseline graph shows provider packages depending on
