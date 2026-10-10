@@ -163,7 +163,9 @@ impl Host for SerialHost {
         let started = self.started.clone();
         let release_first = Arc::clone(&self.release_first);
         Box::pin(async move {
-            started.send(call.id.clone()).unwrap();
+            started
+                .send(call.id.clone())
+                .expect("test observes host start");
             if call.id == "one" {
                 release_first.notified().await;
             }
