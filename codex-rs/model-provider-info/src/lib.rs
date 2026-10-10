@@ -530,7 +530,7 @@ other non-default provider fields are not supported"
 
     /// Builds an API provider with managed residency taking precedence over configured headers.
     pub fn to_api_provider(&self, auth_mode: Option<AuthMode>) -> CodexResult<ApiProvider> {
-        if self.native_provider_id().is_some() {
+        if self.wire_api != WireApi::Responses {
             return Err(CodexErr::InvalidRequest(
                 "native providers require their registered session transport".into(),
             ));
@@ -607,7 +607,7 @@ other non-default provider fields are not supported"
 
     /// Effective maximum number of request retries for this provider.
     pub fn request_max_retries(&self) -> u64 {
-        if self.native_provider_id().is_some() {
+        if self.wire_api != WireApi::Responses {
             return 0;
         }
         self.request_max_retries
@@ -617,7 +617,7 @@ other non-default provider fields are not supported"
 
     /// Effective maximum number of stream reconnection attempts for this provider.
     pub fn stream_max_retries(&self) -> u64 {
-        if self.native_provider_id().is_some() {
+        if self.wire_api != WireApi::Responses {
             return 0;
         }
         self.stream_max_retries

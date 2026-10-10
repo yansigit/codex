@@ -344,7 +344,7 @@ pub fn create_model_provider(
     provider_info: ModelProviderInfo,
     auth_manager: Option<Arc<AuthManager>>,
 ) -> SharedModelProvider {
-    if provider_info.native_provider_id().is_some() {
+    if provider_info.wire_api != codex_model_provider_info::WireApi::Responses {
         let home = auth_manager
             .as_ref()
             .map(|manager| manager.runtime_config().codex_home);
@@ -1416,5 +1416,22 @@ printf '%s\n' '{"AccessKeyId":"exported","SecretAccessKey":"secret"}'
                 );
             }
         }
+    }
+    #[test]
+    fn incomplete_native_configuration_keeps_native_backend_and_returns_error() {
+        let provider = create_model_provider(
+            ModelProviderInfo {
+                wire_api: WireApi::Native,
+                ..Default::default()
+            },
+            None,
+        );
+        let backend = provider.backend().unwrap();
+        assert!(backend.descriptor().is_err());
+        assert!(backend.provider().is_err());
+        assert_eq!(
+            provider.account_state(),
+            Err(ProviderAccountError::NativeStateUnavailable)
+        );
     }
 }
