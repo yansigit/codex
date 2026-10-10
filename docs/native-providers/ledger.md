@@ -1,8 +1,8 @@
 # Native provider implementation ledger
 
-The native provider implementation now has live end-to-end evidence across
-four provider families. The remaining root build, schema, and strict clippy
-gates are still in progress. Provider source revisions and licenses are in
+The native provider implementation has live end-to-end evidence across all
+four provider families. The final CLI build, schema fixtures, and strict clippy
+checks passed on 2026-10-10. Provider source revisions and licenses are in
 [references.md](references.md); scenario-level receipts and limits are in the
 [coverage matrix](coverage-matrix.md).
 
@@ -30,8 +30,9 @@ gates are still in progress. Provider source revisions and licenses are in
 
 ## Verification evidence
 
-- **Core:** `/tmp/native-core-tests-21.log` records 21 native-provider tests
-  passing, including output-cap draining. Cross-namespace lease/checkpoint
+- **Core:** `/tmp/native-core-tests-ultimate.log` records 22 native-provider
+  tests passing, including output-cap draining and per-thread model metadata
+  isolation under an OpenAI-global app-server. Cross-namespace lease/checkpoint
   and provider regression tests are recorded in
   `/tmp/native-review-regressions.log`.
 - **Provider packages:** the latest package snapshot recorded 198 passing
@@ -45,13 +46,15 @@ gates are still in progress. Provider source revisions and licenses are in
   provider inheritance.
 - **Schema:** the native `Account`, `LoginAccountParams`, and
   `LoginAccountResponse` variants were regenerated into stable and
-  experimental schema artifacts. The final four-test schema fixture gate is
-  running; do not report it as passed yet.
+  experimental schema artifacts. `/tmp/native-schema-ultimate.log` records
+  four passing fixture tests (the manual fixture writer is intentionally ignored).
 - **Feature check:** the no-default-features check passed in
   `/tmp/native-feature-check.log`.
-- **Final root gates:** the current CLI build, schema fixture suite, and strict
-  workspace clippy rerun are still running. Earlier build/clippy results do
-  not substitute for these final checks.
+- **Final root gates:** the CLI build passed in
+  `/tmp/native-cli-build-ultimate.log`. Strict clippy passed for all provider
+  crates, the adapter, core, CLI, and app-server in
+  `/tmp/native-clippy-ultimate.log`. Bazel and the full repository test suite
+  were not run.
 
 ## Live provider acceptance
 
@@ -63,7 +66,7 @@ reproduction commands are in [usage.md](usage.md).
 | Provider    | Verified live behavior                                                                                                                                                                                                                                                                                                                                       | Scope and remaining limits                                                                                                                                        |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Cursor      | Browser login, refresh, 256-model discovery, model changes, ordinary native read/write/grep/list/delete, shell/exec/stdin, MCP text/image, file errors, policy rejection, permission decline/accept, lifecycle and interruption recovery passed. Final MCP image tests used the production-default catalog; historical user/tool image branches also passed. | Linux full-runtime checks. Background shells, binary native writes, and unsupported multimodal resources remain explicit errors.                                  |
-| OpenCode Go | Chat `glm-5.3`, Messages `minimax-m3`, and Responses `gpt-6-luna` passed two initial exec/write/read rounds plus one resumed read. Model change, browser login/refresh/discovery, approvals, branch/compaction, interruption/recovery, and Chat/Responses vision passed. Go Messages MCP image passed through the full Codex core.                           | Selected account/model coverage. The original Go key had exhausted its monthly quota, so tests explicitly chose the available pool account; no fallback was used. |
+| OpenCode Go | Chat `glm-5.3`, Messages `minimax-m3`, and Responses `gpt-6-luna` passed two initial exec/write/read rounds plus one resumed read. API-key login/discovery, model change, approvals, branch/compaction, interruption/recovery, and Chat/Responses vision passed. Go Messages view-image passed through the full Codex core.                                  | Selected account/model coverage. The original Go key had exhausted its monthly quota, so tests explicitly chose the available pool account; no fallback was used. |
 | Claude      | Browser login/refresh, 14-model discovery, reasoning, view-image, model change, live tool rounds/resume, approvals, branch/compaction, active-tool interruption/recovery, and TUI status/provider/account/model display passed.                                                                                                                              | Selected models/accounts; no automatic account rotation.                                                                                                          |
 | Antigravity | Browser login/refresh, 26-model discovery, Gemini and Claude-family model changes, full-core image checks, live tool rounds/resume, approvals, branch/compaction, and active-tool interruption/recovery passed.                                                                                                                                              | Selected models/accounts; broader provider error and entitlement coverage remains open.                                                                           |
 
@@ -82,14 +85,14 @@ listed in the [coverage matrix](coverage-matrix.md).
 
 ## Limits and follow-up
 
-- The final root CLI build, four-test schema fixture gate, and strict clippy
-  rerun must finish before calling the source snapshot fully validated.
 - Live coverage is Linux-only for native filesystem and shell execution. It
   does not establish Windows/macOS command availability or every sandbox
   policy branch.
-- Cursor drains completed foreground output for a bounded 500 ms grace period
-  to capture late checkpoint writes. This is the tested design assumption;
-  longer-running background shells are unsupported.
+- Cursor drains its upstream stream for 500 ms after `turnEnded` when the
+  service keeps HTTP/2 open. There is no verified final-checkpoint marker;
+  metadata arriving after this grace period can be missed. This bounded
+  protocol assumption and its delayed-frame regression are documented in the
+  [Cursor crate](../../codex-rs/provider-cursor/README.md).
 - Binary native writes, audio/resource inputs, remote-image resources, and
   unsupported model/protocol combinations return explicit errors.
 - An optional baseline code-mode host build failed because the upstream V8
@@ -97,4 +100,5 @@ listed in the [coverage matrix](coverage-matrix.md).
   do not depend on that optional binary; retain the normal default sandbox.
 - Auth, model, and service checks cover selected accounts and models. Provider
   entitlements, account-wide rotation, and catalog-wide compatibility are not
-  claimed. No provider is marked complete or exhaustive.
+  claimed. The listed acceptance scenarios pass; untested combinations remain
+  outside the validated scope.

@@ -135,17 +135,17 @@ The checks create unique temporary workspaces and only print provider/thread
 and pass/fail details.
 
 ```sh
-CODEX="$PWD/codex-rs/target/debug/codex"
-CODEX_HOME="/path/to/private-acceptance-home"
+CODEX_BINARY="$PWD/codex-rs/target/debug/codex"
+ACCEPTANCE_HOME="/path/to/private-acceptance-home"
 
 python3 scripts/native_provider_acceptance.py \
-  --codex "$CODEX" --codex-home "$CODEX_HOME" \
+  --codex "$CODEX_BINARY" --codex-home "$ACCEPTANCE_HOME" \
   --provider claude --check lifecycle
 python3 scripts/native_provider_acceptance.py \
-  --codex "$CODEX" --codex-home "$CODEX_HOME" \
+  --codex "$CODEX_BINARY" --codex-home "$ACCEPTANCE_HOME" \
   --provider antigravity --check interruption
 python3 scripts/native_provider_acceptance.py \
-  --codex "$CODEX" --codex-home "$CODEX_HOME" \
+  --codex "$CODEX_BINARY" --codex-home "$ACCEPTANCE_HOME" \
   --provider opencode-go --check permissions
 ```
 
@@ -162,8 +162,9 @@ receipts are in the [coverage matrix](coverage-matrix.md).
 ## Supported limits
 
 Full filesystem/shell acceptance is currently verified on Linux. Cursor uses
-Codex's normal host path and a bounded 500 ms foreground-output drain to capture
-late checkpoint updates; background shells are unsupported. Binary native
+Codex's normal host path. When the upstream stream stays open after `turnEnded`,
+a bounded 500 ms drain collects late checkpoint updates; metadata arriving
+after that period can be missed. Background shells are unsupported. Binary native
 writes, audio/resource input, remote-image resources, and unsupported
 model/protocol combinations return explicit errors. Provider requests do not
 automatically retry or switch accounts. Model capability and live acceptance
@@ -171,6 +172,6 @@ are account- and route-specific; see the [coverage matrix](coverage-matrix.md).
 
 See the [pinned reference inventory](references.md) for source revisions and
 the [evidence matrix](coverage-matrix.md) for current local and live acceptance
-limits. The current root CLI build, final schema fixture gate, and strict
-workspace clippy rerun are still in progress; do not treat this page as a
-claim that all provider models, accounts, platforms, or features are complete.
+limits. The final CLI build, schema fixture suite, strict clippy checks for
+affected crates, and the documented live acceptance scenarios passed. This
+does not establish support for every provider model, account, or platform.
