@@ -157,7 +157,7 @@ impl AccountRequestProcessor {
                 && response.workspace_routing.is_some()
                 && auth_changes.borrow().owner_generation == owner_generation
             {
-                let notification = processor.current_account_updated_notification();
+                let notification = processor.current_account_updated_notification().await;
                 processor
                     .outgoing
                     .send_account_notification(

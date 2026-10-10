@@ -6,6 +6,35 @@ use std::num::NonZeroU64;
 use tempfile::tempdir;
 
 #[test]
+fn native_provider_configuration_round_trips_without_responses_fallback() {
+    for id in ["cursor", "opencode-go", "claude", "antigravity"] {
+        let provider = built_in_model_providers(None).remove(id).unwrap();
+        provider.validate().unwrap();
+        assert_eq!(provider.wire_api.native_provider_id(), Some(id));
+        let encoded = toml::to_string(&provider).unwrap();
+        assert_eq!(
+            toml::from_str::<ModelProviderInfo>(&encoded).unwrap(),
+            provider
+        );
+        assert!(provider.to_api_provider(None).is_err());
+        assert_eq!(provider.request_max_retries(), 0);
+        assert_eq!(provider.stream_max_retries(), 0);
+        let mut changed = provider.clone();
+        changed.requires_openai_auth = true;
+        assert!(changed.validate().is_err());
+        let mut changed = provider.clone();
+        changed.stream_max_retries = Some(1);
+        assert!(changed.validate().is_err());
+        let mut changed = provider.clone();
+        changed.stream_idle_timeout_ms = Some(1);
+        assert!(changed.validate().is_err());
+        let mut changed = provider;
+        changed.websocket_connect_timeout_ms = Some(1);
+        assert!(changed.validate().is_err());
+    }
+}
+
+#[test]
 fn runtime_internal_metadata_opt_in_is_not_serialized_or_configurable() {
     let trusted = ModelProviderInfo {
         include_internal_metadata: true,

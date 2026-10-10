@@ -6838,6 +6838,15 @@
       "description": "Wire protocol that the provider speaks.",
       "oneOf": [
         {
+          "enum": [
+            "cursor",
+            "opencode-go",
+            "claude",
+            "antigravity"
+          ],
+          "type": "string"
+        },
+        {
           "description": "The Responses API exposed by OpenAI at `/v1/responses`.",
           "enum": [
             "responses"

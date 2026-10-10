@@ -72,6 +72,7 @@ mod mcp_cmd;
 mod mcp_login;
 mod migrate_rollouts;
 mod plugin_cmd;
+mod provider_cmd;
 mod queue_cmd;
 mod remote_control_cmd;
 #[cfg(target_os = "windows")]
@@ -145,6 +146,8 @@ struct MultitoolCli {
 
 #[derive(Debug, clap::Subcommand)]
 enum Subcommand {
+    /// Manage native Cursor, OpenCode Go, Claude, and Antigravity accounts.
+    Provider(provider_cmd::ProviderCommand),
     /// Browse all agent sessions on the shared local app-server daemon.
     Agents(AgentsCommand),
 
@@ -1569,6 +1572,14 @@ async fn cli_main(
             .await?;
             handle_app_exit(exit_info, daemon_cli_executable.as_deref())?;
         }
+        Some(Subcommand::Provider(command)) => {
+            reject_remote_mode_for_subcommand(
+                root_remote.as_deref(),
+                root_remote_auth_token_env.as_deref(),
+                "provider",
+            )?;
+            command.run(root_config_overrides).await?;
+        }
         Some(Subcommand::Login(mut login_cli)) => {
             reject_remote_mode_for_subcommand(
                 root_remote.as_deref(),
@@ -2275,6 +2286,7 @@ fn unsupported_subcommand_name_for_strict_config(
         Some(Subcommand::MigrateRollouts(_)) => Some("migrate-rollouts"),
         #[cfg(any(target_os = "macos", target_os = "windows"))]
         Some(Subcommand::App(_)) => Some("app"),
+        Some(Subcommand::Provider(_)) => Some("provider"),
         Some(Subcommand::Login(_)) => Some("login"),
         Some(Subcommand::Logout(_)) => Some("logout"),
         Some(Subcommand::Completion(_)) => Some("completion"),

@@ -108,12 +108,33 @@ pub enum WireApi {
     /// The Responses API exposed by OpenAI at `/v1/responses`.
     #[default]
     Responses,
+    Cursor,
+    #[serde(rename = "opencode-go")]
+    OpenCodeGo,
+    Claude,
+    Antigravity,
+}
+
+impl WireApi {
+    pub fn native_provider_id(self) -> Option<&'static str> {
+        match self {
+            Self::Responses => None,
+            Self::Cursor => Some("cursor"),
+            Self::OpenCodeGo => Some("opencode-go"),
+            Self::Claude => Some("claude"),
+            Self::Antigravity => Some("antigravity"),
+        }
+    }
 }
 
 impl fmt::Display for WireApi {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let value = match self {
             Self::Responses => "responses",
+            Self::Cursor => "cursor",
+            Self::OpenCodeGo => "opencode-go",
+            Self::Claude => "claude",
+            Self::Antigravity => "antigravity",
         };
         f.write_str(value)
     }
@@ -127,8 +148,21 @@ impl<'de> Deserialize<'de> for WireApi {
         let value = String::deserialize(deserializer)?;
         match value.as_str() {
             "responses" => Ok(Self::Responses),
+            "cursor" => Ok(Self::Cursor),
+            "opencode-go" => Ok(Self::OpenCodeGo),
+            "claude" => Ok(Self::Claude),
+            "antigravity" => Ok(Self::Antigravity),
             "chat" => Err(serde::de::Error::custom(CHAT_WIRE_API_REMOVED_ERROR)),
-            _ => Err(serde::de::Error::unknown_variant(&value, &["responses"])),
+            _ => Err(serde::de::Error::unknown_variant(
+                &value,
+                &[
+                    "responses",
+                    "cursor",
+                    "opencode-go",
+                    "claude",
+                    "antigravity",
+                ],
+            )),
         }
     }
 }
@@ -297,6 +331,30 @@ other non-default provider fields are not supported"
     }
 
     pub fn validate(&self) -> std::result::Result<(), String> {
+        if self.wire_api.native_provider_id().is_some() {
+            if self.requires_openai_auth
+                || self.aws.is_some()
+                || self.auth.is_some()
+                || self.gateway_oauth.is_some()
+                || self.supports_websockets
+                || self.model_catalog_url.is_some()
+                || self.query_params.is_some()
+                || self.http_headers.is_some()
+                || self.env_http_headers.is_some()
+                || self.stream_idle_timeout_ms.is_some()
+                || self.websocket_connect_timeout_ms.is_some()
+            {
+                return Err("native providers use their own authentication, discovery, headers, and streaming transport".into());
+            }
+            if self.request_max_retries.is_some_and(|value| value != 0)
+                || self.stream_max_retries.is_some_and(|value| value != 0)
+            {
+                return Err(
+                    "native provider retries must be zero; resume after interruption is explicit"
+                        .into(),
+                );
+            }
+        }
         if let Some(gateway) = &self.gateway_oauth {
             gateway.validate(self)?;
         }
@@ -425,6 +483,11 @@ other non-default provider fields are not supported"
 
     /// Builds an API provider with managed residency taking precedence over configured headers.
     pub fn to_api_provider(&self, auth_mode: Option<AuthMode>) -> CodexResult<ApiProvider> {
+        if self.wire_api.native_provider_id().is_some() {
+            return Err(CodexErr::InvalidRequest(
+                "native providers require their registered session transport".into(),
+            ));
+        }
         let default_base_url = if matches!(
             auth_mode,
             Some(
@@ -497,6 +560,9 @@ other non-default provider fields are not supported"
 
     /// Effective maximum number of request retries for this provider.
     pub fn request_max_retries(&self) -> u64 {
+        if self.wire_api.native_provider_id().is_some() {
+            return 0;
+        }
         self.request_max_retries
             .unwrap_or(DEFAULT_REQUEST_MAX_RETRIES)
             .min(MAX_REQUEST_MAX_RETRIES)
@@ -504,6 +570,9 @@ other non-default provider fields are not supported"
 
     /// Effective maximum number of stream reconnection attempts for this provider.
     pub fn stream_max_retries(&self) -> u64 {
+        if self.wire_api.native_provider_id().is_some() {
+            return 0;
+        }
         self.stream_max_retries
             .unwrap_or(DEFAULT_STREAM_MAX_RETRIES)
             .min(MAX_STREAM_MAX_RETRIES)
@@ -666,13 +735,42 @@ pub fn built_in_model_providers(
     let amazon_bedrock_runtime_provider =
         P::create_amazon_bedrock_runtime_provider(/*aws*/ None);
 
-    // We do not want to be in the business of adjucating which third-party
-    // providers are bundled with Codex CLI, so we only include the OpenAI and
-    // open source ("oss") providers by default. Users are encouraged to add to
-    // `model_providers` in config.toml to add their own providers.
     [
         (OPENAI_PROVIDER_ID, openai_provider),
         (AMAZON_BEDROCK_PROVIDER_ID, amazon_bedrock_provider),
+        (
+            "cursor",
+            P {
+                name: "Cursor".into(),
+                wire_api: WireApi::Cursor,
+                ..P::default()
+            },
+        ),
+        (
+            "opencode-go",
+            P {
+                name: "OpenCode Go".into(),
+                wire_api: WireApi::OpenCodeGo,
+                env_key: Some("OPENCODE_API_KEY".into()),
+                ..P::default()
+            },
+        ),
+        (
+            "claude",
+            P {
+                name: "Claude Pro/Max".into(),
+                wire_api: WireApi::Claude,
+                ..P::default()
+            },
+        ),
+        (
+            "antigravity",
+            P {
+                name: "Antigravity".into(),
+                wire_api: WireApi::Antigravity,
+                ..P::default()
+            },
+        ),
         (
             AMAZON_BEDROCK_RUNTIME_PROVIDER_ID,
             amazon_bedrock_runtime_provider,

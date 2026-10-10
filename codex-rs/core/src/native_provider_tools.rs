@@ -76,7 +76,7 @@ pub(super) fn command(name: &str, args: &Value) -> Result<Value> {
             let seconds = integer(args, "timeout_ms", 120_000, 1, 3_600_000)?.div_ceil(1000);
             // A private temp directory captures streams separately and is cleaned by the shell.
             format!(
-                "d=$(mktemp -d) || exit 1\ntrap 'rm -rf -- \"$d\"' EXIT\ntimeout --signal=TERM {seconds}s /bin/bash -lc {command} >\"$d/out\" 2>\"$d/err\"\ns=$?\nprintf '{MARKER}%s\\n' \"$s\"\nbase64 -w0 <\"$d/out\"\nprintf '\\n'\nbase64 -w0 <\"$d/err\"\nprintf '\\n'"
+                "d=$(mktemp -d) || exit 1\ntrap 'rm -- \"$d/out\" \"$d/err\"; rmdir -- \"$d\"' EXIT\ntimeout --signal=TERM --kill-after=5s {seconds}s /bin/bash -lc {command} >\"$d/out\" 2>\"$d/err\"\ns=$?\nprintf '{MARKER}%s\\n' \"$s\"\nbase64 -w0 <\"$d/out\"\nprintf '\\n'\nbase64 -w0 <\"$d/err\"\nprintf '\\n'"
             )
         }
         "cursor_read_file" => {

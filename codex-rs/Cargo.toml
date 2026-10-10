@@ -87,6 +87,13 @@ members = [
     "memories/write",
     "mermaid",
     "model-provider-info",
+    "provider-api",
+    "provider-auth",
+    "provider-codecs",
+    "provider-opencode",
+    "provider-claude",
+    "provider-antigravity",
+    "provider-cursor",
     "mxc-sandbox",
     "models-manager",
     "network-proxy",
@@ -262,6 +269,12 @@ codex-otel = { path = "otel" }
 codex-otel-trace-websocket = { path = "otel-trace-websocket" }
 codex-plugin = { path = "plugin" }
 codex-model-provider = { path = "model-provider" }
+codex-provider-api = { path = "provider-api" }
+codex-provider-auth = { path = "provider-auth" }
+codex-provider-opencode = { path = "provider-opencode" }
+codex-provider-claude = { path = "provider-claude" }
+codex-provider-antigravity = { path = "provider-antigravity" }
+codex-provider-cursor = { path = "provider-cursor" }
 codex-process-hardening = { path = "process-hardening" }
 codex-protocol = { path = "protocol" }
 codex-prompts = { path = "prompts" }

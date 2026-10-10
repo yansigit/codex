@@ -12,7 +12,22 @@ path = "src/lib.rs"
 [lints]
 workspace = true
 
+[features]
+default = ["provider-cursor", "provider-opencode", "provider-claude", "provider-antigravity"]
+provider-cursor = ["dep:codex-provider-cursor"]
+provider-opencode = ["dep:codex-provider-opencode"]
+provider-claude = ["dep:codex-provider-claude"]
+provider-antigravity = ["dep:codex-provider-antigravity"]
+
 [dependencies]
+codex-provider-api = { workspace = true }
+codex-provider-auth = { workspace = true }
+codex-provider-cursor = { workspace = true, optional = true }
+codex-provider-opencode = { workspace = true, optional = true }
+codex-provider-claude = { workspace = true, optional = true }
+codex-provider-antigravity = { workspace = true, optional = true }
+reqwest = { workspace = true, features = ["json", "stream"] }
+tokio-util = { workspace = true }
 codex-utils-process = { workspace = true }
 chrono = { workspace = true }
 codex-api = { workspace = true }

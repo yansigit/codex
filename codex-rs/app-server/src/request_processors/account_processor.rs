@@ -39,6 +39,10 @@ const LOGIN_ISSUER_OVERRIDE_ENV_VAR: &str = "CODEX_APP_SERVER_LOGIN_ISSUER";
 const LOGIN_OPEN_APP_URL_OVERRIDE_ENV_VAR: &str = "CODEX_APP_SERVER_DEV_OPEN_APP_URL";
 
 enum ActiveLogin {
+    Native {
+        cancel: CancellationToken,
+        login_id: Uuid,
+    },
     Browser {
         shutdown_handle: ShutdownHandle,
         login_id: Uuid,
@@ -52,9 +56,9 @@ enum ActiveLogin {
 impl ActiveLogin {
     fn login_id(&self) -> Uuid {
         match self {
-            ActiveLogin::Browser { login_id, .. } | ActiveLogin::DeviceCode { login_id, .. } => {
-                *login_id
-            }
+            ActiveLogin::Native { login_id, .. }
+            | ActiveLogin::Browser { login_id, .. }
+            | ActiveLogin::DeviceCode { login_id, .. } => *login_id,
         }
     }
 
@@ -63,7 +67,9 @@ impl ActiveLogin {
             ActiveLogin::Browser {
                 shutdown_handle, ..
             } => shutdown_handle.shutdown(),
-            ActiveLogin::DeviceCode { cancel, .. } => cancel.cancel(),
+            ActiveLogin::DeviceCode { cancel, .. } | ActiveLogin::Native { cancel, .. } => {
+                cancel.cancel()
+            }
         }
     }
 }
@@ -239,7 +245,22 @@ impl AccountRequestProcessor {
         self.auth_manager.clear_external_auth();
     }
 
-    fn current_account_updated_notification(&self) -> AccountUpdatedNotification {
+    async fn current_account_updated_notification(&self) -> AccountUpdatedNotification {
+        if self
+            .load_latest_config()
+            .await
+            .model_provider
+            .wire_api
+            .native_provider_id()
+            .is_some()
+        {
+            // Native account details are available through account/read. Never label
+            // that account with a separately saved OpenAI credential's auth mode.
+            return AccountUpdatedNotification {
+                auth_mode: None,
+                plan_type: None,
+            };
+        }
         let auth = self.auth_manager.auth_cached();
         AccountUpdatedNotification {
             auth_mode: auth
@@ -338,6 +359,14 @@ impl AccountRequestProcessor {
         }
         self.enterprise_login.cancel(/*login_id*/ None).await;
         match params {
+            LoginAccountParams::Native {
+                provider,
+                account_id,
+                api_key,
+            } => {
+                let result = self.login_native(provider, account_id, api_key).await;
+                self.outgoing.send_result(request_id, result).await;
+            }
             LoginAccountParams::ApiKey { api_key } => {
                 self.login_api_key_v2(request_id, LoginApiKeyParams { api_key })
                     .await;
@@ -728,6 +757,108 @@ impl AccountRequestProcessor {
         })
     }
 
+    async fn login_native(
+        &self,
+        provider: String,
+        account: String,
+        token: Option<String>,
+    ) -> Result<LoginAccountResponse, JSONRPCErrorError> {
+        if !matches!(
+            provider.as_str(),
+            "cursor" | "opencode-go" | "claude" | "antigravity"
+        ) || account.is_empty()
+        {
+            return Err(invalid_request(
+                "native login requires a known provider and nonempty account ID",
+            ));
+        }
+        self.cancel_active_login().await;
+        let config = self.load_latest_config().await;
+        if config.model_provider.wire_api.native_provider_id() == Some(provider.as_str())
+            && codex_model_provider::native::NativeModelProvider::new(
+                config.model_provider.clone(),
+                Some(config.codex_home.to_path_buf()),
+            )
+            .has_configured_token()
+        {
+            return Err(invalid_request(
+                "native authentication is configured by an environment variable or bearer token; remove that override before logging in",
+            ));
+        }
+        let cancellation = CancellationToken::new();
+        let store = codex_provider_auth::AuthStore::new(&self.config.codex_home);
+        if let Some(token) = token {
+            if token.trim().is_empty() {
+                return Err(invalid_request("empty provider token"));
+            }
+            store
+                .login(
+                    &provider,
+                    &account,
+                    codex_provider_auth::TokenRecord {
+                        access_token: token,
+                        refresh_token: None,
+                        expires_at: None,
+                        metadata: serde_json::Value::Null,
+                        revoked: false,
+                    },
+                    &cancellation,
+                )
+                .await
+                .map_err(|error| internal_error(error.to_string()))?;
+            self.send_login_success_notifications(None).await;
+            return Ok(LoginAccountResponse::Native {
+                provider,
+                login_id: None,
+                auth_url: None,
+            });
+        }
+        let login = codex_model_provider::native::NativeLogin::begin(&provider)
+            .await
+            .map_err(|error| invalid_request(error.to_string()))?;
+        let auth_url = login.url().to_owned();
+        let login_id = Uuid::new_v4();
+        *self.active_login.lock().await = Some(ActiveLogin::Native {
+            cancel: cancellation.clone(),
+            login_id,
+        });
+        let processor = self.clone();
+        let provider_id = provider.clone();
+        tokio::spawn(async move {
+            let result = login.finish(&cancellation).await;
+            // Keep the active-login lock until commit so cancel/replacement fences late callbacks.
+            let mut active = processor.active_login.lock().await;
+            if active.as_ref().map(ActiveLogin::login_id) != Some(login_id)
+                || cancellation.is_cancelled()
+            {
+                return;
+            }
+            let result = match result {
+                Ok(record) => {
+                    store
+                        .login(&provider_id, &account, record, &cancellation)
+                        .await
+                }
+                Err(error) => Err(error),
+            };
+            *active = None;
+            drop(active);
+            processor
+                .send_account_login_notifications(AccountLoginCompletedNotification {
+                    login_id: Some(login_id.to_string()),
+                    success: result.is_ok(),
+                    error: result.err().map(|error| error.to_string()),
+                    onboarding_entrypoint: None,
+                })
+                .await;
+        });
+        Ok(LoginAccountResponse::Native {
+            provider,
+            login_id: Some(login_id.to_string()),
+            auth_url: Some(auth_url),
+        })
+    }
+
     async fn login_chatgpt_device_code_v2(&self, request_id: ConnectionRequestId) {
         let result = self.login_chatgpt_device_code_response().await;
         self.outgoing.send_result(request_id, result).await;
@@ -952,7 +1083,7 @@ impl AccountRequestProcessor {
             .await;
 
         if success {
-            let notification = self.current_account_updated_notification();
+            let notification = self.current_account_updated_notification().await;
             self.outgoing
                 .send_account_notification(
                     /*connection_id*/ None,
@@ -990,6 +1121,25 @@ impl AccountRequestProcessor {
     }
 
     async fn logout_common(&self) -> std::result::Result<Option<AuthMode>, JSONRPCErrorError> {
+        let current_config = self.load_latest_config().await;
+        if let Some(provider) = current_config.model_provider.wire_api.native_provider_id() {
+            if codex_model_provider::native::NativeModelProvider::new(
+                current_config.model_provider.clone(),
+                Some(current_config.codex_home.to_path_buf()),
+            )
+            .has_configured_token()
+            {
+                return Err(invalid_request(
+                    "native authentication is configured by an environment variable or bearer token; remove that override to log out",
+                ));
+            }
+            self.cancel_active_login().await;
+            codex_provider_auth::AuthStore::new(&current_config.codex_home)
+                .logout(provider, &CancellationToken::new())
+                .await
+                .map_err(|error| internal_error(error.to_string()))?;
+            return Ok(None);
+        }
         if self.auth_manager.is_workload_identity_selected() {
             return Err(self.configured_auth_owned_by_host_error());
         }
