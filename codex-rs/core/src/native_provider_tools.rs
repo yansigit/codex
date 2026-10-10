@@ -14,7 +14,7 @@ pub(super) fn definitions() -> Vec<ToolDefinition> {
         ("cursor_write_file", "Write a file under Codex permissions", json!({"path":{"type":"string"},"content":{"type":"string"}}), vec!["path","content"]),
         ("cursor_delete_file", "Delete a file under Codex permissions", json!({"path":{"type":"string"}}), vec!["path"]),
         ("cursor_ls", "List a directory under Codex permissions", json!({"path":{"type":"string"},"ignore":{"type":"array","items":{"type":"string"}}}), vec!["path"]),
-        ("cursor_grep", "Search files under Codex permissions", json!({"pattern":{"type":"string"},"path":{"type":"string"},"glob":{"type":"string"},"context":{"type":"integer"},"context_before":{"type":"integer"},"context_after":{"type":"integer"},"case_insensitive":{"type":"boolean"},"type":{"type":"string"},"head_limit":{"type":"integer"},"multiline":{"type":"boolean"},"sort":{"type":"string"},"offset":{"type":"integer"},"output_mode":{"type":"string"}}), vec!["pattern"]),
+        ("cursor_grep", "Search files under Codex permissions", json!({"pattern":{"type":"string"},"path":{"type":"string"},"glob":{"type":"string"},"context":{"type":"integer"},"context_before":{"type":"integer"},"context_after":{"type":"integer"},"case_insensitive":{"type":"boolean"},"type":{"type":"string"},"head_limit":{"type":"integer"},"multiline":{"type":"boolean"},"sort":{"type":"string"},"sort_ascending":{"type":"boolean"},"offset":{"type":"integer"},"output_mode":{"type":"string"}}), vec!["pattern"]),
     ].into_iter().map(|(name,description,properties,required)| ToolDefinition { name:name.into(),description:description.into(),parameters:json!({"type":"object","properties":properties,"required":required}) }).collect()
 }
 
@@ -81,11 +81,11 @@ pub(super) fn command(name: &str, args: &Value) -> Result<Value> {
         }
         "cursor_read_file" => {
             let path = quote(text(args, "path")?);
-            let start = integer(args, "offset", 1, 1, i64::MAX as u64)?;
+            let start = integer(args, "offset", 1, 1, i32::MAX as u64)?;
             let limit = integer(args, "limit", 2000, 1, 10000)?;
             let end = start.saturating_add(limit - 1);
             format!(
-                "p={path}\ntest -f \"$p\" || exit 1\n{}\nprintf '{MARKER}%s %s\\n' \"$lines\" \"$bytes\"\nsed -n '{start},{end}p' -- \"$p\" | head -c 65536 | iconv -f UTF-8 -t UTF-8//IGNORE | base64 -w0\nprintf '\\n'",
+                "p={path}\ntest -f \"$p\" || exit 1\n{}\nprintf '{MARKER}%s %s\\n' \"$lines\" \"$bytes\"\nsed -n '{start},{end}p' -- \"$p\" | head -c 65536 | base64 -w0\nprintf '\\n'",
                 line_count_script()
             )
         }
@@ -158,16 +158,16 @@ pub(super) fn command(name: &str, args: &Value) -> Result<Value> {
             };
             let context = args
                 .get("context")
-                .map(|_| integer(args, "context", 0, 0, 1000))
+                .map(|_| integer(args, "context", 0, 0, i32::MAX as u64))
                 .transpose()?;
             let before = args
                 .get("context_before")
-                .map(|_| integer(args, "context_before", 0, 0, 1000))
+                .map(|_| integer(args, "context_before", 0, 0, i32::MAX as u64))
                 .transpose()?
                 .or(context);
             let after = args
                 .get("context_after")
-                .map(|_| integer(args, "context_after", 0, 0, 1000))
+                .map(|_| integer(args, "context_after", 0, 0, i32::MAX as u64))
                 .transpose()?
                 .or(context);
             let before = before
@@ -185,8 +185,19 @@ pub(super) fn command(name: &str, args: &Value) -> Result<Value> {
                     )));
                 }
             };
-            let _ = integer(args, "offset", 0, 0, u64::MAX)?;
-            let _ = integer(args, "head_limit", u64::MAX, 0, u64::MAX)?;
+            let sort_ascending = match args.get("sort_ascending") {
+                None => true,
+                Some(value) => value.as_bool().ok_or_else(|| {
+                    ProviderError::Host("sort_ascending must be a boolean".into())
+                })?,
+            };
+            if sort == "" && !sort_ascending {
+                return Err(ProviderError::Unsupported(
+                    "sort_ascending requires path sorting".into(),
+                ));
+            }
+            let _ = integer(args, "offset", 0, 0, i32::MAX as u64)?;
+            let _ = integer(args, "head_limit", i32::MAX as u64, 0, i32::MAX as u64)?;
             let output_mode = optional_text(args, "output_mode")?.unwrap_or("content");
             if !matches!(output_mode, "content" | "files_with_matches" | "count") {
                 return Err(ProviderError::Unsupported(format!(
@@ -234,6 +245,24 @@ pub(super) fn result(name: &str, args: &Value, structured: &Value) -> Result<Val
         String::from_utf8(data)
             .map_err(|_| ProviderError::Host("binary native output is unsupported".into()))
     };
+    let decode_read = |text: &str| -> Result<String> {
+        let bytes = STANDARD
+            .decode(text)
+            .map_err(|_| ProviderError::Host("invalid encoded native output".into()))?;
+        match String::from_utf8(bytes) {
+            Ok(text) => Ok(text),
+            Err(error)
+                if error.utf8_error().error_len().is_none() && error.as_bytes().len() == 65_536 =>
+            {
+                let valid_up_to = error.utf8_error().valid_up_to();
+                String::from_utf8(error.into_bytes()[..valid_up_to].to_vec())
+                    .map_err(|_| ProviderError::Host("invalid UTF-8 native file content".into()))
+            }
+            Err(_) => Err(ProviderError::Host(
+                "invalid UTF-8 native file content".into(),
+            )),
+        }
+    };
     match name {
         "cursor_shell" => Ok(
             json!({"exit_code":header.parse::<i32>().map_err(|_|ProviderError::Host("missing native shell status".into()))?,"stdout":decode(lines.next().unwrap_or_default())?,"stderr":decode(lines.next().unwrap_or_default())?}),
@@ -251,15 +280,25 @@ pub(super) fn result(name: &str, args: &Value, structured: &Value) -> Result<Val
             if name == "cursor_write_file" {
                 return Ok(json!({"lines_created":count,"file_size":size}));
             }
-            let content = decode(lines.next().unwrap_or_default())?;
+            let content = decode_read(lines.next().unwrap_or_default())?;
             Ok(
                 json!({"truncated":content.len() as u64 < size,"content":content,"total_lines":count,"file_size":size,"range_applied":true}),
             )
         }
         "cursor_delete_file" => Ok(json!({})),
         "cursor_ls" => {
+            if header != "ls" {
+                return Err(ProviderError::Host(
+                    "missing native directory header".into(),
+                ));
+            }
+            let base = lines.next().unwrap_or_default();
+            if !std::path::Path::new(base).is_absolute() {
+                return Err(ProviderError::Host(
+                    "native directory path is not absolute".into(),
+                ));
+            }
             let records = decode(lines.next().unwrap_or_default())?;
-            let base = header.as_str();
             let mut files = vec![];
             let mut directories = vec![];
             for record in records.split('\0').filter(|record| !record.is_empty()) {
@@ -303,10 +342,23 @@ pub(super) fn result(name: &str, args: &Value, structured: &Value) -> Result<Val
             if sort == "path" {
                 matches.sort_by(|left, right| left.0.cmp(&right.0));
             }
-            let offset = integer(args, "offset", 0, 0, u64::MAX)? as usize;
+            let ascending = match args.get("sort_ascending") {
+                None => true,
+                Some(value) => value.as_bool().ok_or_else(|| {
+                    ProviderError::Host("sort_ascending must be a boolean".into())
+                })?,
+            };
+            if sort == "path" && !ascending {
+                matches.reverse();
+            } else if sort == "none" && !ascending {
+                return Err(ProviderError::Unsupported(
+                    "sort_ascending requires path sorting".into(),
+                ));
+            }
+            let offset = integer(args, "offset", 0, 0, i32::MAX as u64)? as usize;
             let limit = args
                 .get("head_limit")
-                .map(|_| integer(args, "head_limit", 0, 0, usize::MAX as u64))
+                .map(|_| integer(args, "head_limit", 0, 0, i32::MAX as u64))
                 .transpose()?
                 .map(|n| n as usize);
             let mode = args["output_mode"].as_str().unwrap_or("content");
@@ -334,7 +386,7 @@ pub(super) fn result(name: &str, args: &Value, structured: &Value) -> Result<Val
                     Ok(json!({"files":selected.iter().map(|(file,_)|file).collect::<Vec<_>>()}))
                 }
                 "count" => Ok(
-                    json!({"counts":selected.iter().map(|(file,rows)|json!({"file":file,"count":rows.len()})).collect::<Vec<_>>()}),
+                    json!({"counts":selected.iter().map(|(file,rows)|json!({"file":file,"count":rows.iter().filter(|row| row["is_context_line"] == false).count()})).collect::<Vec<_>>()}),
                 ),
                 "content" => Ok(
                     json!({"matches":selected.into_iter().map(|(file,lines)|json!({"file":file,"lines":lines})).collect::<Vec<_>>()}),
@@ -391,7 +443,7 @@ mod tests {
         .unwrap();
         let script = read["cmd"].as_str().unwrap();
         assert!(script.contains("lines=$((lines + 1))"));
-        assert!(script.contains("iconv -f UTF-8 -t UTF-8//IGNORE"));
+        assert!(script.contains("head -c 65536 | base64 -w0"));
         let write = command(
             "cursor_write_file",
             &json!({"path":"notes.txt", "content":"end"}),
@@ -440,6 +492,21 @@ mod tests {
             parsed,
             json!({"matches":[{"file":"b.rs","lines":[{"line_number":3,"content":"after\n","is_context_line":true}]}]})
         );
+        let counted = result(
+            "cursor_grep",
+            &json!({"output_mode":"count", "sort":"none"}),
+            &structured,
+        )
+        .unwrap();
+        assert_eq!(counted["counts"][0]["count"], 1);
+
+        let descending = result(
+            "cursor_grep",
+            &json!({"sort":"path", "sort_ascending":false}),
+            &structured,
+        )
+        .unwrap();
+        assert_eq!(descending["matches"][0]["file"], "b.rs");
         assert!(command("cursor_grep", &json!({"pattern":"x", "output_mode":"bad"})).is_err());
     }
 
@@ -455,5 +522,25 @@ mod tests {
         );
         let invalid = format!("{MARKER}grep\nnot-json\n");
         assert!(result("cursor_grep", &json!({}), &json!({"output":invalid})).is_err());
+    }
+
+    #[test]
+    fn read_clips_only_an_incomplete_utf8_sequence_at_the_output_cap() {
+        let mut capped = vec![b'a'; 65_535];
+        capped.push(0xE2);
+        let encoded = STANDARD.encode(capped);
+        let structured = json!({"output":format!("{MARKER}1 65537\n{encoded}\n")});
+        let parsed = result("cursor_read_file", &json!({}), &structured).unwrap();
+        assert_eq!(parsed["content"].as_str().unwrap().len(), 65_535);
+
+        let malformed = STANDARD.encode([0xFF]);
+        let structured = json!({"output":format!("{MARKER}1 1\n{malformed}\n")});
+        assert!(result("cursor_read_file", &json!({}), &structured).is_err());
+
+        let mut malformed_at_cap = vec![b'a'; 65_535];
+        malformed_at_cap.push(0xFF);
+        let structured =
+            json!({"output":format!("{MARKER}1 65536\n{}\n", STANDARD.encode(malformed_at_cap))});
+        assert!(result("cursor_read_file", &json!({}), &structured).is_err());
     }
 }
