@@ -76,11 +76,11 @@ impl ProviderCommand {
         let result: anyhow::Result<()> = async {
             match self.action {
                 ProviderAction::Status { provider } => {
-                    for id in provider
-                        .as_deref()
-                        .map(|id| vec![id])
-                        .unwrap_or_else(provider_choices)
-                    {
+                    let providers = match provider.as_deref() {
+                        Some(id) => vec![id],
+                        None => provider_choices(),
+                    };
+                    for id in providers {
                         if provider_for(id)?.has_configured_token() {
                             println!("{id}: configured token (environment or configuration)");
                             continue;
