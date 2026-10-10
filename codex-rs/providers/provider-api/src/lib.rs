@@ -277,25 +277,3 @@ pub trait Host: Send + Sync {
     /// Persist a checkpoint before acknowledging its receipt.
     fn checkpoint(&self, checkpoint: Checkpoint) -> ProviderFuture<'_, ()>;
 }
-
-#[derive(Default)]
-pub struct Registry {
-    providers: std::collections::BTreeMap<&'static str, Arc<dyn Provider>>,
-}
-
-impl Registry {
-    pub fn register(&mut self, provider: Arc<dyn Provider>) -> Result<()> {
-        let id = provider.id();
-        if self.providers.contains_key(id) {
-            return Err(ProviderError::Protocol(format!("duplicate provider: {id}")));
-        }
-        self.providers.insert(id, provider);
-        Ok(())
-    }
-    pub fn get(&self, id: &str) -> Option<Arc<dyn Provider>> {
-        self.providers.get(id).cloned()
-    }
-    pub fn ids(&self) -> impl Iterator<Item = &str> {
-        self.providers.keys().copied()
-    }
-}
