@@ -1,6 +1,6 @@
 //! Durable execution fences, journaling, and exact checkpoint history binding.
+use crate::{ExecutionLease, SessionStore, ToolDisposition};
 use codex_provider_api as api;
-use codex_provider_auth::{SessionStore, ToolDisposition};
 use serde_json::json;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -33,7 +33,7 @@ impl TurnCheckpoint {
     pub async fn complete(
         &self,
         store: &SessionStore,
-        execution: &codex_provider_auth::ExecutionLease,
+        execution: &ExecutionLease,
         system: &str,
         history: &[api::Message],
         cancellation: &CancellationToken,
@@ -61,7 +61,7 @@ pub struct ChannelHost {
     pub native_tools: std::collections::BTreeSet<String>,
     pub operations: Option<Arc<dyn api::NativeOperations>>,
     pub checkpoint: Arc<tokio::sync::Mutex<TurnCheckpoint>>,
-    pub execution: Arc<codex_provider_auth::ExecutionLease>,
+    pub execution: Arc<ExecutionLease>,
 }
 impl ChannelHost {
     async fn dispatch(

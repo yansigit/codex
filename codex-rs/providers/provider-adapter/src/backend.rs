@@ -341,7 +341,7 @@ mod tests {
     use super::*;
     use codex_provider_api::Checkpoint;
     use codex_provider_api::Namespace;
-    use codex_provider_auth::SessionStore;
+    use codex_provider_runtime::SessionStore;
     use serde_json::json;
     #[tokio::test]
     async fn changing_native_endpoint_cannot_restore_another_endpoints_checkpoint() {

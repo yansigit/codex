@@ -1,7 +1,5 @@
-use codex_provider_api::{Checkpoint, Namespace, ProviderError, ToolCall, ToolResult};
-use codex_provider_auth::{
-    AuthStore, LoginFlow, OAuthConfig, SessionStore, Store, TokenRecord, ToolDisposition, digest,
-};
+use codex_provider_api::ProviderError;
+use codex_provider_auth::{AuthStore, LoginFlow, OAuthConfig, Store, TokenRecord, digest};
 use serde_json::json;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -23,23 +21,6 @@ fn config(base: &str) -> OAuthConfig {
         token_params: BTreeMap::new(),
         token_json: true,
         exchange_state: true,
-    }
-}
-
-fn namespace() -> Namespace {
-    Namespace {
-        provider: "provider-a".into(),
-        account: "account-a".into(),
-        model: "model-a".into(),
-        thread: "thread-a".into(),
-    }
-}
-
-fn tool_call() -> ToolCall {
-    ToolCall {
-        id: "call-1".into(),
-        name: "shell".into(),
-        arguments: json!({"cmd":"true"}),
     }
 }
 
@@ -155,105 +136,6 @@ async fn refresh_without_rotated_token_keeps_old_token_for_next_refresh() {
             .access_token,
         "refreshed"
     );
-}
-
-#[tokio::test]
-async fn checkpoint_and_tool_journal_are_isolated_by_full_namespace() {
-    let root = tempfile::tempdir().unwrap();
-    let cancellation = CancellationToken::new();
-    let original = namespace();
-    let session = SessionStore::new(root.path(), original.clone());
-    let checkpoint = Checkpoint {
-        version: 1,
-        namespace: original.clone(),
-        context_hash: "exact-prefix-digest".into(),
-        state: json!({"cursor":"opaque"}),
-    };
-    session.save(&checkpoint, &cancellation).await.unwrap();
-    assert_eq!(session.load().unwrap(), Some(checkpoint.clone()));
-
-    for mutate in [
-        |ns: &mut Namespace| ns.provider.push_str("-other"),
-        |ns: &mut Namespace| ns.account.push_str("-other"),
-        |ns: &mut Namespace| ns.model.push_str("-other"),
-        |ns: &mut Namespace| ns.thread.push_str("-other"),
-    ] {
-        let mut other = original.clone();
-        mutate(&mut other);
-        let other_session = SessionStore::new(root.path(), other.clone());
-        assert!(other_session.load().unwrap().is_none());
-        assert!(matches!(
-            other_session.save(&checkpoint, &cancellation).await,
-            Err(ProviderError::Checkpoint(_))
-        ));
-        assert!(matches!(
-            other_session
-                .begin_tool(tool_call(), &cancellation)
-                .await
-                .unwrap(),
-            ToolDisposition::Execute(_)
-        ));
-    }
-
-    let ToolDisposition::Execute(ticket) = session
-        .begin_tool(tool_call(), &cancellation)
-        .await
-        .unwrap()
-    else {
-        panic!("a new tool call should execute in its namespace");
-    };
-    ticket
-        .finish(ToolResult {
-            call_id: "call-1".into(),
-            output: json!("done"),
-            is_error: false,
-        })
-        .unwrap();
-    assert!(matches!(
-        session
-            .begin_tool(tool_call(), &cancellation)
-            .await
-            .unwrap(),
-        ToolDisposition::Replay(_)
-    ));
-}
-
-#[tokio::test]
-async fn checkpoint_scope_changes_at_compaction_but_interrupted_tool_journal_is_shared() {
-    let root = tempfile::tempdir().unwrap();
-    let cancellation = CancellationToken::new();
-    let namespace = namespace();
-    let before_compaction = SessionStore::new(root.path(), namespace.clone())
-        .with_checkpoint_scope("window-before-compaction".into());
-    let checkpoint = Checkpoint {
-        version: 1,
-        namespace: namespace.clone(),
-        context_hash: "pre-compaction-context".into(),
-        state: json!({"cursor":"before"}),
-    };
-    before_compaction
-        .save(&checkpoint, &cancellation)
-        .await
-        .unwrap();
-
-    let ToolDisposition::Execute(ticket) = before_compaction
-        .begin_tool(tool_call(), &cancellation)
-        .await
-        .unwrap()
-    else {
-        panic!("first tool execution should start");
-    };
-    drop(ticket); // Simulate interruption before the result is committed.
-
-    let after_compaction = SessionStore::new(root.path(), namespace)
-        .with_checkpoint_scope("window-after-compaction".into());
-    assert!(after_compaction.load().unwrap().is_none());
-    assert!(matches!(
-        after_compaction
-            .begin_tool(tool_call(), &cancellation)
-            .await,
-        Err(ProviderError::Checkpoint(message)) if message.contains("refusing automatic replay")
-    ));
 }
 
 #[tokio::test]

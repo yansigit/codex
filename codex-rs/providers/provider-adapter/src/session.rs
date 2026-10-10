@@ -7,7 +7,7 @@ use codex_protocol::error::{CodexErr, Result};
 use codex_protocol::models::{ContentItem, ResponseItem};
 use codex_protocol::protocol::TokenUsage;
 use codex_provider_api as api;
-use codex_provider_auth::SessionStore;
+use codex_provider_runtime::SessionStore;
 use codex_provider_runtime::{ChannelHost, HostCall, TurnCheckpoint, validate_lineage};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
