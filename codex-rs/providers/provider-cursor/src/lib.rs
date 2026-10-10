@@ -3,6 +3,7 @@
 pub mod auth;
 mod connect;
 pub mod native;
+pub mod operations;
 mod state;
 mod wire;
 
@@ -212,6 +213,16 @@ impl CursorProvider {
 }
 
 impl Provider for CursorProvider {
+    fn recovery_policy(&self) -> codex_provider_api::RecoveryPolicy {
+        codex_provider_api::RecoveryPolicy::RebuildFromHistory
+    }
+
+    fn native_operations(
+        &self,
+    ) -> Option<std::sync::Arc<dyn codex_provider_api::NativeOperations>> {
+        Some(std::sync::Arc::new(operations::CursorOperations))
+    }
+
     fn id(&self) -> &'static str {
         "cursor"
     }
