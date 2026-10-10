@@ -56,12 +56,14 @@ impl ClaudeProvider {
             model.to_owned(),
         );
         let cache = CAPABILITIES.get_or_init(|| Mutex::new(BTreeMap::new()));
-        let mut cache = tokio::select! { biased; _ = context.cancellation.cancelled() => return Err(ProviderError::Cancelled), cache = cache.lock() => cache };
-        if let Some((_, value)) = cache
-            .get(&key)
-            .filter(|(fetched, _)| fetched.elapsed() < Duration::from_secs(600))
         {
-            return Ok(value.clone());
+            let cache = tokio::select! { biased; _ = context.cancellation.cancelled() => return Err(ProviderError::Cancelled), cache = cache.lock() => cache };
+            if let Some((_, value)) = cache
+                .get(&key)
+                .filter(|(fetched, _)| fetched.elapsed() < Duration::from_secs(600))
+            {
+                return Ok(value.clone());
+            }
         }
         let mut url = url::Url::parse(&format!("{}/v1/models/", self.base_url))
             .map_err(|_| ProviderError::Protocol("invalid Claude model endpoint".into()))?;
@@ -81,6 +83,14 @@ impl ClaudeProvider {
         response = tokio::time::timeout(Duration::from_secs(30), builder.send()) => response.map_err(|_| ProviderError::Transport("Claude capability discovery timeout".into()))?.map_err(|_| ProviderError::Transport("Claude capability discovery failed".into()))? };
         let model = bounded_json(response, context).await?;
         let capabilities = model["capabilities"].clone();
+        let mut cache = tokio::select! { biased; _ = context.cancellation.cancelled() => return Err(ProviderError::Cancelled), cache = cache.lock() => cache };
+        // Another request may have populated this entry while discovery was in flight.
+        if let Some((_, value)) = cache
+            .get(&key)
+            .filter(|(fetched, _)| fetched.elapsed() < Duration::from_secs(600))
+        {
+            return Ok(value.clone());
+        }
         if cache.len() >= 256
             && let Some(oldest) = cache
                 .iter()
@@ -211,6 +221,49 @@ mod tests {
     use serde_json::json;
     use wiremock::matchers::{body_partial_json, header, method, path, query_param};
     use wiremock::{Mock, MockServer, ResponseTemplate};
+    #[tokio::test]
+    async fn slow_capability_discovery_does_not_block_another_model() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/v1/models/slow"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_delay(Duration::from_millis(300))
+                    .set_body_json(json!({"capabilities":{"slow":true}})),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/v1/models/fast"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(json!({"capabilities":{"fast":true}})),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+        let provider = ClaudeProvider::with_base_url(Client::new(), server.uri()).unwrap();
+        let context = Context {
+            credentials: Credentials {
+                access_token: "fixture-token".into(),
+                account_id: "fixture-account".into(),
+                metadata: json!({}),
+            },
+            cancellation: Default::default(),
+        };
+        let (slow, fast) = tokio::join!(provider.capabilities("slow", &context), async {
+            tokio::time::sleep(Duration::from_millis(25)).await;
+            tokio::time::timeout(
+                Duration::from_millis(150),
+                provider.capabilities("fast", &context),
+            )
+            .await
+            .unwrap()
+        });
+        assert_eq!(slow.unwrap(), json!({"slow":true}));
+        assert_eq!(fast.unwrap(), json!({"fast":true}));
+        server.verify().await;
+    }
     #[tokio::test]
     async fn adaptive_thinking_uses_discovered_model_capability() {
         let server = MockServer::start().await;

@@ -77,6 +77,10 @@ impl AntigravityProvider {
         bounded_json(response, context).await
     }
     /// Resolve an account project and expose it for shared credential metadata persistence.
+    // The async mutex serializes project discovery and the side-effectful onboarding
+    // POST. Releasing it during network waits could onboard the same account twice.
+    // All waits are bounded and cancellation-aware; no blocking mutex is involved.
+    #[allow(clippy::await_holding_invalid_type)]
     pub async fn discover_project(&self, context: &Context) -> Result<String> {
         if let Some(project) = context.credentials.metadata["project_id"]
             .as_str()
@@ -280,11 +284,14 @@ mod tests {
             .await;
         Mock::given(method("POST")).and(path("/v1internal:fetchAvailableModels")).and(body_json(json!({}))).respond_with(ResponseTemplate::new(200).set_body_json(json!({"models":{"gemini-test":{"displayName":"Gemini Test","maxInputTokens":12345}}}))).expect(1).mount(&server).await;
         let provider = AntigravityProvider::with_base_url(Client::new(), server.uri()).unwrap();
-        assert_eq!(
-            provider.discover_project(&context()).await.unwrap(),
-            "project-a"
+        let context = context();
+        let (first, concurrent) = tokio::join!(
+            provider.discover_project(&context),
+            provider.discover_project(&context)
         );
-        let models = provider.models(context()).await.unwrap();
+        assert_eq!(first.unwrap(), "project-a");
+        assert_eq!(concurrent.unwrap(), "project-a");
+        let models = provider.models(context).await.unwrap();
         assert_eq!(
             models,
             vec![Model {

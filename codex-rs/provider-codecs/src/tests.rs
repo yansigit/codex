@@ -117,7 +117,7 @@ fn messages_preserves_thinking_signature_and_restores_tool_name() {
             .iter()
             .any(|block| matches!(block,Content::ToolCall(ToolCall {name,..}) if name=="read"))
     );
-    let mut continued = req.clone();
+    let mut continued = req;
     continued.messages.push(assistant);
     let continued_wire = codec.request(&continued, &ctx).unwrap();
     assert_eq!(
@@ -190,7 +190,7 @@ fn google_replays_exact_signed_function_part() {
     let signed = json!({"thoughtSignature":"actual-upstream-signature","functionCall":{"name":"read","args":{"path":"a"}}});
     feed(
         &mut codec,
-        json!({"response":{"candidates":[{"content":{"role":"model","parts":[signed.clone()]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":5,"candidatesTokenCount":6}}}),
+        json!({"response":{"candidates":[{"content":{"role":"model","parts":[signed]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":5,"candidatesTokenCount":6}}}),
     );
     let assistant = codec.assistant(&req.namespace).unwrap();
     let call = assistant
