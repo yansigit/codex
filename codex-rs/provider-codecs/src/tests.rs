@@ -299,7 +299,7 @@ async fn native_http_session_continues_tool_round_and_checkpoints_before_executi
     let server = MockServer::start().await;
     let first = concat!(
         "data: {\"id\":\"r1\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"c1\",\"function\":{\"name\":\"read\",\"arguments\":\"{\\\"path\\\":\\\"a\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\n",
-        "data: [DONE]\n\n"
+        "data: {\"id\":\"terminal-fixture\",\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n"
     );
     Mock::given(method("POST")).and(path("/chat")).and(body_partial_json(json!({"messages":[{"role":"system","content":"test system"},{"role":"user","content":[{"type":"text","text":"test prompt"}]}]}))).respond_with(ResponseTemplate::new(200).set_body_string(first).insert_header("content-type","text/event-stream")).expect(1).mount(&server).await;
     let second = "data: {\"id\":\"r2\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"done\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n";
@@ -965,4 +965,51 @@ fn unsupported_tool_content_is_not_silently_stringified() {
         responses.request(&req, &context()).unwrap().body["input"][2]["output"],
         json!([{"type":"input_image","file_id":"fixture-file"}])
     );
+}
+
+#[tokio::test]
+async fn terminal_events_with_partial_trailing_sse_never_checkpoint() {
+    for family in ["messages", "responses", "chat"] {
+        let server = wiremock::MockServer::start().await;
+        let req = request("opencode-go");
+        let (codec, terminal): (Box<dyn WireCodec>, &str) = match family {
+            "messages" => (
+                Box::new(
+                    MessagesCodec::new(server.uri(), BTreeMap::new(), false, &req.tools).unwrap(),
+                ),
+                "data: {\"type\":\"message_start\",\"message\":{\"id\":\"terminal-fixture\",\"usage\":{}}}\n\ndata: {\"type\":\"message_stop\"}\n\n",
+            ),
+            "responses" => (
+                Box::new(ResponsesCodec::new(
+                    server.uri(),
+                    BTreeMap::new(),
+                    &req.tools,
+                )),
+                "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"terminal-fixture\",\"output\":[],\"usage\":{}}}\n\n",
+            ),
+            _ => (
+                Box::new(ChatCodec::new(
+                    server.uri(),
+                    BTreeMap::new(),
+                    false,
+                    &req.tools,
+                )),
+                "data: {\"id\":\"terminal-fixture\",\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n",
+            ),
+        };
+        wiremock::Mock::given(wiremock::matchers::method("POST"))
+            .respond_with(
+                wiremock::ResponseTemplate::new(200)
+                    .set_body_string(format!("{terminal}data: {{\"unfinished\":")),
+            )
+            .mount(&server)
+            .await;
+        let mut session = HttpSession::start(reqwest::Client::new(), codec, req, context())
+            .await
+            .unwrap();
+        assert!(
+            matches!(session.next_event().await, Err(ProviderError::Protocol(message)) if message == "truncated SSE event"),
+            "family {family}"
+        );
+    }
 }

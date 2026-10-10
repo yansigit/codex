@@ -112,6 +112,9 @@ impl HttpSession {
         Ok(())
     }
     fn finish_round(&mut self) -> Result<()> {
+        // A terminal event can share an HTTP chunk with a truncated trailing
+        // frame. Validate retained SSE bytes before checkpointing or dispatch.
+        self.decoder.finish()?;
         let assistant = self.codec.assistant(&self.request.namespace)?;
         let calls: Vec<ToolCall> = assistant
             .content
