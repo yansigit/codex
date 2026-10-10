@@ -103,8 +103,21 @@ ran an allowlisted `printf` command through an asynchronous test host, and
 received exact `NATIVE_SHELL_OK` completion with a native checkpoint. This test
 host does not validate Codex approval or sandbox enforcement.
 
-Model-specific reasoning/output controls, remote image URL retrieval, history
-image replay without a checkpoint, binary native writes, and unknown native
-execution/control operations currently return explicit unsupported errors.
-Active inline image data is encoded using `SelectedContext` and content-addressed
-blobs; live vision acceptance is separate from the codec fixture.
+Model-specific reasoning/output controls, remote image URL retrieval, binary
+native writes, and unknown native execution/control operations currently return
+explicit unsupported errors. Active and historical inline user/tool images are
+encoded using `SelectedContext` and content-addressed blobs, with an aggregate
+limit of 16 attachments and 8 MiB per image. On a fresh history bootstrap,
+attachment path references retain each earlier message position and tool call
+association; the images accompany the newest user action. This avoids inventing
+an unverified historical image root schema. Resumed native checkpoints already
+retain their upstream image context.
+
+Live Codex CLI acceptance verified native file read/write/shell, ordinary stdin
+continuation, MCP text/image results, explicit tool failure and sandbox denial,
+completed-thread resume, and cancellation. Native policy rejection was observed
+as a structured rejected result before upstream continuation. Text-only
+interruption recovery retained the earlier request; interrupted tool execution
+refused automatic replay. Native transport probes with fresh public history
+also retained historical user and tool images; neither prompt supplied the
+image's color in text.
