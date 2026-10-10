@@ -2125,6 +2125,7 @@ dependencies = [
  "codex-plugin",
  "codex-prompts",
  "codex-protocol",
+ "codex-provider-auth",
  "codex-queue-extension",
  "codex-rmcp-client",
  "codex-rollout",
@@ -2543,9 +2544,12 @@ dependencies = [
  "codex-mcp",
  "codex-memories-write",
  "codex-model-provider",
+ "codex-model-provider-info",
  "codex-models-manager",
  "codex-plugin",
  "codex-protocol",
+ "codex-provider-api",
+ "codex-provider-auth",
  "codex-responses-api-proxy",
  "codex-rmcp-client",
  "codex-rollout",
@@ -2591,6 +2595,7 @@ dependencies = [
  "tikv-jemallocator",
  "tokio",
  "tokio-tungstenite",
+ "tokio-util",
  "toml 0.9.11+spec-1.1.0",
  "tracing",
  "tracing-appender",
@@ -2981,6 +2986,8 @@ dependencies = [
  "codex-plugin",
  "codex-prompts",
  "codex-protocol",
+ "codex-provider-api",
+ "codex-provider-auth",
  "codex-response-debug-context",
  "codex-rmcp-client",
  "codex-rollout",
@@ -4073,6 +4080,12 @@ dependencies = [
  "codex-models-manager",
  "codex-otel",
  "codex-protocol",
+ "codex-provider-antigravity",
+ "codex-provider-api",
+ "codex-provider-auth",
+ "codex-provider-claude",
+ "codex-provider-cursor",
+ "codex-provider-opencode",
  "codex-response-debug-context",
  "codex-secrets",
  "codex-utils-cargo-bin",
@@ -4080,11 +4093,13 @@ dependencies = [
  "codex-utils-redacted-string",
  "http 1.4.0",
  "pretty_assertions",
+ "reqwest 0.12.28",
  "serde",
  "serde_json",
  "sha2 0.10.9",
  "tempfile",
  "tokio",
+ "tokio-util",
  "tracing",
  "url",
  "wiremock",
@@ -4349,6 +4364,121 @@ dependencies = [
  "ts-rs",
  "uuid",
  "wildmatch",
+]
+
+[[package]]
+name = "codex-provider-antigravity"
+version = "0.0.0"
+dependencies = [
+ "codex-provider-api",
+ "codex-provider-auth",
+ "codex-provider-codecs",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "url",
+ "wiremock",
+]
+
+[[package]]
+name = "codex-provider-api"
+version = "0.0.0"
+dependencies = [
+ "futures",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
+name = "codex-provider-auth"
+version = "0.0.0"
+dependencies = [
+ "base64 0.22.1",
+ "codex-provider-api",
+ "libc",
+ "rand 0.9.3",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "url",
+ "wiremock",
+]
+
+[[package]]
+name = "codex-provider-claude"
+version = "0.0.0"
+dependencies = [
+ "codex-provider-api",
+ "codex-provider-codecs",
+ "reqwest 0.12.28",
+ "serde_json",
+ "tokio",
+ "url",
+ "wiremock",
+]
+
+[[package]]
+name = "codex-provider-codecs"
+version = "0.0.0"
+dependencies = [
+ "codex-provider-api",
+ "reqwest 0.12.28",
+ "serde_json",
+ "sha2 0.10.9",
+ "tokio",
+ "tokio-util",
+ "url",
+ "uuid",
+ "wiremock",
+]
+
+[[package]]
+name = "codex-provider-cursor"
+version = "0.0.0"
+dependencies = [
+ "base64 0.22.1",
+ "bytes",
+ "codex-provider-api",
+ "flate2",
+ "futures",
+ "h2",
+ "http 1.4.0",
+ "prost",
+ "prost-types",
+ "rand 0.9.3",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "url",
+ "uuid",
+ "wiremock",
+]
+
+[[package]]
+name = "codex-provider-opencode"
+version = "0.0.0"
+dependencies = [
+ "codex-provider-api",
+ "codex-provider-codecs",
+ "reqwest 0.12.28",
+ "serde_json",
+ "tokio",
+ "url",
+ "wiremock",
 ]
 
 [[package]]

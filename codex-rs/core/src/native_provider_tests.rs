@@ -13,6 +13,140 @@ fn item(value: Value) -> ResponseItem {
     serde_json::from_value(value).expect("valid response item")
 }
 
+fn bound_request() -> api::Request {
+    let history = vec![api::Message {
+        role: api::Role::Tool,
+        content: vec![api::Content::ToolResult(api::ToolResult {
+            call_id: "failed-call".into(),
+            output: json!("denied"),
+            is_error: true,
+        })],
+    }];
+    let namespace = api::Namespace {
+        provider: "claude".into(),
+        account: "fixture".into(),
+        model: "model".into(),
+        thread: "thread".into(),
+    };
+    let checkpoint = api::Checkpoint {
+        version: 1,
+        namespace: namespace.clone(),
+        context_hash: "provider-prefix".into(),
+        state: json!({
+            "codex_host_pending":false,
+            "codex_host_lineage": { "length":history.len(), "hash":super::lineage_hash("rules", &history).unwrap(), "failed_results":super::failed_result_bindings(&history).unwrap() }
+        }),
+    };
+    api::Request {
+        namespace,
+        system: "rules".into(),
+        messages: history,
+        tools: vec![],
+        parallel_tool_calls: false,
+        max_output_tokens: None,
+        reasoning_effort: None,
+        output_schema: None,
+        checkpoint: Some(checkpoint),
+        metadata: json!({}),
+    }
+}
+
+#[test]
+fn checkpoint_lineage_restores_failure_flags_but_rejects_changed_output() {
+    let mut request = bound_request();
+    let api::Content::ToolResult(result) = &mut request.messages[0].content[0] else {
+        panic!()
+    };
+    result.is_error = false; // Ordinary rollout serialization drops the failure flag.
+    super::validate_lineage(&mut request).unwrap();
+    assert!(
+        matches!(&request.messages[0].content[0], api::Content::ToolResult(result) if result.is_error)
+    );
+    assert_eq!(request.metadata["host_checkpoint_prefix"], 1);
+    let api::Content::ToolResult(result) = &mut request.messages[0].content[0] else {
+        panic!()
+    };
+    result.output = json!("edited after checkpoint");
+    assert!(super::validate_lineage(&mut request).is_err());
+}
+
+#[test]
+fn interrupted_text_generation_recovers_only_a_verified_clean_checkpoint() {
+    let mut request = bound_request();
+    let clean = request.checkpoint.clone().unwrap();
+    request.checkpoint.as_mut().unwrap().state = json!({"codex_host_pending":true,"codex_host_tools_started":false,"codex_host_previous":clean});
+    super::validate_lineage(&mut request).unwrap();
+    assert_eq!(request.checkpoint, Some(clean));
+    request.checkpoint.as_mut().unwrap().state = json!({"codex_host_pending":true,"codex_host_tools_started":false,"codex_host_previous":null});
+    super::validate_lineage(&mut request).unwrap();
+    assert!(request.checkpoint.is_none());
+}
+
+#[test]
+fn interrupted_tools_and_unverified_checkpoints_refuse_replay() {
+    for started in [json!(true), Value::Null] {
+        let mut request = bound_request();
+        request.checkpoint.as_mut().unwrap().state =
+            json!({"codex_host_pending":true,"codex_host_tools_started":started});
+        assert!(super::validate_lineage(&mut request).is_err());
+    }
+    let mut request = bound_request();
+    request.checkpoint.as_mut().unwrap().state = json!({});
+    assert!(super::validate_lineage(&mut request).is_err());
+}
+
+#[tokio::test]
+async fn checkpoint_after_tool_dispatch_cannot_clear_interruption_fence() {
+    use api::Host;
+    let home = tempfile::tempdir().unwrap();
+    let request = bound_request();
+    let store = codex_provider_auth::SessionStore::new(home.path(), request.namespace.clone());
+    let state = Arc::new(tokio::sync::Mutex::new(super::TurnCheckpoint {
+        namespace: request.namespace.clone(),
+        latest: None,
+        previous: request.checkpoint.clone(),
+        tools_started: false,
+    }));
+    let (calls, mut receive) = tokio::sync::mpsc::channel(1);
+    let cancel = tokio_util::sync::CancellationToken::new();
+    let host = Arc::new(super::ChannelHost {
+        store: store.clone(),
+        calls,
+        cancellation: cancel.clone(),
+        poll_tool: None,
+        native_tools: Default::default(),
+        checkpoint: state,
+        execution: Arc::new(store.begin_execution("turn", &cancel).await.unwrap()),
+    });
+    let execute_host = host.clone();
+    let execute_cancel = cancel.clone();
+    let executing = tokio::spawn(async move {
+        execute_host
+            .execute(
+                api::ToolCall {
+                    id: "one".into(),
+                    name: "exec".into(),
+                    arguments: json!({}),
+                },
+                execute_cancel,
+            )
+            .await
+    });
+    let call = receive.recv().await.unwrap();
+    assert_eq!(
+        store.load().unwrap().unwrap().state["codex_host_tools_started"],
+        true
+    );
+    host.checkpoint(request.checkpoint.unwrap()).await.unwrap();
+    assert_eq!(
+        store.load().unwrap().unwrap().state["codex_host_tools_started"],
+        true
+    );
+    cancel.cancel();
+    drop(call);
+    assert!(executing.await.unwrap().is_err());
+}
+
 #[test]
 fn messages_map_roles_images_and_adjacent_assistant_items() {
     let input = vec![
@@ -180,4 +314,326 @@ fn unsupported_history_and_content_formats_are_rejected() {
     let malformed_call =
         item(json!({"type":"function_call","call_id":"c1","name":"read","arguments":"not json"}));
     assert!(messages(&[malformed_call]).is_err());
+}
+
+#[test]
+fn checkpoint_binding_restores_failed_results_and_rejects_edited_history() {
+    let history = vec![api::Message {
+        role: api::Role::Tool,
+        content: vec![api::Content::ToolResult(api::ToolResult {
+            call_id: "one".into(),
+            output: json!("permission denied"),
+            is_error: true,
+        })],
+    }];
+    let namespace = api::Namespace {
+        provider: "claude".into(),
+        account: "a".into(),
+        model: "m".into(),
+        thread: "t".into(),
+    };
+    let mut request = api::Request {
+        namespace: namespace.clone(),
+        system: "system".into(),
+        messages: history.clone(),
+        tools: vec![],
+        parallel_tool_calls: true,
+        max_output_tokens: None,
+        reasoning_effort: None,
+        output_schema: None,
+        metadata: json!({}),
+        checkpoint: Some(api::Checkpoint {
+            version: 1,
+            namespace,
+            context_hash: "provider-owned".into(),
+            state: json!({"codex_host_pending":false,"codex_host_lineage":{"length":1,"hash":super::lineage_hash("system", &history).unwrap(),"failed_results":super::failed_result_bindings(&history).unwrap()}}),
+        }),
+    };
+    if let api::Content::ToolResult(result) = &mut request.messages[0].content[0] {
+        result.is_error = false;
+    }
+    super::validate_lineage(&mut request).unwrap();
+    assert_eq!(request.messages, history);
+    assert_eq!(request.metadata["host_checkpoint_prefix"], 1);
+    let mut edited = request.clone();
+    if let api::Content::ToolResult(result) = &mut edited.messages[0].content[0] {
+        result.output = json!("allowed");
+    }
+    assert!(super::validate_lineage(&mut edited).is_err());
+    let mut interrupted = request.clone();
+    interrupted.checkpoint.as_mut().unwrap().state["codex_host_pending"] = json!(true);
+    assert!(super::validate_lineage(&mut interrupted).is_err());
+    request.messages.clear();
+    assert!(super::validate_lineage(&mut request).is_err());
+}
+
+#[derive(Debug)]
+struct MockNativeProvider {
+    home: std::path::PathBuf,
+    info: codex_model_provider_info::ModelProviderInfo,
+    cancelled: Arc<std::sync::atomic::AtomicBool>,
+    results: Arc<std::sync::Mutex<Vec<api::ToolResult>>>,
+}
+
+impl codex_model_provider::ModelProvider for MockNativeProvider {
+    fn info(&self) -> &codex_model_provider_info::ModelProviderInfo {
+        &self.info
+    }
+    fn auth_manager(&self) -> Option<Arc<codex_login::AuthManager>> {
+        None
+    }
+    fn auth(
+        &self,
+    ) -> codex_model_provider::ModelProviderFuture<'_, Option<codex_login::CodexAuth>> {
+        Box::pin(async { None })
+    }
+    fn account_state(&self) -> codex_model_provider::ProviderAccountResult {
+        Ok(codex_model_provider::ProviderAccountState {
+            account: None,
+            requires_openai_auth: false,
+        })
+    }
+    fn models_manager(
+        &self,
+        _: std::path::PathBuf,
+        catalog: Option<codex_protocol::openai_models::ModelsResponse>,
+    ) -> codex_models_manager::manager::SharedModelsManager {
+        self.models_manager_without_cache(catalog)
+    }
+    fn native_state_home(&self) -> Option<std::path::PathBuf> {
+        Some(self.home.clone())
+    }
+    fn native_credentials(
+        &self,
+        _: tokio_util::sync::CancellationToken,
+    ) -> api::ProviderFuture<'_, api::Credentials> {
+        Box::pin(async {
+            Ok(api::Credentials {
+                access_token: "fixture-token".into(),
+                account_id: "fixture-account".into(),
+                metadata: Value::Null,
+            })
+        })
+    }
+    fn native_provider(&self) -> api::Result<Arc<dyn api::Provider>> {
+        Ok(Arc::new(MockBackend {
+            cancelled: self.cancelled.clone(),
+            results: self.results.clone(),
+        }))
+    }
+}
+
+struct MockBackend {
+    cancelled: Arc<std::sync::atomic::AtomicBool>,
+    results: Arc<std::sync::Mutex<Vec<api::ToolResult>>>,
+}
+impl api::Provider for MockBackend {
+    fn id(&self) -> &'static str {
+        "claude"
+    }
+    fn models(&self, _: api::Context) -> api::ProviderFuture<'_, Vec<api::Model>> {
+        Box::pin(async { Ok(vec![]) })
+    }
+    fn start(
+        &self,
+        request: api::Request,
+        _: api::Context,
+    ) -> api::ProviderFuture<'_, Box<dyn api::ProviderSession>> {
+        Box::pin(async move {
+            assert_eq!(request.tools[0].name, "lookup");
+            let session = MockSession {
+                events: std::collections::VecDeque::from([
+                    api::Event::TextDelta("before tool".into()),
+                    api::Event::ToolCall(api::ToolCall {
+                        id: "call-one".into(),
+                        name: "lookup".into(),
+                        arguments: json!({}),
+                    }),
+                ]),
+                cancelled: self.cancelled.clone(),
+                results: self.results.clone(),
+            };
+            Ok(Box::new(session) as Box<dyn api::ProviderSession>)
+        })
+    }
+}
+struct MockSession {
+    events: std::collections::VecDeque<api::Event>,
+    cancelled: Arc<std::sync::atomic::AtomicBool>,
+    results: Arc<std::sync::Mutex<Vec<api::ToolResult>>>,
+}
+impl api::ProviderSession for MockSession {
+    fn next_event(&mut self) -> api::ProviderFuture<'_, Option<api::Event>> {
+        Box::pin(async {
+            match self.events.pop_front() {
+                Some(event) => Ok(Some(event)),
+                None => std::future::pending().await,
+            }
+        })
+    }
+    fn submit_tool_result(&mut self, result: api::ToolResult) -> api::ProviderFuture<'_, ()> {
+        Box::pin(async move {
+            self.results.lock().unwrap().push(result);
+            self.events
+                .push_back(api::Event::TextDelta("after tool".into()));
+            self.events.push_back(api::Event::Completed {
+                id: "finished".into(),
+            });
+            Ok(())
+        })
+    }
+    fn cancel(&mut self) -> api::ProviderFuture<'_, ()> {
+        self.cancelled
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        Box::pin(async { Ok(()) })
+    }
+}
+
+fn mock_native(home: &std::path::Path) -> (Arc<MockNativeProvider>, Prompt) {
+    let provider = Arc::new(MockNativeProvider {
+        home: home.to_owned(),
+        info: codex_model_provider_info::built_in_model_providers(None)
+            .remove("claude")
+            .unwrap(),
+        cancelled: Arc::default(),
+        results: Arc::default(),
+    });
+    let prompt = Prompt {
+        tools: Arc::from([ToolSpec::Function(ResponsesApiTool {
+            name: "lookup".into(),
+            description: "lookup".into(),
+            strict: false,
+            defer_loading: None,
+            parameters: JsonSchema::default(),
+            output_schema: None,
+        })]),
+        ..Prompt::default()
+    };
+    (provider, prompt)
+}
+
+#[tokio::test]
+async fn native_stream_preserves_text_order_and_waits_for_host_result() {
+    use crate::client_common::ResponseEvent;
+    use futures::StreamExt;
+    let home = tempfile::tempdir().unwrap();
+    let (provider, prompt) = mock_native(home.path());
+    let model = codex_models_manager::model_info::model_info_from_slug("fixture-model");
+    let mut stream = super::stream(
+        provider.clone(),
+        &prompt,
+        &model,
+        "thread".into(),
+        None,
+        "window".into(),
+        "turn",
+    )
+    .await
+    .unwrap();
+    let mut messages = vec![];
+    loop {
+        let event = tokio::time::timeout(std::time::Duration::from_secs(2), stream.next())
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        match event {
+            ResponseEvent::OutputItemDone(ResponseItem::Message { content, .. }) => {
+                messages.extend(content)
+            }
+            ResponseEvent::OutputItemDone(ResponseItem::FunctionCall { call_id, .. }) => {
+                assert_eq!(call_id, "call-one");
+                break;
+            }
+            ResponseEvent::Completed { .. } => panic!("completed before host result"),
+            _ => {}
+        }
+    }
+    assert_eq!(
+        messages,
+        vec![codex_protocol::models::ContentItem::OutputText {
+            text: "before tool".into()
+        }]
+    );
+    assert!(
+        tokio::time::timeout(std::time::Duration::from_millis(30), stream.next())
+            .await
+            .is_err()
+    );
+    // Core returns the ordinary history output together with structured executor
+    // output. A standard tool must replay the history output, not this wrapper.
+    stream.native_tool_results.as_ref().unwrap().send(api::ToolResult { call_id: "call-one".into(), output: json!({"codex_native_history":"denied","codex_native_structured":{"extra":"private runtime data"}}), is_error: true }).await.unwrap();
+    loop {
+        let event = tokio::time::timeout(std::time::Duration::from_secs(2), stream.next())
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        if let ResponseEvent::Completed {
+            response_id,
+            end_turn,
+            ..
+        } = event
+        {
+            assert_eq!(response_id, "finished");
+            assert_eq!(end_turn, Some(true));
+            break;
+        }
+    }
+    let results = provider.results.lock().unwrap();
+    assert_eq!(results.len(), 1);
+    assert!(results[0].is_error);
+    assert_eq!(results[0].output, json!("denied"));
+}
+
+#[tokio::test]
+async fn dropping_native_stream_cancels_pending_host_and_upstream() {
+    use crate::client_common::ResponseEvent;
+    use futures::StreamExt;
+    let home = tempfile::tempdir().unwrap();
+    let (provider, prompt) = mock_native(home.path());
+    let model = codex_models_manager::model_info::model_info_from_slug("fixture-model");
+    let mut stream = super::stream(
+        provider.clone(),
+        &prompt,
+        &model,
+        "thread".into(),
+        None,
+        "window".into(),
+        "turn",
+    )
+    .await
+    .unwrap();
+    loop {
+        if matches!(
+            stream.next().await.unwrap().unwrap(),
+            ResponseEvent::OutputItemDone(ResponseItem::FunctionCall { .. })
+        ) {
+            break;
+        }
+    }
+    drop(stream);
+    tokio::time::timeout(std::time::Duration::from_secs(2), async {
+        while !provider.cancelled.load(std::sync::atomic::Ordering::SeqCst) {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(provider.results.lock().unwrap().is_empty());
+    let changed_model = codex_models_manager::model_info::model_info_from_slug("other-model");
+    let resumed = super::stream(
+        provider,
+        &prompt,
+        &changed_model,
+        "thread".into(),
+        None,
+        "new-compacted-window".into(),
+        "turn",
+    )
+    .await;
+    let Err(error) = resumed else {
+        panic!("model/window changes must not bypass interrupted execution");
+    };
+    assert!(error.to_string().contains("explicitly branch"));
 }

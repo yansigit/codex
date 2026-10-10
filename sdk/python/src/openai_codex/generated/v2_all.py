@@ -26,6 +26,15 @@ class AbsolutePathBuf(RootModel[str]):
     ]
 
 
+class NativeAccount(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    account_id: Annotated[str, Field(alias="accountId")]
+    provider: str
+    type: Annotated[Literal["native"], Field(title="NativeAccountType")]
+
+
 class ApiKeyAccount(BaseModel):
     model_config = ConfigDict(
         populate_by_name=True,
@@ -2235,6 +2244,16 @@ class LocalShellStatus(Enum):
     incomplete = "incomplete"
 
 
+class NativeLoginAccountParams(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    account_id: Annotated[str, Field(alias="accountId")]
+    api_key: Annotated[str | None, Field(alias="apiKey")] = None
+    provider: str
+    type: Annotated[Literal["native"], Field(title="Nativev2::LoginAccountParamsType")]
+
+
 class ApiKeyLoginAccountParams(BaseModel):
     model_config = ConfigDict(
         populate_by_name=True,
@@ -2307,6 +2326,16 @@ class AmazonBedrockAccessKeysLoginAccountParams(BaseModel):
     ]
 
 
+class NativeLoginAccountResponse(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    auth_url: Annotated[str | None, Field(alias="authUrl")] = None
+    login_id: Annotated[str | None, Field(alias="loginId")] = None
+    provider: str
+    type: Annotated[Literal["native"], Field(title="Nativev2::LoginAccountResponseType")]
+
+
 class ApiKeyLoginAccountResponse(BaseModel):
     model_config = ConfigDict(
         populate_by_name=True,
@@ -2370,7 +2399,8 @@ class AmazonBedrockLoginAccountResponse(BaseModel):
 
 class LoginAccountResponse(
     RootModel[
-        ApiKeyLoginAccountResponse
+        NativeLoginAccountResponse
+        | ApiKeyLoginAccountResponse
         | ChatgptLoginAccountResponse
         | ChatgptDeviceCodeLoginAccountResponse
         | ChatgptAuthTokensLoginAccountResponse
@@ -2381,7 +2411,8 @@ class LoginAccountResponse(
         populate_by_name=True,
     )
     root: Annotated[
-        ApiKeyLoginAccountResponse
+        NativeLoginAccountResponse
+        | ApiKeyLoginAccountResponse
         | ChatgptLoginAccountResponse
         | ChatgptDeviceCodeLoginAccountResponse
         | ChatgptAuthTokensLoginAccountResponse
@@ -6788,11 +6819,11 @@ class ChatgptAccount(BaseModel):
     type: Annotated[Literal["chatgpt"], Field(title="ChatgptAccountType")]
 
 
-class Account(RootModel[ApiKeyAccount | ChatgptAccount | AmazonBedrockAccount]):
+class Account(RootModel[NativeAccount | ApiKeyAccount | ChatgptAccount | AmazonBedrockAccount]):
     model_config = ConfigDict(
         populate_by_name=True,
     )
-    root: ApiKeyAccount | ChatgptAccount | AmazonBedrockAccount
+    root: NativeAccount | ApiKeyAccount | ChatgptAccount | AmazonBedrockAccount
 
 
 class AccountLoginCompletedNotification(BaseModel):
@@ -8709,7 +8740,8 @@ class ChatgptLoginAccountParams(BaseModel):
 
 class LoginAccountParams(
     RootModel[
-        ApiKeyLoginAccountParams
+        NativeLoginAccountParams
+        | ApiKeyLoginAccountParams
         | ChatgptLoginAccountParams
         | ChatgptDeviceCodeLoginAccountParams
         | ChatgptAuthTokensLoginAccountParams
@@ -8721,7 +8753,8 @@ class LoginAccountParams(
         populate_by_name=True,
     )
     root: Annotated[
-        ApiKeyLoginAccountParams
+        NativeLoginAccountParams
+        | ApiKeyLoginAccountParams
         | ChatgptLoginAccountParams
         | ChatgptDeviceCodeLoginAccountParams
         | ChatgptAuthTokensLoginAccountParams

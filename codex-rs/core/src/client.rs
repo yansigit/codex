@@ -2331,6 +2331,28 @@ impl ModelClientSession {
     ) -> Result<ResponseStream> {
         let wire_api = self.client.state.provider.info().wire_api;
         match wire_api {
+            WireApi::Cursor | WireApi::OpenCodeGo | WireApi::Claude | WireApi::Antigravity => {
+                crate::native_provider::stream(
+                    Arc::clone(&self.client.state.provider),
+                    prompt,
+                    model_info,
+                    self.client.state.thread_id.to_string(),
+                    effort.map(|effort| effort.to_string()),
+                    format!(
+                        "{}:{:?}",
+                        responses_metadata.window_id, responses_metadata.request_kind
+                    ),
+                    if matches!(
+                        responses_metadata.request_kind,
+                        Some(crate::responses_metadata::CodexResponsesRequestKind::Memory)
+                    ) {
+                        "memory"
+                    } else {
+                        "turn"
+                    },
+                )
+                .await
+            }
             WireApi::Responses => {
                 if self.client.responses_websocket_enabled() {
                     let request_trace = current_span_w3c_trace_context();
@@ -2612,6 +2634,7 @@ where
 
     (
         ResponseStream {
+            native_tool_results: None,
             rx_event,
             interrupt: None,
             consumer_dropped: consumer_dropped_for_stream,
