@@ -133,12 +133,27 @@ impl CursorProvider {
             .header("x-cursor-client-version", &self.options.client_version)
     }
 
+    async fn bearer(&self, context: &Context) -> Result<String> {
+        if context.credentials.access_token.starts_with("crsr_") {
+            Ok(auth::AuthClient::new(&self.options.base_url)?
+                .exchange_api_key(
+                    &context.credentials.access_token,
+                    context.cancellation.clone(),
+                )
+                .await?
+                .access_token)
+        } else {
+            Ok(context.credentials.access_token.clone())
+        }
+    }
+
     async fn start_session(&self, request: Request, context: Context) -> Result<Session> {
         validate_request(&request, &context)?;
         let mut state = state::State::restore(&request)?;
         let (run, request_context) = prepare(&request, &mut state)?;
         state.message_count = request.messages.len();
         let context_hash = state::hash(&request.messages)?;
+        let bearer = self.bearer(&context).await?;
         let (writer, receiver) = mpsc::channel::<std::result::Result<Bytes, std::io::Error>>(16);
         writer
             .try_send(Ok(connect::encode(
@@ -153,7 +168,7 @@ impl CursorProvider {
             biased;
             _ = context.cancellation.cancelled() => return Err(ProviderError::Cancelled),
             response = tokio::time::timeout(self.options.connect_timeout,
-                self.rpc("Run", &context.credentials.access_token, true)
+                self.rpc("Run", &bearer, true)
                     .body(reqwest::Body::wrap_stream(ReceiverStream::new(receiver))).send()) =>
                 response.map_err(|_| ProviderError::Transport("Cursor connect timed out".into()))?
                     .map_err(|_| ProviderError::Transport("Cursor HTTP/2 connection failed".into()))?,
@@ -201,6 +216,7 @@ impl Provider for CursorProvider {
 
     fn models(&self, context: Context) -> ProviderFuture<'_, Vec<Model>> {
         Box::pin(async move {
+            let bearer = self.bearer(&context).await?;
             if context.credentials.access_token.is_empty() {
                 return Err(ProviderError::Authentication(
                     "Cursor login required".into(),
@@ -209,7 +225,7 @@ impl Provider for CursorProvider {
             let response = tokio::select! {
                 biased;
                 _ = context.cancellation.cancelled() => return Err(ProviderError::Cancelled),
-                response = tokio::time::timeout(self.options.connect_timeout, self.rpc("GetUsableModels", &context.credentials.access_token, false).body(Vec::<u8>::new()).send()) =>
+                response = tokio::time::timeout(self.options.connect_timeout, self.rpc("GetUsableModels", &bearer, false).body(Vec::<u8>::new()).send()) =>
                     response.map_err(|_| ProviderError::Transport("Cursor discovery timed out".into()))?
                         .map_err(|_| ProviderError::Transport("Cursor discovery connection failed".into()))?,
             };
@@ -293,12 +309,12 @@ fn validate_request(request: &Request, context: &Context) -> Result<()> {
     }
     for message in &request.messages {
         for content in &message.content {
-            if let Content::Opaque { namespace, .. } = content {
-                if namespace != &request.namespace {
-                    return Err(ProviderError::Checkpoint(
-                        "foreign provider replay content in Cursor request".into(),
-                    ));
-                }
+            if let Content::Opaque { namespace, .. } = content
+                && namespace != &request.namespace
+            {
+                return Err(ProviderError::Checkpoint(
+                    "foreign provider replay content in Cursor request".into(),
+                ));
             }
         }
     }
@@ -507,7 +523,7 @@ fn prepare(
             tools: Some(mcp),
             conversation_id: Some(state.conversation.clone()),
             system: None,
-            exclude_workspace_context: Some(true),
+            exclude_workspace_context: None,
         },
         request_context,
     ))
@@ -688,9 +704,34 @@ impl Session {
             }
         }
         if let Some(exec) = message.exec {
+            let fields = wire_fields(&exec);
             let exec = wire::ExecServer::decode(exec.as_slice())
                 .map_err(|_| ProviderError::Protocol("invalid Cursor execution protobuf".into()))?;
-            if exec.request_context.is_some() {
+            if let Some(query) = &exec.mcp_state {
+                let include = query.identifiers.is_empty()
+                    || query.identifiers.iter().any(|id| id == MCP_PROVIDER);
+                let servers = if include && !self.request_context.tools.is_empty() {
+                    vec![wire::McpStateServer {
+                        name: MCP_PROVIDER.into(),
+                        identifier: MCP_PROVIDER.into(),
+                        tools: self.request_context.tools.clone(),
+                        status: Some("ready".into()),
+                    }]
+                } else {
+                    Vec::new()
+                };
+                self.deferred.push_back(wire::ClientMessage {
+                    exec: Some(wire::ExecClient {
+                        id: exec.id,
+                        exec_id: exec.exec_id,
+                        mcp_state: Some(wire::McpStateResult {
+                            success: Some(wire::McpStateSuccess { servers }),
+                        }),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                });
+            } else if exec.request_context.is_some() {
                 self.deferred.push_back(wire::ClientMessage {
                     exec: Some(wire::ExecClient {
                         id: exec.id,
@@ -727,7 +768,7 @@ impl Session {
                 } else {
                     native::call(&exec)?.ok_or_else(|| {
                         ProviderError::Unsupported(
-                            "Cursor requested an unadvertised native execution operation".into(),
+                            format!("Cursor requested an unadvertised native execution operation (fields {fields:?})"),
                         )
                     })?
                 };
@@ -937,3 +978,24 @@ impl ProviderSession for Session {
 
 #[cfg(test)]
 mod tests;
+
+fn wire_fields(mut payload: &[u8]) -> Vec<u32> {
+    let mut fields = Vec::new();
+    while !payload.is_empty() {
+        let Ok((tag, wire_type)) = prost::encoding::decode_key(&mut payload) else {
+            break;
+        };
+        fields.push(tag);
+        if prost::encoding::skip_field(
+            wire_type,
+            tag,
+            &mut payload,
+            prost::encoding::DecodeContext::default(),
+        )
+        .is_err()
+        {
+            break;
+        }
+    }
+    fields
+}

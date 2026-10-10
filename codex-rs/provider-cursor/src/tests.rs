@@ -89,6 +89,35 @@ async fn fixture() -> (CursorProvider, tokio::task::JoinHandle<()>) {
                     .body(())
                     .unwrap();
                 let mut send = respond.send_response(response, false).unwrap();
+                // Catalog refresh is protocol setup, and may only describe the
+                // tools the host actually registered for this turn.
+                send_message(
+                    &mut send,
+                    wire::ServerMessage {
+                        exec: Some(
+                            wire::ExecServer {
+                                id: 4,
+                                mcp_state: Some(wire::McpStateArgs::default()),
+                                ..Default::default()
+                            }
+                            .encode_to_vec(),
+                        ),
+                        ..Default::default()
+                    },
+                    false,
+                )
+                .await;
+                let state_reply = receive_message(&mut recv, &mut decoder)
+                    .await
+                    .exec
+                    .unwrap()
+                    .mcp_state
+                    .unwrap()
+                    .success
+                    .unwrap();
+                assert_eq!(state_reply.servers.len(), 1);
+                assert_eq!(state_reply.servers[0].tools.len(), 1);
+                assert_eq!(state_reply.servers[0].tools[0].name, "host_tool");
                 // A real request for the system blob, then a server-owned blob.
                 send_message(
                     &mut send,

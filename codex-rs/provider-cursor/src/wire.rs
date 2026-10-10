@@ -212,6 +212,8 @@ pub(crate) struct ExecServer {
     pub shell_stream: Option<ShellArgs>,
     #[prost(string, tag = "15")]
     pub exec_id: String,
+    #[prost(message, optional, tag = "36")]
+    pub mcp_state: Option<McpStateArgs>,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -252,6 +254,8 @@ pub(crate) struct ExecClient {
     pub shell_stream: Option<Vec<u8>>,
     #[prost(string, tag = "15")]
     pub exec_id: String,
+    #[prost(message, optional, tag = "36")]
+    pub mcp_state: Option<McpStateResult>,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -328,6 +332,38 @@ pub(crate) struct BlobResult {
 
 #[derive(Clone, PartialEq, Message)]
 pub(crate) struct BlobAck {}
+
+#[derive(Clone, PartialEq, Message)]
+pub(crate) struct McpStateArgs {
+    #[prost(string, repeated, tag = "1")]
+    pub identifiers: Vec<String>,
+    #[prost(bool, tag = "2")]
+    pub kick_only: bool,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub(crate) struct McpStateResult {
+    #[prost(message, optional, tag = "1")]
+    pub success: Option<McpStateSuccess>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub(crate) struct McpStateSuccess {
+    #[prost(message, repeated, tag = "1")]
+    pub servers: Vec<McpStateServer>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub(crate) struct McpStateServer {
+    #[prost(string, tag = "1")]
+    pub name: String,
+    #[prost(string, tag = "2")]
+    pub identifier: String,
+    #[prost(message, repeated, tag = "5")]
+    pub tools: Vec<McpTool>,
+    #[prost(string, optional, tag = "7")]
+    pub status: Option<String>,
+}
 
 #[derive(Clone, PartialEq, Message)]
 pub(crate) struct SelectedContext {

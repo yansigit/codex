@@ -95,7 +95,20 @@ impl Decoder {
                 return Err(if code == "unauthenticated" {
                     ProviderError::Authentication("Cursor rejected credentials".into())
                 } else {
-                    ProviderError::Protocol(format!("Cursor Connect ended with {code}"))
+                    let detail = error.get("message").and_then(|v| v.as_str()).unwrap_or("");
+                    let detail = detail
+                        .split_whitespace()
+                        .take(80)
+                        .map(|word| {
+                            if word.len() > 48 || word.contains("crsr_") || word.contains("eyJ") {
+                                "<redacted>"
+                            } else {
+                                word
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    ProviderError::Protocol(format!("Cursor Connect ended with {code}: {detail}"))
                 });
             }
             self.ended = true;
