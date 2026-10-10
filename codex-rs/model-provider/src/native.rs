@@ -1,10 +1,13 @@
 //! Thin model-provider facade for the subsystem's Codex-facing native backend.
-use crate::{
-    ModelProvider, ModelProviderFuture, ProviderAccountResult, ProviderAccountState,
-    ProviderCapabilities,
-};
-use codex_login::{AuthManager, CodexAuth};
-use codex_model_provider_info::{ModelProviderInfo, RemoteCompactionSupport};
+use crate::ModelProvider;
+use crate::ModelProviderFuture;
+use crate::ProviderAccountResult;
+use crate::ProviderAccountState;
+use crate::ProviderCapabilities;
+use codex_login::AuthManager;
+use codex_login::CodexAuth;
+use codex_model_provider_info::ModelProviderInfo;
+use codex_model_provider_info::RemoteCompactionSupport;
 use codex_models_manager::manager::SharedModelsManager;
 use codex_protocol::openai_models::ModelsResponse;
 use codex_provider_adapter::backend::NativeBackend;
