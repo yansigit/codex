@@ -511,7 +511,8 @@ def main() -> int:
     except AcceptanceError as error:
         print(f"FAIL provider={args.provider} check={args.check} error={error}")
         return 1
-    except Exception as error:  # Do not print unexpected exception payloads.  # noqa: BLE001
+    except Exception as error:  # noqa: BLE001
+        # Do not print unexpected exception payloads.
         print(
             f"FAIL provider={args.provider} check={args.check} error={type(error).__name__}"
         )
