@@ -14,6 +14,20 @@ pub(crate) struct ClientMessage {
     pub kv: Option<KvClient>,
     #[prost(bytes = "vec", optional, tag = "4")]
     pub action: Option<Vec<u8>>,
+    #[prost(message, optional, tag = "5")]
+    pub exec_control: Option<ExecClientControl>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub(crate) struct ExecClientControl {
+    #[prost(message, optional, tag = "1")]
+    pub stream_close: Option<ExecStreamClose>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub(crate) struct ExecStreamClose {
+    #[prost(uint32, tag = "1")]
+    pub id: u32,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -401,6 +415,10 @@ pub(crate) struct ShellArgs {
     pub timeout: i32,
     #[prost(string, tag = "4")]
     pub call_id: String,
+    #[prost(bool, tag = "11")]
+    pub background: bool,
+    #[prost(int32, optional, tag = "14")]
+    pub hard_timeout: Option<i32>,
 }
 
 #[derive(Clone, PartialEq, Message)]

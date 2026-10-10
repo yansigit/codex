@@ -461,3 +461,242 @@ async fn cancelled_start_never_opens_an_upstream_connection() {
         Err(ProviderError::Cancelled)
     ));
 }
+
+#[test]
+fn absent_native_options_are_omitted_and_shell_hard_timeout_is_preserved() {
+    let read = wire::ExecServer {
+        read: Some(wire::ReadArgs {
+            path: "file".into(),
+            call_id: "read".into(),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    assert_eq!(
+        native::call(&read).unwrap().unwrap().0.arguments,
+        json!({"path":"file"})
+    );
+    let mut shell = wire::ExecServer {
+        shell_stream: Some(wire::ShellArgs {
+            command: "true".into(),
+            call_id: "shell".into(),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    assert_eq!(
+        native::call(&shell).unwrap().unwrap().0.arguments,
+        json!({"command":"true"})
+    );
+    shell.shell_stream.as_mut().unwrap().hard_timeout = Some(500);
+    assert_eq!(
+        native::call(&shell).unwrap().unwrap().0.arguments,
+        json!({"command":"true","timeout_ms":500})
+    );
+    shell.shell_stream.as_mut().unwrap().background = true;
+    assert!(matches!(
+        native::call(&shell),
+        Err(ProviderError::Unsupported(_))
+    ));
+}
+
+#[test]
+fn native_shell_stream_finishes_with_structured_result_and_close_even_when_denied() {
+    let operation = native::Operation::Shell {
+        command: "true".into(),
+        cwd: "/work".into(),
+        stream: true,
+    };
+    for (is_error, output) in [
+        (false, json!({"exit_code":0,"stdout":"ok","stderr":""})),
+        (true, json!({"rejected":true,"reason":"denied"})),
+    ] {
+        let messages = native::response(
+            5,
+            "exec",
+            &operation,
+            &ToolResult {
+                call_id: "shell".into(),
+                is_error,
+                output,
+            },
+        )
+        .unwrap();
+        assert_eq!(messages.len(), 6);
+        #[derive(prost::Message)]
+        struct Start {
+            #[prost(bytes = "vec", optional, tag = "4")]
+            value: Option<Vec<u8>>,
+        }
+        let first = Start::decode(
+            messages[0]
+                .exec
+                .as_ref()
+                .unwrap()
+                .shell_stream
+                .as_ref()
+                .unwrap()
+                .as_slice(),
+        )
+        .unwrap();
+        assert_eq!(first.value, Some(vec![]));
+        assert!(messages[4].exec.as_ref().unwrap().shell.is_some());
+        assert_eq!(
+            messages[5]
+                .exec_control
+                .as_ref()
+                .unwrap()
+                .stream_close
+                .as_ref()
+                .unwrap()
+                .id,
+            5
+        );
+    }
+    assert!(
+        native::response(
+            5,
+            "exec",
+            &operation,
+            &ToolResult {
+                call_id: "shell".into(),
+                is_error: false,
+                output: json!({})
+            }
+        )
+        .is_err()
+    );
+}
+
+#[tokio::test]
+async fn native_shell_stream_continues_on_same_h2_session_after_final_ack() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base_url = format!("http://{}", listener.local_addr().unwrap());
+    let server = tokio::spawn(async move {
+        let (socket, _) = listener.accept().await.unwrap();
+        let mut connection = h2::server::handshake(socket).await.unwrap();
+        let (request, mut respond) = connection.accept().await.unwrap().unwrap();
+        let _handler = tokio::spawn(async move {
+            let mut recv = request.into_body();
+            let mut decoder = connect::Decoder::default();
+            assert!(receive_message(&mut recv, &mut decoder).await.run.is_some());
+            let response = http::Response::builder()
+                .status(200)
+                .header("content-type", "application/connect+proto")
+                .body(())
+                .unwrap();
+            let mut send = respond.send_response(response, false).unwrap();
+            send_message(
+                &mut send,
+                wire::ServerMessage {
+                    exec: Some(
+                        wire::ExecServer {
+                            id: 8,
+                            exec_id: "native-shell-exec".into(),
+                            shell_stream: Some(wire::ShellArgs {
+                                command: "printf ok".into(),
+                                call_id: "native-shell".into(),
+                                ..Default::default()
+                            }),
+                            ..Default::default()
+                        }
+                        .encode_to_vec(),
+                    ),
+                    ..Default::default()
+                },
+                false,
+            )
+            .await;
+            for _ in 0..4 {
+                assert!(
+                    receive_message(&mut recv, &mut decoder)
+                        .await
+                        .exec
+                        .unwrap()
+                        .shell_stream
+                        .is_some()
+                );
+            }
+            assert!(
+                receive_message(&mut recv, &mut decoder)
+                    .await
+                    .exec
+                    .unwrap()
+                    .shell
+                    .is_some()
+            );
+            assert_eq!(
+                receive_message(&mut recv, &mut decoder)
+                    .await
+                    .exec_control
+                    .unwrap()
+                    .stream_close
+                    .unwrap()
+                    .id,
+                8
+            );
+            send_message(
+                &mut send,
+                wire::ServerMessage {
+                    interaction: Some(wire::Interaction {
+                        text: Some(wire::Text {
+                            text: "continued".into(),
+                        }),
+                        ended: Some(wire::TurnEnded::default()),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+                false,
+            )
+            .await;
+            send.send_data(Bytes::from_static(&[2, 0, 0, 0, 2, b'{', b'}']), true)
+                .unwrap();
+        });
+        while let Some(result) = connection.accept().await {
+            result.unwrap();
+        }
+    });
+    let provider = CursorProvider::new(Options {
+        base_url,
+        ..Default::default()
+    })
+    .unwrap();
+    let mut req = request();
+    req.tools = vec![ToolDefinition {
+        name: native::SHELL.into(),
+        description: "Shell".into(),
+        parameters: json!({"type":"object"}),
+    }];
+    let mut session = provider.start(req, context()).await.unwrap();
+    let mut host_calls = 0;
+    let mut text = String::new();
+    loop {
+        match tokio::time::timeout(Duration::from_secs(5), session.next_event())
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap()
+        {
+            Event::ToolCall(call) => {
+                host_calls += 1;
+                assert_eq!(call.name, native::SHELL);
+                assert_eq!(call.arguments, json!({"command":"printf ok"}));
+                session
+                    .submit_tool_result(ToolResult {
+                        call_id: call.id,
+                        is_error: false,
+                        output: json!({"exit_code":0,"stdout":"ok","stderr":""}),
+                    })
+                    .await
+                    .unwrap();
+            }
+            Event::TextDelta(delta) => text.push_str(&delta),
+            Event::Completed { .. } => break,
+            _ => {}
+        }
+    }
+    assert_eq!(host_calls, 1);
+    assert_eq!(text, "continued");
+    server.abort();
+}
