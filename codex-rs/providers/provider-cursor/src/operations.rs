@@ -23,7 +23,27 @@ impl NativeOperations for CursorOperations {
             "cursor_write_file" => Ok(HostOperation::WriteFile(args)),
             "cursor_delete_file" => Ok(HostOperation::DeleteFile(args)),
             "cursor_ls" => Ok(HostOperation::ListDirectory(args)),
-            "cursor_grep" => Ok(HostOperation::Search(args)),
+            "cursor_grep" => {
+                // Preserve Cursor's protocol diagnostics before entering the
+                // provider-neutral host command translator.
+                if let Some(sort) = args.get("sort").and_then(Value::as_str)
+                    && !sort.contains('\0')
+                    && !matches!(sort, "path" | "none")
+                {
+                    return Err(ProviderError::Unsupported(format!(
+                        "Cursor grep sort mode {sort:?} is unsupported"
+                    )));
+                }
+                if let Some(mode) = args.get("output_mode").and_then(Value::as_str)
+                    && !mode.contains('\0')
+                    && !matches!(mode, "content" | "files_with_matches" | "count")
+                {
+                    return Err(ProviderError::Unsupported(format!(
+                        "Cursor grep output mode {mode:?} is unsupported"
+                    )));
+                }
+                Ok(HostOperation::Search(args))
+            }
             _ => Err(ProviderError::Unsupported(
                 "unknown Cursor operation".into(),
             )),
