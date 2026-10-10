@@ -387,47 +387,23 @@ fn prepare(
         .rposition(|message| message.role == Role::User);
     let new_user =
         active.filter(|index| request.checkpoint.is_none() || *index >= state.message_count);
-    let action = if let Some(index) = new_user {
+    let mut images = Vec::new();
+    let mut historical_attachments = Vec::new();
+    let mut action = if let Some(index) = new_user {
         let message = &request.messages[index];
-        let mut images = Vec::new();
         let mut text = Vec::new();
         for content in &message.content {
             match content {
                 Content::Text { text: value } => text.push(value.clone()),
                 Content::Image { url } => {
-                    let (header, data) = url.split_once(',').ok_or_else(|| {
-                        ProviderError::Unsupported("Cursor images require inline data URLs".into())
-                    })?;
-                    let mime = header
-                        .strip_prefix("data:")
-                        .and_then(|v| v.strip_suffix(";base64"))
-                        .filter(|mime| {
-                            matches!(
-                                *mime,
-                                "image/png" | "image/jpeg" | "image/webp" | "image/gif"
-                            )
-                        })
-                        .ok_or_else(|| {
-                            ProviderError::Unsupported(
-                                "unsupported Cursor inline image MIME type".into(),
-                            )
+                    for part in
+                        native::mcp_content(&json!([{"type":"input_image","image_url":url}]))?
+                    {
+                        let image = part.image.ok_or_else(|| {
+                            ProviderError::Protocol("Cursor image content missing image".into())
                         })?;
-                    if data.len() > 12 * 1024 * 1024 || images.len() >= 16 {
-                        return Err(ProviderError::Unsupported(
-                            "Cursor image input exceeds limit".into(),
-                        ));
+                        attach_image(state, &mut images, image)?;
                     }
-                    let data = STANDARD.decode(data).map_err(|_| {
-                        ProviderError::Protocol("invalid Cursor inline image base64".into())
-                    })?;
-                    let id = state.put_blob(&data)?;
-                    let uuid = uuid::Uuid::new_v4().to_string();
-                    images.push(wire::SelectedImage {
-                        path: format!("/attachments/{uuid}"),
-                        uuid,
-                        mime: mime.into(),
-                        blob: Some(wire::ImageBlob { id, data }),
-                    });
                 }
                 _ => {
                     return Err(ProviderError::Unsupported(
@@ -442,7 +418,7 @@ fn prepare(
                     text: text.join("\n"),
                     id: uuid::Uuid::new_v4().to_string(),
                     mode: 1,
-                    selected_context: Some(wire::SelectedContext { images }),
+                    selected_context: Some(wire::SelectedContext { images: Vec::new() }),
                 }),
                 context: Some(request_context.clone()),
             }),
@@ -485,17 +461,46 @@ fn prepare(
                         "[Tool Call {} {}] {}",
                         call.id, call.name, call.arguments
                     )),
-                    Content::ToolResult(result) => text.push(format!(
-                        "[Tool {} {}] {}",
-                        if result.is_error { "Error" } else { "Result" },
-                        result.call_id,
-                        result.output
-                    )),
-                    Content::Thinking { .. } => {}
-                    Content::Image { .. } => {
-                        return Err(ProviderError::Unsupported(
-                            "Cursor history images require a persisted native checkpoint".into(),
+                    Content::ToolResult(result) => {
+                        let mut output = Vec::new();
+                        for part in native::mcp_content(&result.output)? {
+                            if let Some(value) = part.text {
+                                output.push(value.text);
+                            }
+                            if let Some(image) = part.image {
+                                let path = attach_image(state, &mut images, image)?;
+                                let reference = format!(
+                                    "History message {} tool result {} image: {path}",
+                                    index + 1,
+                                    result.call_id
+                                );
+                                historical_attachments.push(reference.clone());
+                                output.push(format!("[Image attachment: {reference}]"));
+                            }
+                        }
+                        text.push(format!(
+                            "[Tool {} {}] {}",
+                            if result.is_error { "Error" } else { "Result" },
+                            result.call_id,
+                            output.join("\n")
                         ));
+                    }
+                    Content::Thinking { .. } => {}
+                    Content::Image { url } => {
+                        for part in
+                            native::mcp_content(&json!([{"type":"input_image","image_url":url}]))?
+                        {
+                            let image = part.image.ok_or_else(|| {
+                                ProviderError::Protocol(
+                                    "Cursor history content missing image".into(),
+                                )
+                            })?;
+                            let path = attach_image(state, &mut images, image)?;
+                            let reference =
+                                format!("History message {} {role} image: {path}", index + 1);
+                            historical_attachments.push(reference.clone());
+                            text.push(format!("[Image attachment: {reference}]"));
+                        }
                     }
                     Content::Opaque { .. } => {}
                 }
@@ -510,6 +515,22 @@ fn prepare(
             ));
         }
         encoded_state = wire::State { roots }.encode_to_vec();
+    }
+    if !images.is_empty() {
+        let user = action
+            .user
+            .as_mut()
+            .and_then(|user| user.message.as_mut())
+            .ok_or_else(|| {
+                ProviderError::Unsupported(
+                    "Cursor image bootstrap requires a new user message".into(),
+                )
+            })?;
+        if !historical_attachments.is_empty() {
+            user.text.push_str("\n\nThe following images belong to earlier history messages and tool results, at the attachment paths referenced in that history. Preserve those original associations:\n");
+            user.text.push_str(&historical_attachments.join("\n"));
+        }
+        user.selected_context = Some(wire::SelectedContext { images });
     }
     Ok((
         wire::RunRequest {
@@ -527,6 +548,31 @@ fn prepare(
         },
         request_context,
     ))
+}
+
+fn attach_image(
+    state: &mut state::State,
+    images: &mut Vec<wire::SelectedImage>,
+    image: wire::McpImage,
+) -> Result<String> {
+    if images.len() >= 16 {
+        return Err(ProviderError::Unsupported(
+            "Cursor image input exceeds 16 attachments".into(),
+        ));
+    }
+    let id = state.put_blob(&image.data)?;
+    let uuid = uuid::Uuid::new_v4().to_string();
+    let path = format!("/attachments/{uuid}");
+    images.push(wire::SelectedImage {
+        path: path.clone(),
+        uuid,
+        mime: image.mime,
+        blob: Some(wire::ImageBlob {
+            id,
+            data: image.data,
+        }),
+    });
+    Ok(path)
 }
 
 fn validate_status(response: &reqwest::Response) -> Result<()> {

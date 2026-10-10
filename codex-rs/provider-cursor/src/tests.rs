@@ -798,3 +798,99 @@ fn mcp_results_preserve_typed_text_images_and_failure() {
         ));
     }
 }
+
+#[test]
+fn historical_user_and_tool_images_preserve_bytes_and_message_associations() {
+    let mut req = request();
+    req.messages[0].content.push(Content::Image {
+        url: format!(
+            "data:image/png;base64,{}",
+            STANDARD.encode(b"historical-user-image")
+        ),
+    });
+    req.messages.push(InputMessage {
+        role: Role::Tool,
+        content: vec![Content::ToolResult(ToolResult {
+            call_id: "historical-image-call".into(),
+            output: json!([
+                {"type":"input_text","text":"Original tool result caption"},
+                {"type":"input_image","image_url":format!("data:image/png;base64,{}", STANDARD.encode(b"historical-tool-image"))}
+            ]),
+            is_error: false,
+        })],
+    });
+    req.messages.push(InputMessage {
+        role: Role::User,
+        content: vec![Content::Text {
+            text: "Recall the earlier images".into(),
+        }],
+    });
+    let mut state = state::State::restore(&req).unwrap();
+    let (run, _) = prepare(&req, &mut state).unwrap();
+    let user = run.action.unwrap().user.unwrap().message.unwrap();
+    let images = user.selected_context.unwrap().images;
+    assert_eq!(images.len(), 2);
+    assert_eq!(
+        images[0].blob.as_ref().unwrap().data,
+        b"historical-user-image"
+    );
+    assert_eq!(
+        images[1].blob.as_ref().unwrap().data,
+        b"historical-tool-image"
+    );
+    assert!(
+        user.text
+            .contains(&format!("History message 1 user image: {}", images[0].path))
+    );
+    assert!(user.text.contains(&format!(
+        "History message 2 tool result historical-image-call image: {}",
+        images[1].path
+    )));
+    let roots = wire::State::decode(run.state.as_slice()).unwrap().roots;
+    let earlier_user: Value =
+        serde_json::from_slice(&state.blob(&roots[1]).unwrap().unwrap()).unwrap();
+    let earlier_tool: Value =
+        serde_json::from_slice(&state.blob(&roots[2]).unwrap().unwrap()).unwrap();
+    assert!(
+        earlier_user["content"][0]["text"]
+            .as_str()
+            .unwrap()
+            .contains(&images[0].path)
+    );
+    let text = earlier_tool["content"][0]["text"].as_str().unwrap();
+    assert!(text.contains("Original tool result caption"));
+    assert!(text.contains("historical-image-call"));
+    assert!(text.contains(&images[1].path));
+    assert!(!text.contains("base64,"));
+}
+
+#[test]
+fn historical_and_active_images_share_attachment_limit_and_reject_unsupported_content() {
+    let mut req = request();
+    for _ in 0..16 {
+        req.messages[0].content.push(Content::Image {
+            url: format!("data:image/png;base64,{}", STANDARD.encode(b"image")),
+        });
+    }
+    req.messages.push(InputMessage {
+        role: Role::User,
+        content: vec![Content::Image {
+            url: format!("data:image/png;base64,{}", STANDARD.encode(b"active-image")),
+        }],
+    });
+    let mut state = state::State::restore(&req).unwrap();
+    assert!(matches!(
+        prepare(&req, &mut state),
+        Err(ProviderError::Unsupported(_))
+    ));
+    req.messages[0].content = vec![Content::ToolResult(ToolResult {
+        call_id: "unsupported-audio".into(),
+        output: json!([{"type":"input_audio","data":"unsupported"}]),
+        is_error: false,
+    })];
+    let mut state = state::State::restore(&req).unwrap();
+    assert!(matches!(
+        prepare(&req, &mut state),
+        Err(ProviderError::Unsupported(_))
+    ));
+}

@@ -799,7 +799,7 @@ pub(crate) fn response(
     }])
 }
 
-fn mcp_content(output: &serde_json::Value) -> Result<Vec<wire::McpContent>> {
+pub(crate) fn mcp_content(output: &serde_json::Value) -> Result<Vec<wire::McpContent>> {
     let content = output
         .get("content")
         .and_then(serde_json::Value::as_array)
