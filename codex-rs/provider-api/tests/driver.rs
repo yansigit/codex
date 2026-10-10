@@ -7,7 +7,7 @@ use codex_provider_api::{
     ToolCall, ToolDefinition, ToolResult, drive_session,
 };
 use serde_json::{Value, json};
-use tokio::sync::{Barrier, Mutex, mpsc};
+use tokio::sync::{Barrier, Mutex, Notify, mpsc};
 use tokio_util::sync::CancellationToken;
 
 struct Session {
@@ -152,6 +152,76 @@ fn session_pair() -> (
     )
 }
 
+struct SerialHost {
+    started: mpsc::UnboundedSender<String>,
+    release_first: Arc<Notify>,
+}
+
+impl Host for SerialHost {
+    fn execute(&self, call: ToolCall, _: CancellationToken) -> ProviderFuture<'_, ToolResult> {
+        let started = self.started.clone();
+        let release_first = Arc::clone(&self.release_first);
+        Box::pin(async move {
+            started.send(call.id.clone()).unwrap();
+            if call.id == "one" {
+                release_first.notified().await;
+            }
+            Ok(ToolResult {
+                call_id: call.id,
+                output: json!("ok"),
+                is_error: false,
+            })
+        })
+    }
+
+    fn checkpoint(&self, _: Checkpoint) -> ProviderFuture<'_, ()> {
+        Box::pin(async { Ok(()) })
+    }
+}
+
+struct FastHost;
+
+impl Host for FastHost {
+    fn execute(&self, call: ToolCall, _: CancellationToken) -> ProviderFuture<'_, ToolResult> {
+        Box::pin(async move {
+            Ok(ToolResult {
+                call_id: call.id,
+                output: json!("ok"),
+                is_error: false,
+            })
+        })
+    }
+
+    fn checkpoint(&self, _: Checkpoint) -> ProviderFuture<'_, ()> {
+        Box::pin(async { Ok(()) })
+    }
+}
+
+struct HangingSubmitSession {
+    incoming: mpsc::Receiver<Event>,
+    submit_started: Arc<AtomicBool>,
+    cancelled: Arc<AtomicBool>,
+}
+
+impl ProviderSession for HangingSubmitSession {
+    fn next_event(&mut self) -> ProviderFuture<'_, Option<Event>> {
+        Box::pin(async move { Ok(self.incoming.recv().await) })
+    }
+
+    fn submit_tool_result(&mut self, _: ToolResult) -> ProviderFuture<'_, ()> {
+        let started = Arc::clone(&self.submit_started);
+        Box::pin(async move {
+            started.store(true, Ordering::SeqCst);
+            std::future::pending().await
+        })
+    }
+
+    fn cancel(&mut self) -> ProviderFuture<'_, ()> {
+        self.cancelled.store(true, Ordering::SeqCst);
+        Box::pin(async { Ok(()) })
+    }
+}
+
 #[tokio::test]
 async fn eof_without_completed_is_a_protocol_error() {
     let (session, events_tx, _results, cancelled) = session_pair();
@@ -260,6 +330,110 @@ async fn parallel_calls_execute_concurrently_and_return_individual_results() {
     drive.await.unwrap().unwrap();
     assert_eq!(host_started.lock().await.len(), 2);
     assert!(!cancelled.load(Ordering::SeqCst));
+}
+
+#[tokio::test]
+async fn parallel_disabled_serializes_host_calls_until_first_result_is_submitted() {
+    let (session, events_tx, mut results_rx, cancelled) = session_pair();
+    events_tx.send(call("one")).await.unwrap();
+    events_tx.send(call("two")).await.unwrap();
+    let (started_tx, mut started_rx) = mpsc::unbounded_channel();
+    let release_first = Arc::new(Notify::new());
+    let host = Arc::new(SerialHost {
+        started: started_tx,
+        release_first: Arc::clone(&release_first),
+    });
+    let (output_tx, _output_rx) = mpsc::channel(8);
+    let mut serial_request = request();
+    serial_request.parallel_tool_calls = false;
+    let drive = tokio::spawn(async move {
+        drive_session(
+            Box::new(session),
+            host,
+            &serial_request,
+            CancellationToken::new(),
+            output_tx,
+        )
+        .await
+    });
+
+    assert_eq!(
+        tokio::time::timeout(Duration::from_secs(1), started_rx.recv())
+            .await
+            .unwrap()
+            .unwrap(),
+        "one"
+    );
+    assert!(
+        tokio::time::timeout(Duration::from_millis(50), started_rx.recv())
+            .await
+            .is_err()
+    );
+
+    release_first.notify_one();
+    assert_eq!(results_rx.recv().await.unwrap().call_id, "one");
+    assert_eq!(
+        tokio::time::timeout(Duration::from_secs(1), started_rx.recv())
+            .await
+            .unwrap()
+            .unwrap(),
+        "two"
+    );
+    assert_eq!(results_rx.recv().await.unwrap().call_id, "two");
+    events_tx
+        .send(Event::Completed { id: "done".into() })
+        .await
+        .unwrap();
+    drive.await.unwrap().unwrap();
+    assert!(!cancelled.load(Ordering::SeqCst));
+}
+
+#[tokio::test]
+async fn dropping_event_consumer_cancels_a_hanging_tool_result_submission() {
+    let (events_tx, incoming) = mpsc::channel(8);
+    let submit_started = Arc::new(AtomicBool::new(false));
+    let cancelled = Arc::new(AtomicBool::new(false));
+    let session = HangingSubmitSession {
+        incoming,
+        submit_started: Arc::clone(&submit_started),
+        cancelled: Arc::clone(&cancelled),
+    };
+    let (output_tx, mut output_rx) = mpsc::channel(8);
+    let drive = tokio::spawn(async move {
+        drive_session(
+            Box::new(session),
+            Arc::new(FastHost),
+            &request(),
+            CancellationToken::new(),
+            output_tx,
+        )
+        .await
+    });
+    events_tx.send(call("one")).await.unwrap();
+    assert!(matches!(
+        tokio::time::timeout(Duration::from_secs(1), output_rx.recv())
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap(),
+        Event::ToolCall(_)
+    ));
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while !submit_started.load(Ordering::SeqCst) {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    drop(output_rx);
+    assert!(matches!(
+        tokio::time::timeout(Duration::from_secs(2), drive)
+            .await
+            .unwrap()
+            .unwrap(),
+        Err(ProviderError::Cancelled)
+    ));
+    assert!(cancelled.load(Ordering::SeqCst));
 }
 
 #[tokio::test]
