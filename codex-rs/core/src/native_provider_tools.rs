@@ -191,7 +191,7 @@ pub(super) fn command(name: &str, args: &Value) -> Result<Value> {
                     ProviderError::Host("sort_ascending must be a boolean".into())
                 })?,
             };
-            if sort == "" && !sort_ascending {
+            if sort.is_empty() && !sort_ascending {
                 return Err(ProviderError::Unsupported(
                     "sort_ascending requires path sorting".into(),
                 ));

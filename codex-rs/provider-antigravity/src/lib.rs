@@ -275,6 +275,7 @@ impl Provider for AntigravityProvider {
                         .unwrap_or(id)
                         .into(),
                     context_window: model["maxInputTokens"].as_u64(),
+                    supports_images: None,
                 })
                 .collect())
         })
@@ -365,7 +366,8 @@ mod tests {
             vec![Model {
                 id: "gemini-test".into(),
                 name: "Gemini Test".into(),
-                context_window: Some(12345)
+                context_window: Some(12345),
+                supports_images: None,
             }]
         );
         server.verify().await;

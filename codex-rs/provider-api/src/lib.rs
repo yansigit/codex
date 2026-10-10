@@ -153,6 +153,9 @@ pub struct Model {
     pub id: String,
     pub name: String,
     pub context_window: Option<u64>,
+    /// A known capability; `None` retains the host's fallback model metadata.
+    #[serde(default)]
+    pub supports_images: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

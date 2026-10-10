@@ -1275,6 +1275,21 @@ impl ModelClient {
     }
 
     pub(crate) async fn prewarm_auth(&self) -> Result<()> {
+        if self
+            .state
+            .provider
+            .info()
+            .wire_api
+            .native_provider_id()
+            .is_some()
+        {
+            self.state
+                .provider
+                .native_credentials(CancellationToken::new())
+                .await
+                .map_err(|error| CodexErr::Stream(error.to_string()))?;
+            return Ok(());
+        }
         self.current_client_setup(ClientRouting::Workspace)
             .await
             .map(|_| ())

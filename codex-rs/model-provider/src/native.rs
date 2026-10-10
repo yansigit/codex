@@ -451,6 +451,14 @@ impl ModelsEndpointClient for NativeModelProvider {
                     info.context_window =
                         model.context_window.and_then(|value| value.try_into().ok());
                     info.max_context_window = info.context_window;
+                    if let Some(supports_images) = model.supports_images {
+                        info.input_modalities =
+                            vec![codex_protocol::openai_models::InputModality::Text];
+                        if supports_images {
+                            info.input_modalities
+                                .push(codex_protocol::openai_models::InputModality::Image);
+                        }
+                    }
                     info.supported_in_api = true;
                     info.visibility = codex_protocol::openai_models::ModelVisibility::List;
                     info
