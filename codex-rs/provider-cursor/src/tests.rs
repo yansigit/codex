@@ -66,6 +66,13 @@ async fn receive_message(
 }
 
 async fn fixture() -> (CursorProvider, tokio::task::JoinHandle<()>) {
+    fixture_timing(Duration::ZERO, Duration::from_millis(500)).await
+}
+
+async fn fixture_timing(
+    trailing_delay: Duration,
+    completion_grace: Duration,
+) -> (CursorProvider, tokio::task::JoinHandle<()>) {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base_url = format!("http://{}", listener.local_addr().unwrap());
     let task = tokio::spawn(async move {
@@ -241,6 +248,34 @@ async fn fixture() -> (CursorProvider, tokio::task::JoinHandle<()>) {
                     false,
                 )
                 .await;
+                if !trailing_delay.is_zero() {
+                    tokio::time::sleep(trailing_delay).await;
+                    let data = b"late final server blob".to_vec();
+                    send_message(
+                        &mut send,
+                        wire::ServerMessage {
+                            kv: Some(wire::KvServer {
+                                id: 5,
+                                set: Some(wire::SetBlob {
+                                    id: sha2::Sha256::digest(&data).to_vec(),
+                                    data,
+                                }),
+                                ..Default::default()
+                            }),
+                            ..Default::default()
+                        },
+                        false,
+                    )
+                    .await;
+                    assert!(
+                        receive_message(&mut recv, &mut decoder)
+                            .await
+                            .kv
+                            .unwrap()
+                            .set
+                            .is_some()
+                    );
+                }
                 send_message(
                     &mut send,
                     wire::ServerMessage {
@@ -258,11 +293,51 @@ async fn fixture() -> (CursorProvider, tokio::task::JoinHandle<()>) {
     (
         CursorProvider::new(Options {
             base_url,
+            completion_grace,
             ..Default::default()
         })
         .unwrap(),
         task,
     )
+}
+
+#[tokio::test]
+async fn configured_completion_grace_persists_late_final_kv_and_checkpoint() {
+    let (provider, peer) = fixture_timing(Duration::from_millis(700), Duration::from_secs(2)).await;
+    let mut session = provider.start(request(), context()).await.unwrap();
+    let mut final_checkpoint = None;
+    let mut calls = 0;
+    while let Some(event) = session.next_event().await.unwrap() {
+        match event {
+            Event::Checkpoint(checkpoint) => final_checkpoint = Some(checkpoint),
+            Event::ToolCall(call) => {
+                calls += 1;
+                session
+                    .submit_tool_result(ToolResult {
+                        call_id: call.id,
+                        output: json!({"answer":7}),
+                        is_error: false,
+                    })
+                    .await
+                    .unwrap();
+            }
+            Event::Completed { .. } => break,
+            _ => {}
+        }
+    }
+    assert_eq!(calls, 1);
+    let checkpoint = final_checkpoint.unwrap();
+    assert!(!checkpoint.state["checkpoint"].as_str().unwrap().is_empty());
+    assert!(
+        checkpoint.state["blobs"]
+            .as_object()
+            .unwrap()
+            .values()
+            .any(|value| {
+                value.as_str() == Some(STANDARD.encode(b"late final server blob").as_str())
+            })
+    );
+    peer.abort();
 }
 
 #[tokio::test]
