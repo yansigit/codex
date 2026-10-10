@@ -176,9 +176,20 @@ async fn environment_token_override_rejects_logout_without_deleting_stored_accou
 #[tokio::test]
 async fn native_provider_selection_survives_fork_and_cold_resume() -> Result<()> {
     let codex_home = TempDir::new()?;
+    let upstream = wiremock::MockServer::start().await;
+    wiremock::Mock::given(wiremock::matchers::method("POST"))
+        .and(wiremock::matchers::path("/v1/chat/completions"))
+        .respond_with(wiremock::ResponseTemplate::new(200)
+            .insert_header("content-type", "text/event-stream")
+            .set_body_string("data: {\"id\":\"fixture\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"saved\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"fixture\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n"))
+        .expect(1)
+        .mount(&upstream).await;
     std::fs::write(
         codex_home.path().join("config.toml"),
-        "model = \"gpt-5.6-luna\"\n",
+        format!(
+            "model = \"gpt-5.6-luna\"\n[model_providers.go_native_fixture]\nname = \"Native fixture\"\nwire_api = \"opencode-go\"\nbase_url = {:?}\n",
+            upstream.uri()
+        ),
     )?;
     AuthStore::new(codex_home.path())
         .login(
@@ -199,13 +210,28 @@ async fn native_provider_selection_survives_fork_and_cold_resume() -> Result<()>
         READ_TIMEOUT,
         server.start_thread(ThreadStartParams {
             model: Some("glm-5.3".into()),
-            model_provider: Some("opencode-go".into()),
+            model_provider: Some("go_native_fixture".into()),
             ..Default::default()
         }),
     )
     .await??;
-    assert_eq!(started.model_provider, "opencode-go");
+    assert_eq!(started.model_provider, "go_native_fixture");
     assert_eq!(started.model, "glm-5.3");
+
+    // Empty threads have no durable rollout. Persist a real native turn before
+    // exercising fork and a separate app-server process's cold resume.
+    timeout(
+        READ_TIMEOUT,
+        server.start_turn_and_wait_for_completion(codex_app_server_protocol::TurnStartParams {
+            thread_id: started.thread.id.clone(),
+            input: vec![codex_app_server_protocol::UserInput::Text {
+                text: "Save this turn".into(),
+                text_elements: vec![],
+            }],
+            ..Default::default()
+        }),
+    )
+    .await??;
 
     let fork_id = server
         .send_thread_fork_request(ThreadForkParams {
@@ -214,7 +240,7 @@ async fn native_provider_selection_survives_fork_and_cold_resume() -> Result<()>
         })
         .await?;
     let forked: ThreadForkResponse = timeout(READ_TIMEOUT, server.read_response(fork_id)).await??;
-    assert_eq!(forked.model_provider, "opencode-go");
+    assert_eq!(forked.model_provider, "go_native_fixture");
     assert_eq!(forked.model, "glm-5.3");
 
     server.shutdown_gracefully().await?;
@@ -231,7 +257,7 @@ async fn native_provider_selection_survives_fork_and_cold_resume() -> Result<()>
         .await?;
     let resumed: ThreadResumeResponse =
         timeout(READ_TIMEOUT, restarted.read_response(resume_id)).await??;
-    assert_eq!(resumed.model_provider, "opencode-go");
+    assert_eq!(resumed.model_provider, "go_native_fixture");
     assert_eq!(resumed.model, "glm-5.3");
     Ok(())
 }

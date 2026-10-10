@@ -58,6 +58,7 @@ impl Provider for OpenCodeProvider {
                     id: model["id"].as_str().unwrap_or_default().into(),
                     name: model["name"].as_str().unwrap_or_default().into(),
                     context_window: model["context_window"].as_u64(),
+                    supports_images: None,
                 })
                 .collect())
         })

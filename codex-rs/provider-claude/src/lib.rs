@@ -148,6 +148,7 @@ impl Provider for ClaudeProvider {
                         id: id.into(),
                         name: model["display_name"].as_str().unwrap_or(id).into(),
                         context_window: None,
+                        supports_images: None,
                     });
                     if models.len() > 500 {
                         return Err(ProviderError::Protocol(

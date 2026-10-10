@@ -254,6 +254,7 @@ impl Provider for CursorProvider {
                     },
                     id: model.id,
                     context_window: None,
+                    supports_images: None,
                 })
                 .collect())
         })
