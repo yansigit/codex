@@ -25,7 +25,7 @@ doctest = false
 workspace = true
 
 [dependencies]
-codex-provider-auth = { workspace = true }
+codex-provider-adapter = { workspace = true }
 codex-utils-process = { workspace = true }
 anyhow = { workspace = true }
 base64 = { workspace = true }

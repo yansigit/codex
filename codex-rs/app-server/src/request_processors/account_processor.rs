@@ -250,7 +250,6 @@ impl AccountRequestProcessor {
             .load_latest_config()
             .await
             .model_provider
-            .wire_api
             .native_provider_id()
             .is_some()
         {
@@ -766,47 +765,36 @@ impl AccountRequestProcessor {
         account: String,
         token: Option<String>,
     ) -> Result<LoginAccountResponse, JSONRPCErrorError> {
-        if !matches!(
-            provider.as_str(),
-            "cursor" | "opencode-go" | "claude" | "antigravity"
-        ) || account.is_empty()
-        {
+        if codex_provider_adapter::registry::get(&provider).is_none() || account.is_empty() {
             return Err(invalid_request(
                 "native login requires a known provider and nonempty account ID",
             ));
         }
         self.cancel_active_login().await;
         let config = self.load_latest_config().await;
-        if config.model_provider.wire_api.native_provider_id() == Some(provider.as_str())
-            && codex_model_provider::native::NativeModelProvider::new(
-                config.model_provider.clone(),
-                Some(config.codex_home.to_path_buf()),
-            )
-            .has_configured_token()
-        {
+        let info = if config.model_provider.native_provider_id() == Some(provider.as_str()) {
+            config.model_provider.clone()
+        } else {
+            codex_model_provider_info::built_in_model_providers(None)
+                .remove(&provider)
+                .ok_or_else(|| invalid_request("unknown native provider"))?
+        };
+        let backend = codex_provider_adapter::backend::NativeBackend::new(
+            info,
+            Some(config.codex_home.to_path_buf()),
+        );
+        if backend.has_configured_token() {
             return Err(invalid_request(
                 "native authentication is configured by an environment variable or bearer token; remove that override before logging in",
             ));
         }
         let cancellation = CancellationToken::new();
-        let store = codex_provider_auth::AuthStore::new(&self.config.codex_home);
         if let Some(token) = token {
             if token.trim().is_empty() {
                 return Err(invalid_request("empty provider token"));
             }
-            store
-                .login(
-                    &provider,
-                    &account,
-                    codex_provider_auth::TokenRecord {
-                        access_token: token,
-                        refresh_token: None,
-                        expires_at: None,
-                        metadata: serde_json::Value::Null,
-                        revoked: false,
-                    },
-                    &cancellation,
-                )
+            backend
+                .login_token(&account, token, &cancellation)
                 .await
                 .map_err(|error| internal_error(error.to_string()))?;
             self.send_login_success_notifications(None).await;
@@ -816,7 +804,8 @@ impl AccountRequestProcessor {
                 auth_url: None,
             });
         }
-        let login = codex_model_provider::native::NativeLogin::begin(&provider)
+        let login = backend
+            .begin_login()
             .await
             .map_err(|error| invalid_request(error.to_string()))?;
         let auth_url = login.url().to_owned();
@@ -826,7 +815,6 @@ impl AccountRequestProcessor {
             login_id,
         });
         let processor = self.clone();
-        let provider_id = provider.clone();
         tokio::spawn(async move {
             let result = login.finish(&cancellation).await;
             // Keep the active-login lock until commit so cancel/replacement fences late callbacks.
@@ -837,11 +825,7 @@ impl AccountRequestProcessor {
                 return;
             }
             let result = match result {
-                Ok(record) => {
-                    store
-                        .login(&provider_id, &account, record, &cancellation)
-                        .await
-                }
+                Ok(record) => backend.commit_login(&account, record, &cancellation).await,
                 Err(error) => Err(error),
             };
             *active = None;
@@ -1125,20 +1109,19 @@ impl AccountRequestProcessor {
 
     async fn logout_common(&self) -> std::result::Result<Option<AuthMode>, JSONRPCErrorError> {
         let current_config = self.load_latest_config().await;
-        if let Some(provider) = current_config.model_provider.wire_api.native_provider_id() {
-            if codex_model_provider::native::NativeModelProvider::new(
+        if current_config.model_provider.native_provider_id().is_some() {
+            let backend = codex_provider_adapter::backend::NativeBackend::new(
                 current_config.model_provider.clone(),
                 Some(current_config.codex_home.to_path_buf()),
-            )
-            .has_configured_token()
-            {
+            );
+            if backend.has_configured_token() {
                 return Err(invalid_request(
                     "native authentication is configured by an environment variable or bearer token; remove that override to log out",
                 ));
             }
             self.cancel_active_login().await;
-            codex_provider_auth::AuthStore::new(&current_config.codex_home)
-                .logout(provider, &CancellationToken::new())
+            backend
+                .logout(&CancellationToken::new())
                 .await
                 .map_err(|error| internal_error(error.to_string()))?;
             return Ok(None);

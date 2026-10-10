@@ -1684,7 +1684,7 @@ impl ThreadRequestProcessor {
             .config
             .model_providers
             .get(&source.model_provider)
-            .is_some_and(|info| info.wire_api.native_provider_id().is_some());
+            .is_some_and(|info| info.native_provider_id().is_some());
         if native
             && provider.is_none()
             && !overrides.is_some_and(|values| values.contains_key("model_provider"))

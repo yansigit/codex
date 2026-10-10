@@ -1,11 +1,17 @@
-use std::io::{IsTerminal, Read};
+use std::io::IsTerminal;
+use std::io::Read;
 
-use clap::{Args, Subcommand};
-use codex_model_provider::{ModelProvider, native::NativeModelProvider};
-use codex_provider_auth::{AuthStore, TokenRecord};
+use clap::Args;
+use clap::Subcommand;
+use codex_provider_adapter::auth::TokenRecord;
+use codex_provider_adapter::backend::NativeBackend;
 use tokio_util::sync::CancellationToken;
 
-const PROVIDERS: [&str; 4] = ["cursor", "opencode-go", "claude", "antigravity"];
+fn provider_choices() -> Vec<&'static str> {
+    codex_provider_adapter::registry::descriptors()
+        .map(|provider| provider.id)
+        .collect()
+}
 
 #[derive(Debug, Args)]
 pub(crate) struct ProviderCommand {
@@ -17,7 +23,7 @@ pub(crate) struct ProviderCommand {
 enum ProviderAction {
     /// Log in to one native provider. Tokens are read from stdin, never arguments.
     Login {
-        #[arg(value_parser = PROVIDERS)]
+        #[arg(value_parser = clap::builder::PossibleValuesParser::new(provider_choices()))]
         provider: String,
         #[arg(long, default_value = "default")]
         account: String,
@@ -26,17 +32,17 @@ enum ProviderAction {
     },
     /// Remove the selected account for one provider.
     Logout {
-        #[arg(value_parser = PROVIDERS)]
+        #[arg(value_parser = clap::builder::PossibleValuesParser::new(provider_choices()))]
         provider: String,
     },
     /// Show selected native accounts without exposing credentials.
     Status {
-        #[arg(value_parser = PROVIDERS)]
+        #[arg(value_parser = clap::builder::PossibleValuesParser::new(provider_choices()))]
         provider: Option<String>,
     },
     /// Discover models using the selected provider account.
     Models {
-        #[arg(value_parser = PROVIDERS)]
+        #[arg(value_parser = clap::builder::PossibleValuesParser::new(provider_choices()))]
         provider: String,
     },
 }
@@ -51,17 +57,16 @@ impl ProviderCommand {
         )
         .await?;
         let home = config.codex_home;
-        let provider_for = |id: &str| -> anyhow::Result<NativeModelProvider> {
-            let info = if config.model_provider.wire_api.native_provider_id() == Some(id) {
+        let provider_for = |id: &str| -> anyhow::Result<NativeBackend> {
+            let info = if config.model_provider.native_provider_id() == Some(id) {
                 config.model_provider.clone()
             } else {
                 codex_model_provider_info::built_in_model_providers(None)
                     .remove(id)
                     .ok_or_else(|| anyhow::anyhow!("unknown provider"))?
             };
-            Ok(NativeModelProvider::new(info, Some(home.to_path_buf())))
+            Ok(NativeBackend::new(info, Some(home.to_path_buf())))
         };
-        let store = AuthStore::new(&home);
         let cancellation = CancellationToken::new();
         let signal = cancellation.clone();
         let listener = tokio::spawn(async move {
@@ -74,13 +79,13 @@ impl ProviderCommand {
                     for id in provider
                         .as_deref()
                         .map(|id| vec![id])
-                        .unwrap_or_else(|| PROVIDERS.to_vec())
+                        .unwrap_or_else(|| provider_choices())
                     {
                         if provider_for(id)?.has_configured_token() {
                             println!("{id}: configured token (environment or configuration)");
                             continue;
                         }
-                        match store.status(id)? {
+                        match provider_for(id)?.status()? {
                             Some(status) => println!(
                                 "{id}: {}{}",
                                 status.account,
@@ -96,7 +101,7 @@ impl ProviderCommand {
                 }
                 ProviderAction::Logout { provider } => {
                     anyhow::ensure!(!provider_for(&provider)?.has_configured_token(), "remove the configured environment or bearer token override before logging out");
-                    store.logout(&provider, &cancellation).await?;
+                    provider_for(&provider)?.logout(&cancellation).await?;
                     println!("Logged out of {provider}");
                 }
                 ProviderAction::Login {
@@ -127,21 +132,21 @@ impl ProviderCommand {
                         }
                     } else {
                         let login =
-                            codex_model_provider::native::NativeLogin::begin(&provider).await?;
+                            provider_for(&provider)?.begin_login().await?;
                         println!("Open this URL to log in to {provider}:\n{}", login.url());
                         login.finish(&cancellation).await?
                     };
-                    store
-                        .login(&provider, &account, record, &cancellation)
+                    provider_for(&provider)?
+                        .commit_login(&account, record, &cancellation)
                         .await?;
                     println!("Logged in to {provider} as {account}");
                 }
                 ProviderAction::Models { provider } => {
                     let provider = provider_for(&provider)?;
-                    let credentials = provider.native_credentials(cancellation.clone()).await?;
+                    let credentials = provider.credentials(cancellation.clone()).await?;
                     let models = provider
-                        .native_provider()?
-                        .models(codex_provider_api::Context {
+                        .provider()?
+                        .models(codex_provider_adapter::api::Context {
                             credentials,
                             cancellation,
                         })
