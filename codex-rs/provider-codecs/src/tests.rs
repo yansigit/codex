@@ -430,6 +430,39 @@ fn checkpoint_normalizes_text_fragments_and_allows_tool_catalog_growth() {
     assert_eq!(req.messages[1], assistant);
 }
 #[test]
+fn checkpoint_restores_signed_empty_blocks_when_host_omits_public_empty_fragments() {
+    let mut req = request("claude");
+    let call = ToolCall {
+        id: "c".into(),
+        name: "read".into(),
+        arguments: json!({"path":"a"}),
+    };
+    let assistant = Message {
+        role: Role::Assistant,
+        content: vec![
+            Content::Thinking {
+                text: String::new(),
+                signature: Some("exact-signature".into()),
+            },
+            Content::Text {
+                text: String::new(),
+            },
+            Content::ToolCall(call.clone()),
+            Content::Opaque {
+                namespace: req.namespace.clone(),
+                value: json!({"anthropic_blocks":[{"type":"thinking","thinking":"","signature":"exact-signature"},{"type":"tool_use","id":"c","name":"Read","input":{"path":"a"}}]}),
+            },
+        ],
+    };
+    req.checkpoint = Some(crate::replay::checkpoint(&req, &assistant).unwrap());
+    req.messages.push(Message {
+        role: Role::Assistant,
+        content: vec![Content::ToolCall(call)],
+    });
+    restore_checkpoint(&mut req).unwrap();
+    assert_eq!(req.messages[1], assistant);
+}
+#[test]
 fn chat_assistant_history_uses_plain_text_and_deepseek_thinking_enablement() {
     let mut req = request("opencode-go");
     req.reasoning_effort = Some("high".into());
