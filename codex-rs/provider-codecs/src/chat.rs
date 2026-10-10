@@ -1,7 +1,9 @@
+use crate::ToolOutputPart;
 use crate::WireCodec;
 use crate::WireRequest;
-use crate::output_text;
 use crate::protocol;
+use crate::tool_image_url;
+use crate::tool_output;
 use codex_provider_api::*;
 use serde_json::Value;
 use serde_json::json;
@@ -53,7 +55,11 @@ impl WireCodec for ChatCodec {
         if !request.system.is_empty() {
             messages.push(json!({"role":"system","content":request.system}));
         }
+        let mut tool_images = Vec::new();
         for message in &request.messages {
+            if message.role != Role::Tool && !tool_images.is_empty() {
+                messages.push(json!({"role":"user","content":std::mem::take(&mut tool_images)}));
+            }
             let role = match message.role {
                 Role::System => "system",
                 Role::User => "user",
@@ -69,7 +75,20 @@ impl WireCodec for ChatCodec {
                     Content::Image { url } => content.push(json!({"type":"image_url","image_url":{"url":url}})),
                     Content::Thinking { text, .. } => thinking.push_str(text),
                     Content::ToolCall(call) => calls.push(json!({"id":call.id,"type":"function","function":{"name":call.name,"arguments":call.arguments.to_string()}})),
-                    Content::ToolResult(result) => messages.push(json!({"role":"tool","tool_call_id":result.call_id,"content":output_text(&result.output)})),
+                    Content::ToolResult(result) => {
+                        let mut text = Vec::new();
+                        let mut images = Vec::new();
+                        for part in tool_output(&result.output)? {
+                            match part {
+                                ToolOutputPart::Text(value) => text.push(value),
+                                ToolOutputPart::Image(image) => images.push(json!({"type":"image_url","image_url":{"url":tool_image_url(&image)?}})),
+                            }
+                        }
+                        let mut text = text.join("\n");
+                        if text.is_empty() && !images.is_empty() { text = "(see attached image)".into(); }
+                        messages.push(json!({"role":"tool","tool_call_id":result.call_id,"content":text}));
+                        tool_images.extend(images);
+                    },
                     Content::Opaque { namespace, .. } => { if namespace != &request.namespace { return Err(ProviderError::Checkpoint("Chat replay namespace mismatch".into())); } },
                 }
             }
@@ -101,6 +120,9 @@ impl WireCodec for ChatCodec {
                 }
                 messages.push(value);
             }
+        }
+        if !tool_images.is_empty() {
+            messages.push(json!({"role":"user","content":tool_images}));
         }
         let mut body = json!({"model":request.namespace.model,"messages":messages,"stream":true,"stream_options":{"include_usage":true}});
         if let Some(max) = request.max_output_tokens {

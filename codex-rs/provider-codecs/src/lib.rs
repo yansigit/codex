@@ -36,5 +36,51 @@ pub(crate) fn output_text(value: &Value) -> String {
         .unwrap_or_else(|| value.to_string())
 }
 
+/// Core tool outputs use Responses-compatible content items for multimodal results.
+/// Keep them structured; an unsupported item must not become JSON prose.
+pub(crate) enum ToolOutputPart {
+    Text(String),
+    Image(Value),
+}
+pub(crate) fn tool_output(value: &Value) -> Result<Vec<ToolOutputPart>> {
+    let Some(items) = value.as_array() else {
+        return Ok(vec![ToolOutputPart::Text(output_text(value))]);
+    };
+    items
+        .iter()
+        .map(|item| match item["type"].as_str() {
+            Some("input_text") => Ok(ToolOutputPart::Text(string(item, "text")?)),
+            Some("input_image") => {
+                let url = item["image_url"].as_str();
+                let file = item["file_id"].as_str();
+                if url.is_some() == file.is_some() {
+                    return Err(protocol(
+                        "tool image requires exactly one image_url or file_id",
+                    ));
+                }
+                Ok(ToolOutputPart::Image(item.clone()))
+            }
+            _ => Err(ProviderError::Unsupported(
+                "tool output content item type".into(),
+            )),
+        })
+        .collect()
+}
+pub(crate) fn tool_image_url(image: &Value) -> Result<&str> {
+    image["image_url"].as_str().ok_or_else(|| {
+        ProviderError::Unsupported("this protocol cannot resolve a tool image file_id".into())
+    })
+}
+pub(crate) fn image_source(url: &str) -> Result<Value> {
+    if let Some(data) = url.strip_prefix("data:") {
+        let (mime, data) = data
+            .split_once(";base64,")
+            .ok_or_else(|| protocol("image must be a base64 data URL"))?;
+        Ok(serde_json::json!({"type":"base64","media_type":mime,"data":data}))
+    } else {
+        Ok(serde_json::json!({"type":"url","url":url}))
+    }
+}
+
 #[cfg(test)]
 mod tests;
