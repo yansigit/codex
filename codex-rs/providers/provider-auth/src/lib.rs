@@ -1,4 +1,4 @@
-//! Isolated native-provider credentials and durable continuation state.
+//! Isolated native-provider credentials and private atomic storage.
 mod loopback;
 mod oauth;
 mod store;
