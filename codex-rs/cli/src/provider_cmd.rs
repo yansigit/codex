@@ -163,3 +163,28 @@ impl ProviderCommand {
         result
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::ProviderCommand;
+    use clap::Args;
+
+    #[test]
+    fn provider_cli_parses_each_supported_provider_and_rejects_unknown_values() {
+        let command = ProviderCommand::augment_args(clap::Command::new("provider"));
+        for provider in ["cursor", "opencode-go", "claude", "antigravity"] {
+            assert!(
+                command
+                    .clone()
+                    .try_get_matches_from(["provider", "login", provider])
+                    .is_ok(),
+                "provider CLI should accept {provider}"
+            );
+        }
+        assert!(
+            command
+                .try_get_matches_from(["provider", "login", "unsupported-provider"])
+                .is_err()
+        );
+    }
+}

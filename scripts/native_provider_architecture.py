@@ -91,6 +91,80 @@ def registered_provider_ids(root: Path, manifest: dict[str, Any]) -> set[str]:
     }
 
 
+def production_rust_sources(root: Path, scan_roots: list[str]) -> list[Path]:
+    sources: set[Path] = set()
+    test_file = re.compile(r"(?:^|_)(?:test|tests)\.rs$")
+    for relative_root in scan_roots:
+        path = root / relative_root
+        if path.is_file() and path.suffix == ".rs":
+            candidates = [path]
+        elif path.is_dir():
+            candidates = path.rglob("*.rs")
+        else:
+            continue
+        for candidate in candidates:
+            relative = candidate.relative_to(root).as_posix()
+            if "/tests/" in f"/{relative}/" or test_file.search(candidate.name):
+                continue
+            sources.add(candidate)
+    return sorted(sources)
+
+
+def without_inline_test_modules(source: str) -> str:
+    """Remove cfg(test) module bodies before scanning production branches."""
+    module = re.compile(
+        r"#\s*\[\s*cfg\s*\(\s*test\s*\)\s*\]\s*"
+        r"(?:pub\s+)?mod\s+\w+\s*\{"
+    )
+    pieces: list[str] = []
+    cursor = 0
+    while match := module.search(source, cursor):
+        opening = source.find("{", match.start(), match.end())
+        depth = 1
+        index = opening + 1
+        in_string = False
+        escaped = False
+        line_comment = False
+        block_depth = 0
+        while index < len(source) and depth:
+            char = source[index]
+            following = source[index : index + 2]
+            if line_comment:
+                if char == "\n":
+                    line_comment = False
+            elif block_depth:
+                if following == "/*":
+                    block_depth += 1
+                    index += 1
+                elif following == "*/":
+                    block_depth -= 1
+                    index += 1
+            elif in_string:
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == '"':
+                    in_string = False
+            elif following == "//":
+                line_comment = True
+                index += 1
+            elif following == "/*":
+                block_depth = 1
+                index += 1
+            elif char == '"':
+                in_string = True
+            elif char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+            index += 1
+        pieces.append(source[cursor : match.start()])
+        cursor = index
+    pieces.append(source[cursor:])
+    return "".join(pieces)
+
+
 def load_metadata(metadata_path: Path | None) -> dict[str, Any]:
     if metadata_path is not None:
         return json.loads(metadata_path.read_text())
@@ -157,12 +231,18 @@ def validate(
                 f"provider package is outside owned root {owned_root}: {name}"
             )
 
-    graph: dict[str, set[str]] = {package["id"]: set() for package in packages}
-    outside_path_edges: dict[tuple[str, str], str] = {}
+    workspace_ids = set(metadata.get("workspace_members", []))
+    graph: dict[str, set[tuple[str, str]]] = {
+        package["id"]: set() for package in packages
+    }
     for package in packages:
         for dependency in package.get("dependencies", []):
             dependency_name = dependency.get("name")
-            candidates = by_name.get(dependency_name, [])
+            candidates = [
+                candidate
+                for candidate in by_name.get(dependency_name, [])
+                if candidate["id"] in workspace_ids
+            ]
             dependency_path = dependency.get("path")
             if dependency_path:
                 resolved_dependency_path = Path(dependency_path).resolve()
@@ -178,14 +258,12 @@ def validate(
                 ]
                 if path_candidates:
                     candidates = path_candidates
-                elif not resolved_dependency_path.is_relative_to(owned_root):
-                    outside_path_edges[(package["id"], dependency_name)] = str(
-                        resolved_dependency_path
-                    )
             elif dependency.get("source") is not None:
                 candidates = []
             for candidate in candidates:
-                graph.setdefault(package["id"], set()).add(candidate["id"])
+                graph.setdefault(package["id"], set()).add(
+                    (candidate["id"], dependency.get("kind") or "normal")
+                )
 
     # Cargo's resolved nodes include renamed dependencies and package identities;
     # include those edges as well as every declared dependency (including optional
@@ -196,8 +274,18 @@ def validate(
             continue
         for dependency in node.get("deps", []):
             dependency_id = dependency.get("pkg")
-            if dependency_id in by_id:
-                graph.setdefault(package_id, set()).add(dependency_id)
+            if dependency_id in by_id and dependency_id in workspace_ids:
+                dep_kinds = dependency.get("dep_kinds") or [{"kind": None}]
+                for dep_kind in dep_kinds:
+                    graph.setdefault(package_id, set()).add(
+                        (dependency_id, dep_kind.get("kind") or "normal")
+                    )
+
+    owned_ids = {
+        package["id"]
+        for package in packages
+        if Path(package["manifest_path"]).resolve().is_relative_to(owned_root)
+    }
 
     for root_name in sorted(expected_owned):
         if root_name not in by_name:
@@ -216,9 +304,8 @@ def validate(
                 package = by_id.get(package_id)
                 if package is None:
                     continue
-                package_path = Path(package["manifest_path"]).resolve()
                 package_name = package["name"]
-                is_inside_owned_root = package_path.is_relative_to(owned_root)
+                is_inside_owned_root = package_id in owned_ids
                 if package_name == "codex-core":
                     errors.append(
                         f"owned package {root_name} reaches codex-core through "
@@ -231,19 +318,20 @@ def validate(
                         f"package {package_name} through " + " -> ".join(chain)
                     )
                     continue
-                for dependency_id in sorted(graph.get(package_id, set())):
+                for dependency_id, dependency_kind in sorted(
+                    graph.get(package_id, set())
+                ):
+                    if not is_inside_owned_root and dependency_kind not in {
+                        "normal",
+                        "build",
+                    }:
+                        continue
                     dependency_package = by_id[dependency_id]
                     stack.append((dependency_id, (*chain, dependency_package["name"])))
-                for (source_id, dependency_name), path in outside_path_edges.items():
-                    if source_id == package_id and not allowed_upstream:
-                        errors.append(
-                            f"subsystem package {root_name} reaches upstream path "
-                            f"dependency {dependency_name} through "
-                            + " -> ".join((*chain, f"{dependency_name} ({path})"))
-                        )
 
     branch_scan = manifest.get("provider_branch_scan", {})
     scan_paths = branch_scan.get("paths", [])
+    scan_roots = branch_scan.get("scan_roots", [])
     compatibility_paths = set(branch_scan.get("allowed_compatibility_paths", []))
     provider_ids = branch_scan.get("provider_ids", [])
     provider_symbols = list(branch_scan.get("provider_symbols", []))
@@ -251,9 +339,10 @@ def validate(
         f"codex_provider_{provider_id.replace('-', '_')}"
         for provider_id in provider_ids
     )
-    if not scan_paths or not provider_ids or not provider_symbols:
+    if not scan_paths or not scan_roots or not provider_ids or not provider_symbols:
         errors.append(
-            "provider_branch_scan must name scan paths, provider_ids, and provider_symbols"
+            "provider_branch_scan must name scan paths, scan_roots, provider_ids, "
+            "and provider_symbols"
         )
     source_ids = registered_provider_ids(root, manifest)
     if not source_ids:
@@ -270,14 +359,21 @@ def validate(
         if provider_ids and provider_symbols
         else ()
     )
+    source_paths = production_rust_sources(root, scan_roots)
     for scan_path in scan_paths:
-        if scan_path in compatibility_paths:
-            continue
         path = root / scan_path
         if not path.is_file():
             errors.append(f"provider branch scan path is missing: {scan_path}")
+        elif path not in source_paths:
+            source_paths.append(path)
+    for path in sorted(set(source_paths)):
+        scan_path = path.relative_to(root).as_posix()
+        if scan_path in compatibility_paths:
             continue
-        source = path.read_text()
+        if not path.is_file():
+            errors.append(f"provider branch scan path is missing: {scan_path}")
+            continue
+        source = without_inline_test_modules(path.read_text())
         if any(pattern.search(source) for pattern in branch_patterns):
             errors.append(
                 f"provider-specific execution branch found outside registry: {scan_path}"

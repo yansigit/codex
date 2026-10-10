@@ -27,6 +27,8 @@ def run_checks(root: Path, artifact_dir: Path) -> list[dict[str, Any]]:
     stages: list[dict[str, Any]] = []
     env = os.environ.copy()
     env["CARGO_TERM_COLOR"] = "never"
+    env["CARGO_BUILD_JOBS"] = "2"
+    env["CARGO_INCREMENTAL"] = "0"
     revision = subprocess.run(
         ["git", "rev-parse", "HEAD"],
         cwd=root,
@@ -122,6 +124,7 @@ def run_checks(root: Path, artifact_dir: Path) -> list[dict[str, Any]]:
             "fmt",
             "--manifest-path",
             "codex-rs/Cargo.toml",
+            "--all",
             "--",
             "--config",
             "imports_granularity=Item",
@@ -147,6 +150,8 @@ def run_checks(root: Path, artifact_dir: Path) -> list[dict[str, Any]]:
         if "test_target" in group:
             if group["test_target"] == "lib":
                 command.append("--lib")
+            elif group["test_target"].startswith("bin:"):
+                command.extend(["--bin", group["test_target"].removeprefix("bin:")])
             else:
                 command.extend(["--test", group["test_target"]])
         if "filter" in group:
@@ -154,6 +159,29 @@ def run_checks(root: Path, artifact_dir: Path) -> list[dict[str, Any]]:
         if "test_threads" in group:
             command.extend(["--", "--test-threads", str(group["test_threads"])])
         run_stage(group["name"], command, group.get("minimum_tests"))
+
+    registry = "codex-provider-registry"
+    for name, feature_args in (
+        ("registry-metadata-only", ["--no-default-features"]),
+        (
+            "registry-runtime-only",
+            ["--no-default-features", "--features", "runtime"],
+        ),
+    ):
+        run_stage(
+            name,
+            [
+                "cargo",
+                "test",
+                "--manifest-path",
+                "codex-rs/Cargo.toml",
+                "-p",
+                registry,
+                *feature_args,
+                "--lib",
+            ],
+            minimum_tests=1,
+        )
 
     run_stage(
         "cli-build",

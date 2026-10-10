@@ -57,6 +57,7 @@ class NativeProviderArchitectureTests(unittest.TestCase):
             "integration_hooks": hooks,
             "provider_branch_scan": {
                 "paths": ["codex-rs/integration.rs"],
+                "scan_roots": ["codex-rs/core/src"],
                 "allowed_compatibility_paths": [],
                 "provider_ids": ["cursor", "claude"],
                 "provider_symbols": ["WireApi::Cursor", "codex_provider_cursor"],
@@ -142,12 +143,88 @@ class NativeProviderArchitectureTests(unittest.TestCase):
         errors = architecture.validate(self.metadata, self.manifest, self.root)
         self.assertTrue(any("codex-new-integration" in error for error in errors))
 
+    def test_third_party_registry_package_outside_workspace_is_allowed(self) -> None:
+        third_party = package("tokio", str(self.root / "registry/tokio/Cargo.toml"))
+        third_party["source"] = "registry+https://example.invalid"
+        self.metadata["packages"].append(third_party)
+        runtime = self.metadata["packages"][0]
+        runtime["dependencies"] = [
+            {
+                "name": "tokio",
+                "source": "registry+https://example.invalid",
+                "kind": None,
+            }
+        ]
+        errors = architecture.validate(self.metadata, self.manifest, self.root)
+        self.assertFalse(any("tokio" in error for error in errors))
+
+    def test_subsystem_dev_dependency_on_upstream_workspace_package_is_rejected(
+        self,
+    ) -> None:
+        self.metadata["packages"][0]["dependencies"] = [
+            {"name": "codex-config", "kind": "dev"}
+        ]
+        errors = architecture.validate(self.metadata, self.manifest, self.root)
+        self.assertTrue(any("codex-config" in error for error in errors))
+
+    def test_adapter_skips_upstream_dev_only_transitive_test_dependencies(self) -> None:
+        models_manager = package(
+            "codex-models-manager",
+            str(self.root / "codex-rs/models-manager/Cargo.toml"),
+        )
+        models_manager["dependencies"] = [{"name": "core_test_support", "kind": "dev"}]
+        test_support = package(
+            "core_test_support",
+            str(self.root / "codex-rs/core/tests/common/Cargo.toml"),
+        )
+        test_support["dependencies"] = [{"name": "codex-core", "kind": None}]
+        self.metadata["packages"].extend([models_manager, test_support])
+        self.metadata["workspace_members"].extend(
+            [models_manager["id"], test_support["id"]]
+        )
+        adapter = next(
+            package
+            for package in self.metadata["packages"]
+            if package["name"] == "codex-provider-adapter"
+        )
+        adapter["dependencies"].append({"name": "codex-models-manager", "kind": None})
+        errors = architecture.validate(self.metadata, self.manifest, self.root)
+        self.assertFalse(any("reaches codex-core" in error for error in errors))
+
     def test_provider_specific_execution_branch_is_rejected(self) -> None:
         (self.root / "codex-rs/integration.rs").write_text(
             'if request\n    .provider\n    == "cursor" {\n    route_cursor();\n}\n'
         )
         errors = architecture.validate(self.metadata, self.manifest, self.root)
         self.assertTrue(
+            any("provider-specific execution branch" in error for error in errors)
+        )
+
+    def test_new_production_helper_is_scanned_but_test_code_is_skipped(self) -> None:
+        helper = self.root / "codex-rs/core/src/provider_helper.rs"
+        helper.write_text(
+            "pub fn route(provider_id: &str) {\n"
+            '    if provider_id == "claude" { route_claude(); }\n'
+            "}\n"
+        )
+        errors = architecture.validate(self.metadata, self.manifest, self.root)
+        self.assertTrue(
+            any("provider-specific execution branch" in error for error in errors)
+        )
+        helper.write_text(
+            "#[cfg(test)]\n"
+            "mod tests {\n"
+            '    fn test_route() { if provider_id == "claude" { } }\n'
+            "}\n"
+        )
+        errors = architecture.validate(self.metadata, self.manifest, self.root)
+        self.assertFalse(
+            any("provider-specific execution branch" in error for error in errors)
+        )
+        test_file = self.root / "codex-rs/core/src/provider_helper_tests.rs"
+        test_file.write_text('if provider_id == "claude" { route_claude(); }\n')
+        errors = architecture.validate(self.metadata, self.manifest, self.root)
+        self.assertFalse(
             any("provider-specific execution branch" in error for error in errors)
         )
 
