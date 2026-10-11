@@ -738,6 +738,10 @@ impl StatusHistoryCell {
         let mut lines = Vec::new();
 
         let account_value = self.account.as_ref().map(|account| match account {
+            StatusAccountDisplay::Native {
+                provider,
+                account_id,
+            } => format!("{account_id} ({provider})"),
             StatusAccountDisplay::ChatGpt { email, plan } => match (email, plan) {
                 (Some(email), Some(plan)) => format!("{email} ({plan})"),
                 (Some(email), None) => email.clone(),

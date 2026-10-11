@@ -149,7 +149,6 @@ use codex_model_provider::create_model_provider;
 #[cfg(test)]
 use codex_model_provider_info::DEFAULT_WEBSOCKET_CONNECT_TIMEOUT_MS;
 use codex_model_provider_info::ModelProviderInfo;
-use codex_model_provider_info::WireApi;
 use codex_protocol::error::CodexErr;
 use codex_protocol::error::Result;
 use codex_response_debug_context::extract_response_debug_context;
@@ -1275,6 +1274,13 @@ impl ModelClient {
     }
 
     pub(crate) async fn prewarm_auth(&self) -> Result<()> {
+        if let Some(backend) = self.state.provider.backend() {
+            backend
+                .credentials(CancellationToken::new())
+                .await
+                .map_err(|error| CodexErr::Stream(error.to_string()))?;
+            return Ok(());
+        }
         self.current_client_setup(ClientRouting::Workspace)
             .await
             .map(|_| ())
@@ -2329,45 +2335,64 @@ impl ModelClientSession {
         responses_metadata: &CodexResponsesMetadata,
         inference_trace: &InferenceTraceContext,
     ) -> Result<ResponseStream> {
-        let wire_api = self.client.state.provider.info().wire_api;
-        match wire_api {
-            WireApi::Responses => {
-                if self.client.responses_websocket_enabled() {
-                    let request_trace = current_span_w3c_trace_context();
-                    match self
-                        .stream_responses_websocket(
-                            prompt,
-                            model_info,
-                            session_telemetry,
-                            effort.clone(),
-                            summary,
-                            service_tier.clone(),
-                            responses_metadata,
-                            /*warmup*/ false,
-                            request_trace,
-                            inference_trace,
-                        )
-                        .await?
-                    {
-                        WebsocketStreamOutcome::Stream(stream) => return Ok(stream),
-                        WebsocketStreamOutcome::FallbackToHttp => {
-                            self.try_switch_fallback_transport(session_telemetry, model_info);
-                        }
+        if let Some(backend) = self.client.state.provider.backend() {
+            return crate::native_provider::stream(
+                backend,
+                prompt,
+                model_info,
+                self.client.state.thread_id.to_string(),
+                effort.map(|effort| effort.to_string()),
+                format!(
+                    "{}:{:?}",
+                    responses_metadata.window_id, responses_metadata.request_kind
+                ),
+                if matches!(
+                    responses_metadata.request_kind,
+                    Some(crate::responses_metadata::CodexResponsesRequestKind::Memory)
+                ) {
+                    "memory"
+                } else {
+                    "turn"
+                },
+            )
+            .await;
+        }
+        {
+            if self.client.responses_websocket_enabled() {
+                let request_trace = current_span_w3c_trace_context();
+                match self
+                    .stream_responses_websocket(
+                        prompt,
+                        model_info,
+                        session_telemetry,
+                        effort.clone(),
+                        summary,
+                        service_tier.clone(),
+                        responses_metadata,
+                        /*warmup*/ false,
+                        request_trace,
+                        inference_trace,
+                    )
+                    .await?
+                {
+                    WebsocketStreamOutcome::Stream(stream) => return Ok(stream),
+                    WebsocketStreamOutcome::FallbackToHttp => {
+                        self.try_switch_fallback_transport(session_telemetry, model_info);
                     }
                 }
-
-                self.stream_responses_api(
-                    prompt,
-                    model_info,
-                    session_telemetry,
-                    effort,
-                    summary,
-                    service_tier,
-                    responses_metadata,
-                    inference_trace,
-                )
-                .await
             }
+
+            self.stream_responses_api(
+                prompt,
+                model_info,
+                session_telemetry,
+                effort,
+                summary,
+                service_tier,
+                responses_metadata,
+                inference_trace,
+            )
+            .await
         }
     }
 
@@ -2612,6 +2637,7 @@ where
 
     (
         ResponseStream {
+            session_control: None,
             rx_event,
             interrupt: None,
             consumer_dropped: consumer_dropped_for_stream,

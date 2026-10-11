@@ -6750,6 +6750,30 @@
         "oneOf": [
           {
             "properties": {
+              "accountId": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string"
+              },
+              "type": {
+                "enum": [
+                  "native"
+                ],
+                "title": "NativeAccountType",
+                "type": "string"
+              }
+            },
+            "required": [
+              "accountId",
+              "provider",
+              "type"
+            ],
+            "title": "NativeAccount",
+            "type": "object"
+          },
+          {
+            "properties": {
               "type": {
                 "enum": [
                   "apiKey"
@@ -14179,6 +14203,36 @@
         "oneOf": [
           {
             "properties": {
+              "accountId": {
+                "type": "string"
+              },
+              "apiKey": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "provider": {
+                "type": "string"
+              },
+              "type": {
+                "enum": [
+                  "native"
+                ],
+                "title": "Nativev2::LoginAccountParamsType",
+                "type": "string"
+              }
+            },
+            "required": [
+              "accountId",
+              "provider",
+              "type"
+            ],
+            "title": "Nativev2::LoginAccountParams",
+            "type": "object"
+          },
+          {
+            "properties": {
               "apiKey": {
                 "type": "string"
               },
@@ -14346,6 +14400,38 @@
       "LoginAccountResponse": {
         "$schema": "http://json-schema.org/draft-07/schema#",
         "oneOf": [
+          {
+            "properties": {
+              "authUrl": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "loginId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "provider": {
+                "type": "string"
+              },
+              "type": {
+                "enum": [
+                  "native"
+                ],
+                "title": "Nativev2::LoginAccountResponseType",
+                "type": "string"
+              }
+            },
+            "required": [
+              "provider",
+              "type"
+            ],
+            "title": "Nativev2::LoginAccountResponse",
+            "type": "object"
+          },
           {
             "properties": {
               "type": {

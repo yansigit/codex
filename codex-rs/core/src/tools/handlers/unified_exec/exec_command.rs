@@ -456,6 +456,18 @@ impl ExecCommandHandler {
                     hook_command: Some(hook_command),
                 }))
             }
+            Err(UnifiedExecError::Rejected { message }) => {
+                // Preserve the existing transcript text while retaining host refusal as a type.
+                let legacy_error = UnifiedExecError::create_process(format!(
+                    "{:?}",
+                    crate::tools::sandboxing::ToolError::Rejected(message)
+                ));
+                let message = format!("exec_command failed: {legacy_error:?}");
+                Err(FunctionCallError::Rejected(truncate_middle_chars(
+                    &message,
+                    EXEC_COMMAND_REJECTION_MAX_BYTES,
+                )))
+            }
             Err(err) => {
                 let message = format!("exec_command failed: {err:?}");
                 Err(FunctionCallError::RespondToModel(truncate_middle_chars(

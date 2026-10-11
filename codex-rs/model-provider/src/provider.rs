@@ -64,11 +64,15 @@ pub struct ProviderAuthRecoveryMessages {
 pub enum ProviderAccountError {
     MissingChatgptAccountDetails,
     UnsupportedBedrockApiKeyAuth,
+    NativeStateUnavailable,
 }
 
 impl fmt::Display for ProviderAccountError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::NativeStateUnavailable => {
+                write!(f, "native provider account state is unavailable")
+            }
             Self::MissingChatgptAccountDetails => {
                 write!(f, "plan type is required for chatgpt authentication")
             }
@@ -106,6 +110,9 @@ pub const DEFAULT_MEMORY_CONSOLIDATION_PREFERRED_MODEL: &str = "gpt-5.6-terra";
 /// `ModelProviderInfo` returned by `info` is the serialized/configured provider
 /// metadata used by the default OpenAI-compatible implementation.
 pub trait ModelProvider: fmt::Debug + Send + Sync {
+    fn backend(&self) -> Option<Arc<codex_provider_adapter::backend::NativeBackend>> {
+        None
+    }
     /// Returns the configured provider metadata.
     fn info(&self) -> &ModelProviderInfo;
 
@@ -337,6 +344,12 @@ pub fn create_model_provider(
     provider_info: ModelProviderInfo,
     auth_manager: Option<Arc<AuthManager>>,
 ) -> SharedModelProvider {
+    if provider_info.wire_api != codex_model_provider_info::WireApi::Responses {
+        let home = auth_manager
+            .as_ref()
+            .map(|manager| manager.runtime_config().codex_home);
+        return Arc::new(crate::native::NativeModelProvider::new(provider_info, home));
+    }
     if provider_info.is_amazon_bedrock() {
         return Arc::new(AmazonBedrockModelProvider::new(provider_info, auth_manager));
     }
@@ -644,6 +657,7 @@ mod tests {
             gateway_oauth: None,
             aws: None,
             wire_api: WireApi::Responses,
+            native_provider: None,
             query_params: None,
             http_headers: None,
             env_http_headers: None,
@@ -1402,5 +1416,22 @@ printf '%s\n' '{"AccessKeyId":"exported","SecretAccessKey":"secret"}'
                 );
             }
         }
+    }
+    #[test]
+    fn incomplete_native_configuration_keeps_native_backend_and_returns_error() {
+        let provider = create_model_provider(
+            ModelProviderInfo {
+                wire_api: WireApi::Native,
+                ..Default::default()
+            },
+            None,
+        );
+        let backend = provider.backend().unwrap();
+        assert!(backend.descriptor().is_err());
+        assert!(backend.provider().is_err());
+        assert_eq!(
+            provider.account_state(),
+            Err(ProviderAccountError::NativeStateUnavailable)
+        );
     }
 }

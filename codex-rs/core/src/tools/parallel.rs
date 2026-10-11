@@ -42,8 +42,16 @@ struct ToolCallTimingGuard {
     extensions: Arc<codex_extension_api::ExtensionRegistry<crate::config::Config>>,
 }
 
+/// Execution details retained separately from the model-visible history item.
+pub(crate) struct HostExecutionOutput {
+    pub structured: serde_json::Value,
+    pub denied: bool,
+}
+
 #[derive(Clone)]
 pub(crate) struct ToolCallRuntime {
+    execution_outputs:
+        Arc<std::sync::Mutex<std::collections::HashMap<String, HostExecutionOutput>>>,
     session: Arc<Session>,
     // Tool calls may run later, so retain the step whose tool list advertised them.
     step_context: Arc<StepContext>,
@@ -58,11 +66,19 @@ impl ToolCallRuntime {
         tracker: SharedTurnDiffTracker,
     ) -> Self {
         Self {
+            execution_outputs: Arc::default(),
             session,
             step_context,
             tracker,
             parallel_execution: Arc::new(RwLock::new(())),
         }
+    }
+
+    pub(crate) fn take_execution_output(&self, call_id: &str) -> Option<HostExecutionOutput> {
+        self.execution_outputs
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(call_id)
     }
 
     pub(crate) fn create_diff_consumer(
@@ -81,6 +97,14 @@ impl ToolCallRuntime {
         cancellation_token: CancellationToken,
     ) -> impl std::future::Future<Output = Result<ResponseItemEnvelope, CodexErr>> {
         let error_call = call.clone();
+        let execution_outputs = Arc::clone(&self.execution_outputs);
+        let capture_execution = self
+            .step_context
+            .turn
+            .provider
+            .backend()
+            .is_some_and(|backend| backend.session_capabilities().structured_host_completion);
+        let execution_call_id = call.call_id.clone();
         let source = call.direct_source();
         let recorder = self.session.services.executed_tool_calls.clone();
         let recorded_call = recorder.prepare_direct_call(&call, &source, &self.step_context);
@@ -99,6 +123,18 @@ impl ToolCallRuntime {
                 recorded_call.filter(|(_, recording)| recording.strong_count() > 0);
             let mut response = match result {
                 Ok(result) => {
+                    if capture_execution {
+                        execution_outputs
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner)
+                            .insert(
+                                execution_call_id,
+                                HostExecutionOutput {
+                                    structured: result.result.code_mode_result(&result.payload),
+                                    denied: false,
+                                },
+                            );
+                    }
                     if let Some((call, _)) = recorded_call.as_mut()
                         && let Some(metadata) = result.result.tool_result_metadata()
                     {
@@ -108,6 +144,18 @@ impl ToolCallRuntime {
                 }
                 Err(FunctionCallError::Fatal(message)) => return Err(CodexErr::Fatal(message)),
                 Err(other) => {
+                    if capture_execution && let FunctionCallError::Rejected(reason) = &other {
+                        execution_outputs
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner)
+                            .insert(
+                                execution_call_id,
+                                HostExecutionOutput {
+                                    structured: serde_json::json!({"rejected":true,"reason":reason}),
+                                    denied: true,
+                                },
+                            );
+                    }
                     ResponseItemEnvelope::new(Self::failure_response(error_call, other).into())
                 }
             };

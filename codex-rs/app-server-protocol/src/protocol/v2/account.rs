@@ -20,6 +20,12 @@ use std::fmt;
 #[ts(tag = "type")]
 #[ts(export_to = "v2/")]
 pub enum Account {
+    #[serde(rename = "native", rename_all = "camelCase")]
+    #[ts(rename = "native", rename_all = "camelCase")]
+    Native {
+        provider: String,
+        account_id: String,
+    },
     #[serde(rename = "apiKey", rename_all = "camelCase")]
     #[ts(rename = "apiKey", rename_all = "camelCase")]
     ApiKey {},
@@ -46,6 +52,13 @@ pub enum Account {
 impl From<ProviderAccount> for Account {
     fn from(account: ProviderAccount) -> Self {
         match account {
+            ProviderAccount::Native {
+                provider,
+                account_id,
+            } => Self::Native {
+                provider,
+                account_id,
+            },
             ProviderAccount::ApiKey => Self::ApiKey {},
             ProviderAccount::Chatgpt { email, plan_type } => Self::Chatgpt { email, plan_type },
             ProviderAccount::AmazonBedrock {
@@ -62,6 +75,13 @@ impl From<ProviderAccount> for Account {
 #[ts(tag = "type")]
 #[ts(export_to = "v2/")]
 pub enum LoginAccountParams {
+    #[serde(rename = "native", rename_all = "camelCase")]
+    #[ts(rename = "native", rename_all = "camelCase")]
+    Native {
+        provider: String,
+        account_id: String,
+        api_key: Option<String>,
+    },
     #[serde(rename = "apiKey", rename_all = "camelCase")]
     #[ts(rename = "apiKey", rename_all = "camelCase")]
     ApiKey {
@@ -134,6 +154,13 @@ pub enum LoginAppBrand {
 #[ts(tag = "type")]
 #[ts(export_to = "v2/")]
 pub enum LoginAccountResponse {
+    #[serde(rename = "native", rename_all = "camelCase")]
+    #[ts(rename = "native", rename_all = "camelCase")]
+    Native {
+        provider: String,
+        login_id: Option<String>,
+        auth_url: Option<String>,
+    },
     #[serde(rename = "apiKey", rename_all = "camelCase")]
     #[ts(rename = "apiKey", rename_all = "camelCase")]
     ApiKey {},

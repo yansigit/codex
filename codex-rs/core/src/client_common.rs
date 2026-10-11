@@ -116,6 +116,7 @@ fn normalize_image_detail(detail: &mut Option<ImageDetail>, model_info: &ModelIn
 }
 
 pub struct ResponseStream {
+    pub(crate) session_control: Option<codex_provider_adapter::SessionControl>,
     pub(crate) rx_event: mpsc::Receiver<Result<ResponseEvent>>,
     pub(crate) interrupt: Option<oneshot::Sender<()>>,
     /// Signals the mapper task that the consumer stopped polling before the

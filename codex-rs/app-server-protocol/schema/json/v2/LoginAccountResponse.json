@@ -3,6 +3,38 @@
   "oneOf": [
     {
       "properties": {
+        "authUrl": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "loginId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "provider": {
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "native"
+          ],
+          "title": "Nativev2::LoginAccountResponseType",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "type"
+      ],
+      "title": "Nativev2::LoginAccountResponse",
+      "type": "object"
+    },
+    {
+      "properties": {
         "type": {
           "enum": [
             "apiKey"

@@ -2302,6 +2302,13 @@ impl ThreadManagerState {
         };
         let attachment_source =
             forked_from_thread_id.filter(|_| matches!(&initial_history, InitialHistory::Forked(_)));
+        // Per-thread native selections must not inherit the global provider's
+        // model catalog (including OpenAI-only tool modes and capabilities).
+        let models_manager = if config.model_provider.native_provider_id().is_some() {
+            build_models_manager(&config, Arc::clone(&auth_manager))
+        } else {
+            Arc::clone(&self.models_manager)
+        };
         let spawn_result = Session::spawn(SessionSpawnArgs {
             startup,
             config,
@@ -2309,7 +2316,7 @@ impl ThreadManagerState {
             instructions,
             installation_id: self.installation_id.clone(),
             auth_manager,
-            models_manager: Arc::clone(&self.models_manager),
+            models_manager,
             git_root_discovery: Arc::clone(&self.git_root_discovery),
             environment_manager: Arc::clone(&self.environment_manager),
             skills_service: Arc::clone(&self.skills_service),

@@ -7,6 +7,8 @@ use thiserror::Error;
 pub(crate) enum UnifiedExecError {
     #[error("Failed to create unified exec process: {message}")]
     CreateProcess { message: String },
+    #[error("Unified exec request rejected: {message}")]
+    Rejected { message: String },
     #[error("Unified exec process failed: {message}")]
     ProcessFailed { message: String },
     // The model is trained on `session_id`, but internally we track a `process_id`.

@@ -1673,6 +1673,35 @@ impl ThreadRequestProcessor {
         Ok(())
     }
 
+    fn inherit_native_provider(
+        &self,
+        source: &StoredThread,
+        model: Option<String>,
+        provider: Option<String>,
+        overrides: Option<&HashMap<String, serde_json::Value>>,
+    ) -> (Option<String>, Option<String>) {
+        let native = self
+            .config
+            .model_providers
+            .get(&source.model_provider)
+            .is_some_and(|info| info.native_provider_id().is_some());
+        if native
+            && provider.is_none()
+            && !overrides.is_some_and(|values| values.contains_key("model_provider"))
+        {
+            let model = if model.is_none()
+                && !overrides.is_some_and(|values| values.contains_key("model"))
+            {
+                source.model.clone()
+            } else {
+                model
+            };
+            (model, Some(source.model_provider.clone()))
+        } else {
+            (model, provider)
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn build_thread_config_overrides(
         &self,
@@ -4105,6 +4134,17 @@ impl ThreadRequestProcessor {
                 runtime_workspace_roots = Some(resolve_runtime_workspace_roots(restored_roots));
             }
         }
+        // A saved native thread must not silently return to the server's
+        // default Responses provider when resumed without explicit overrides.
+        let (model, model_provider) = match resume_source_thread.as_ref() {
+            Some(source) => self.inherit_native_provider(
+                source,
+                model,
+                model_provider,
+                request_overrides.as_ref(),
+            ),
+            None => (model, model_provider),
+        };
         let mut typesafe_overrides = self.build_thread_config_overrides(
             model,
             model_provider,
@@ -5270,6 +5310,12 @@ impl ThreadRequestProcessor {
             Some(cli_overrides)
         };
         let runtime_workspace_roots = runtime_workspace_roots.map(resolve_runtime_workspace_roots);
+        let (model, model_provider) = self.inherit_native_provider(
+            &source_thread,
+            model,
+            model_provider,
+            request_overrides.as_ref(),
+        );
         let mut typesafe_overrides = self.build_thread_config_overrides(
             model,
             model_provider,
