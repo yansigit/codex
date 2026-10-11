@@ -21,6 +21,120 @@ use serde_json::json;
 use test_case::test_case;
 use tokio::sync::oneshot;
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn native_provider_mail_waits_for_durable_completion_and_preserves_tools()
+-> anyhow::Result<()> {
+    let completed = |id: &str, output: Value| {
+        let mut event = responses::ev_completed(id);
+        event["response"]["output"] = output;
+        event
+    };
+    let (release, gate) = oneshot::channel();
+    let (streaming, _) = start_streaming_sse_server(vec![
+        vec![
+            StreamingSseChunk { gate: None, body: responses::sse(vec![responses::ev_reasoning_summary_text_delta("Preparing the action")]) },
+            StreamingSseChunk { gate: Some(gate), body: responses::sse(vec![completed("first", json!([
+                {"type":"reasoning","id":"thinking","summary":[{"type":"summary_text","text":"Preparing the action"}]},
+                {"type":"function_call","call_id":"planned-action","name":"update_plan","arguments":"{\"plan\":[{\"step\":\"Reply to the user\",\"status\":\"in_progress\"}]}"}
+            ]))]) },
+        ],
+        vec![StreamingSseChunk { gate: None, body: responses::sse(vec![completed("tool-done", json!([
+            {"type":"message","role":"assistant","content":[{"type":"output_text","text":"Plan recorded."}]}
+        ]))]) }],
+        vec![StreamingSseChunk { gate: None, body: responses::sse(vec![completed("mail-done", json!([
+            {"type":"message","role":"assistant","content":[{"type":"output_text","text":"Worker update received."}]}
+        ]))]) }],
+    ]).await;
+    let config_server = responses::start_mock_server().await;
+    let base_url = streaming.uri().to_owned();
+    let test = test_codex()
+        .with_model("gpt-6-luna")
+        .with_config(move |config| {
+            config.model_provider_id = "opencode-go".into();
+            config.model_provider = config.model_providers["opencode-go"].clone();
+            config.model_provider.base_url = Some(base_url);
+            config.model_provider.experimental_bearer_token =
+                Some("fixture-token".to_string().into());
+            config.model_catalog = None;
+            config.update_plan_enabled = true;
+            config
+                .features
+                .disable(Feature::Apps)
+                .expect("disable unrelated apps");
+            config
+                .features
+                .disable(Feature::DeferMailboxPreemption)
+                .expect("exercise backend policy independently of the user feature");
+        })
+        .build_with_auto_env(&config_server)
+        .await?;
+    test.codex
+        .start_or_steer_turn(TurnInputRequest::user_input(vec![super::text(
+            "Update the plan.",
+        )]))
+        .await?;
+    wait_for_event(&test.codex, |event| {
+        matches!(event, EventMsg::ReasoningContentDelta(_))
+    })
+    .await;
+    test.codex
+        .submit(Op::InterAgentCommunication {
+            communication: InterAgentCommunication::new(
+                AgentPath::root().join("worker").expect("worker path"),
+                AgentPath::root(),
+                Vec::new(),
+                "Worker found the result.".into(),
+                false,
+            ),
+            start_options: Default::default(),
+        })
+        .await?;
+    test.codex
+        .submit(Op::RealtimeConversationListVoices)
+        .await?;
+    wait_for_event(&test.codex, |event| {
+        matches!(event, EventMsg::RealtimeConversationListVoicesResponse(_))
+    })
+    .await;
+    release.send(()).expect("release native inference");
+    wait_for_event(&test.codex, |event| {
+        matches!(event, EventMsg::TurnComplete(_))
+    })
+    .await;
+    let requests = streaming
+        .requests()
+        .await
+        .iter()
+        .map(|body| serde_json::from_slice::<Value>(body))
+        .collect::<serde_json::Result<Vec<_>>>()?;
+    assert_eq!(
+        requests.len(),
+        3,
+        "finish the tool round, then deliver the queued mail"
+    );
+    let outputs = requests[1]["input"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|item| item["type"] == "function_call_output")
+        .collect::<Vec<_>>();
+    assert_eq!(outputs.len(), 1);
+    assert_eq!(outputs[0]["call_id"], "planned-action");
+    assert_eq!(outputs[0]["output"], "Plan updated");
+    assert!(
+        !requests[1]["input"]
+            .to_string()
+            .contains("Worker found the result.")
+    );
+    assert!(
+        requests[2]["input"]
+            .to_string()
+            .contains("Worker found the result.")
+    );
+    streaming.shutdown().await;
+    Ok(())
+}
+
 #[derive(Clone, Copy)]
 enum Boundary {
     Reasoning,

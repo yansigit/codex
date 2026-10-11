@@ -50,6 +50,91 @@ fn feed(codec: &mut dyn WireCodec, value: serde_json::Value) -> Vec<Event> {
 }
 
 #[test]
+fn responses_preserves_optional_tool_arguments() {
+    let mut req = request("opencode-go");
+    let parameters = json!({
+        "type": "object",
+        "properties": {
+            "message": {"type": "string"},
+            "model_provider": {"type": "string"},
+            "reasoning_effort": {"type": "string"}
+        },
+        "required": ["message"],
+        "additionalProperties": false
+    });
+    req.tools[0].name = "spawn_agent".into();
+    req.tools[0].parameters = parameters.clone();
+    let codec = ResponsesCodec::new(
+        "https://example.invalid".into(),
+        BTreeMap::new(),
+        &req.tools,
+    );
+    let wire = codec.request(&req, &context()).unwrap();
+    assert_eq!(wire.body["tools"][0]["strict"], false);
+    assert_eq!(wire.body["tools"][0]["parameters"], parameters);
+}
+
+#[test]
+fn responses_refuses_unexpected_encrypted_tool_arguments() {
+    let req = request("opencode-go");
+    let mut codec = ResponsesCodec::new("x".into(), BTreeMap::new(), &req.tools);
+    feed(
+        &mut codec,
+        json!({"type":"response.completed","response":{"id":"fixture","output":[{"type":"function_call","call_id":"call-1","name":"read","arguments":"{}","encrypted_function_args":["message"]}]}}),
+    );
+    assert!(matches!(
+        codec.assistant(&req.namespace),
+        Err(ProviderError::Unsupported(_))
+    ));
+}
+
+#[test]
+fn google_expands_local_schema_references_without_losing_constraints_or_literal_data() {
+    let mut req = request("antigravity");
+    req.tools[0].parameters = json!({"type":"object","properties":{
+        "first":{"$ref":"#/$defs/Label"}, "second":{"$ref":"#/definitions/Alias"},
+        "$ref":{"type":"string","enum":["literal"]}
+    },"required":["first"],"additionalProperties":false,
+    "$defs":{"Label":{"type":"string","enum":["a","b"]}},
+    "definitions":{"Alias":{"$ref":"#/$defs/Label","description":"alias"}}});
+    let codec = GoogleCodec::new("x".into(), BTreeMap::new(), "project".into(), &req.tools);
+    let body = codec.request(&req, &context()).unwrap().body;
+    let parameters = &body["request"]["tools"][0]["functionDeclarations"][0]["parameters"];
+    assert_eq!(
+        parameters["properties"]["first"],
+        json!({"type":"string","enum":["a","b"]})
+    );
+    assert_eq!(
+        parameters["properties"]["second"],
+        json!({"type":"string","enum":["a","b"],"description":"alias"})
+    );
+    assert_eq!(parameters["properties"]["$ref"]["enum"], json!(["literal"]));
+    assert_eq!(parameters["required"], json!(["first"]));
+    assert!(parameters.get("$defs").is_none());
+    assert!(parameters.get("definitions").is_none());
+}
+
+#[test]
+fn google_rejects_unresolved_remote_recursive_conflicting_and_excessive_references() {
+    for schema in [
+        json!({"$ref":"https://example.invalid/schema"}),
+        json!({"$ref":"#/$defs/Missing"}),
+        json!({"$id":"https://example.invalid/schema","$ref":"#/$defs/Label","$defs":{"Label":{"type":"string"}}}),
+        json!({"$ref":"#/$defs/Node","$defs":{"Node":{"type":"object","properties":{"next":{"$ref":"#/$defs/Node"}}}}}),
+        json!({"$ref":"#/$defs/Label","type":"integer","$defs":{"Label":{"type":"string"}}}),
+        json!({"type":"object","properties":{"a":{"$ref":"#/$defs/Large"},"b":{"$ref":"#/$defs/Large"}},"$defs":{"Large":{"type":"string","description":"x".repeat(300_000)}}}),
+    ] {
+        let mut req = request("antigravity");
+        req.tools[0].parameters = schema;
+        let codec = GoogleCodec::new("x".into(), BTreeMap::new(), "project".into(), &req.tools);
+        assert!(matches!(
+            codec.request(&req, &context()),
+            Err(ProviderError::Unsupported(_))
+        ));
+    }
+}
+
+#[test]
 fn messages_preserves_thinking_signature_and_restores_tool_name() {
     let req = request("claude");
     let ctx = context();

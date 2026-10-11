@@ -7,6 +7,7 @@ use codex_protocol::error::CodexErr;
 use codex_protocol::error::Result;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::ResponseItem;
+use codex_protocol::models::plaintext_agent_message_content;
 use codex_protocol::protocol::TokenUsage;
 use codex_provider_api as api;
 use codex_provider_runtime::ChannelHost;
@@ -76,6 +77,46 @@ fn tool_name(namespace: Option<&str>, name: &str) -> String {
     }
 }
 
+/// Native agent communication is plaintext over the provider's authenticated
+/// transport. Do not request Responses-only encrypted arguments that a child on
+/// another transport cannot decode. Preserve properties named `encrypted` and
+/// literal enum/default data; only visit schema nodes.
+fn plaintext_tool_schema(schema: &Value) -> Value {
+    let mut schema = schema.clone();
+    if let Some(object) = schema.as_object_mut() {
+        object.remove("encrypted");
+        for key in ["properties", "$defs", "definitions", "patternProperties"] {
+            if let Some(children) = object.get_mut(key).and_then(Value::as_object_mut) {
+                for child in children.values_mut() {
+                    *child = plaintext_tool_schema(child);
+                }
+            }
+        }
+        for key in [
+            "items",
+            "additionalProperties",
+            "not",
+            "contains",
+            "if",
+            "then",
+            "else",
+            "propertyNames",
+        ] {
+            if let Some(child) = object.get_mut(key) {
+                *child = plaintext_tool_schema(child);
+            }
+        }
+        for key in ["anyOf", "oneOf", "allOf", "prefixItems"] {
+            if let Some(children) = object.get_mut(key).and_then(Value::as_array_mut) {
+                for child in children {
+                    *child = plaintext_tool_schema(child);
+                }
+            }
+        }
+    }
+    schema
+}
+
 fn tools(prompt: &Prompt) -> Result<(Vec<api::ToolDefinition>, BTreeMap<String, ToolTarget>)> {
     let mut definitions = vec![];
     let mut targets = BTreeMap::new();
@@ -115,7 +156,7 @@ fn tools(prompt: &Prompt) -> Result<(Vec<api::ToolDefinition>, BTreeMap<String, 
             definitions.push(api::ToolDefinition {
                 name: mapped,
                 description: entry["description"].as_str().unwrap_or_default().into(),
-                parameters: if kind == "custom" { json!({"type":"object","properties":{"input":{"type":"string"}},"required":["input"],"additionalProperties":false}) } else { entry["parameters"].clone() },
+                parameters: if kind == "custom" { json!({"type":"object","properties":{"input":{"type":"string"}},"required":["input"],"additionalProperties":false}) } else { plaintext_tool_schema(&entry["parameters"]) },
             });
         }
     }
@@ -138,6 +179,27 @@ fn push(messages: &mut Vec<api::Message>, role: api::Role, content: Vec<api::Con
 fn messages(input: &[ResponseItem]) -> Result<Vec<api::Message>> {
     let mut messages = vec![];
     for item in input {
+        if let ResponseItem::AgentMessage {
+            author,
+            recipient,
+            content,
+            ..
+        } = item
+        {
+            let text = plaintext_agent_message_content(content).ok_or_else(|| {
+                error("native provider requires a nonempty plaintext agent message; encrypted agent messages cannot cross this transport")
+            })?;
+            // Agent input is conversational input, never a system instruction. Keep
+            // attribution and all plaintext, including completion and follow-up messages.
+            push(
+                &mut messages,
+                api::Role::User,
+                vec![api::Content::Text {
+                    text: json!({"type":"agent_message","author":author,"recipient":recipient,"text":text}).to_string(),
+                }],
+            );
+            continue;
+        }
         let failed = match item {
             ResponseItem::FunctionCallOutput { output, .. }
             | ResponseItem::CustomToolCallOutput { output, .. } => output.success == Some(false),
@@ -255,7 +317,9 @@ fn call_item(
     let value = if target.custom {
         json!({"type":"custom_tool_call","call_id":call.id,"name":target.name,"namespace":target.namespace,"input":arguments["input"].as_str().ok_or_else(|| error("custom tool requires input string"))?})
     } else {
-        json!({"type":"function_call","call_id":call.id,"name":target.name,"namespace":target.namespace,"arguments":serde_json::to_string(&arguments).map_err(error)?})
+        // Native transports return plaintext arguments. An explicit empty list
+        // distinguishes that from Responses' absent/unknown encryption metadata.
+        json!({"type":"function_call","call_id":call.id,"name":target.name,"namespace":target.namespace,"arguments":serde_json::to_string(&arguments).map_err(error)?,"encrypted_function_args":[]})
     };
     serde_json::from_value(value).map_err(error)
 }
@@ -759,6 +823,34 @@ mod tests {
     }
 
     #[test]
+    fn native_tools_do_not_request_encrypted_agent_arguments() {
+        let schema = json!({"type":"object","properties":{
+            "message":{"type":"string","encrypted":true},
+            "encrypted":{"type":"boolean"},
+            "nested":{"anyOf":[{"$ref":"#/$defs/Message"}]}
+        },"$defs":{"Message":{"type":"string","encrypted":true}},
+        "default":{"encrypted":true},"required":["message"]});
+        let prompt = Prompt {
+            tools: vec![json!({"type":"function","name":"spawn_agent","parameters":schema})],
+            ..Prompt::default()
+        };
+        let (definitions, _) = tools(&prompt).unwrap();
+        let parameters = &definitions[0].parameters;
+        assert!(
+            parameters["properties"]["message"]
+                .get("encrypted")
+                .is_none()
+        );
+        assert!(parameters["$defs"]["Message"].get("encrypted").is_none());
+        assert_eq!(
+            parameters["properties"]["encrypted"],
+            json!({"type":"boolean"})
+        );
+        assert_eq!(parameters["default"], json!({"encrypted":true}));
+        assert_eq!(parameters["required"], json!(["message"]));
+    }
+
+    #[test]
     fn tools_map_namespaced_functions_and_custom_tools() {
         let prompt = Prompt {
             tools: vec![json!({"type":"namespace","name":"local","tools":[
@@ -786,6 +878,20 @@ mod tests {
                 "required":["input"], "additionalProperties":false
             })
         );
+
+        let function_call = call_item(
+            api::ToolCall {
+                id: "c1".into(),
+                name: "local__lookup".into(),
+                arguments: json!({"query":"example"}),
+            },
+            &targets,
+            None,
+        )
+        .expect("function call maps back with explicit plaintext metadata");
+        assert!(matches!(function_call, ResponseItem::FunctionCall {
+            encrypted_function_args: Some(arguments), ..
+        } if arguments.is_empty()));
 
         let custom_call = call_item(
             api::ToolCall {
@@ -832,16 +938,38 @@ mod tests {
     }
 
     #[test]
+    fn plaintext_agent_messages_preserve_attribution_and_content() {
+        let agent_message = item(
+            json!({"type":"agent_message","author":"/root","recipient":"/root/worker","content":[{"type":"input_text","text":"first task"},{"type":"input_text","text":"second line"}]}),
+        );
+        let mapped = messages(&[agent_message]).unwrap();
+        assert_eq!(mapped.len(), 1);
+        assert_eq!(mapped[0].role, api::Role::User);
+        let api::Content::Text { text } = &mapped[0].content[0] else {
+            panic!("expected attributed plaintext");
+        };
+        assert_eq!(
+            serde_json::from_str::<Value>(text).unwrap(),
+            json!({"type":"agent_message","author":"/root","recipient":"/root/worker","text":"first task\nsecond line"})
+        );
+    }
+
+    #[test]
     fn unsupported_history_and_content_formats_are_rejected() {
         let audio = item(
             json!({"type":"message","role":"user","content":[{"type":"input_audio","audio_url":"data:audio/wav;base64,AA=="}]}),
         );
         assert!(messages(&[audio]).is_err());
 
-        let agent_message = item(
-            json!({"type":"agent_message","author":"a","recipient":"b","content":[{"type":"input_text","text":"opaque"}]}),
-        );
-        assert!(messages(&[agent_message]).is_err());
+        for content in [
+            json!([{"type":"encrypted_content","encrypted_content":"opaque"}]),
+            json!([{"type":"input_text","text":"visible"},{"type":"encrypted_content","encrypted_content":"opaque"}]),
+        ] {
+            let agent_message = item(
+                json!({"type":"agent_message","author":"a","recipient":"b","content":content}),
+            );
+            assert!(messages(&[agent_message]).is_err());
+        }
 
         let malformed_call = item(
             json!({"type":"function_call","call_id":"c1","name":"read","arguments":"not json"}),

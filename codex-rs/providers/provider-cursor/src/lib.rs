@@ -40,7 +40,9 @@ use tokio_util::sync::CancellationToken;
 
 const MCP_PROVIDER: &str = "codex-native-host";
 const MAX_TOOLS: usize = 330;
-const MAX_TOOL_BYTES: usize = 120_000;
+// Local serialization bound. The full host collaboration catalog can exceed
+// 120 KB; retain its schemas and instructions instead of truncating tools.
+const MAX_TOOL_BYTES: usize = 512 * 1024;
 
 #[derive(Clone, Debug)]
 pub struct Options {
@@ -382,9 +384,9 @@ fn prepare(
         tools: tools.clone(),
     };
     if mcp.encoded_len() > MAX_TOOL_BYTES {
-        return Err(ProviderError::Unsupported(
-            "Cursor tool catalog exceeds 120000 bytes".into(),
-        ));
+        return Err(ProviderError::Unsupported(format!(
+            "Cursor tool catalog exceeds the {MAX_TOOL_BYTES}-byte local limit"
+        )));
     }
     let request_context = wire::RequestContext {
         tools,

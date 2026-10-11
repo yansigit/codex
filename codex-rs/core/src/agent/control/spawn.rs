@@ -466,6 +466,13 @@ impl LocalAgentControl {
                     ))
                 })?;
             config.model_provider_id = stored_model_provider;
+            // The live parent's catalog and model limits do not describe a
+            // child that was explicitly spawned on another provider.
+            config.model_catalog = None;
+            config.model_context_window = None;
+            config.model_auto_compact_token_limit = None;
+            config.agent_default_subagent_model = None;
+            config.agent_default_subagent_reasoning_effort = None;
         }
         let parent_thread_id = owner_thread_id
             .or_else(|| initial_history.get_resumed_parent_thread_id())

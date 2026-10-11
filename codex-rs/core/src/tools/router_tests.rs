@@ -45,6 +45,27 @@ use super::tool_log_payload;
 struct ExtensionEchoContributor;
 
 #[test]
+fn native_provider_agent_calls_preserve_plaintext_metadata_under_namespace_overrides() {
+    for namespace in ["collaboration", "delegation"] {
+        for name in ["spawn_agent", "send_message", "followup_task"] {
+            let mut call = ToolCall {
+                tool_name: ToolName::namespaced(namespace, name),
+                call_id: "fixture".into(),
+                payload: ToolPayload::Function {
+                    arguments: "{}".into(),
+                },
+                encrypted_function_args: Some(vec![]),
+            };
+            assert_eq!(call.direct_source(), ToolCallSource::DirectPlaintextMessage);
+            call.encrypted_function_args = None;
+            assert_eq!(call.direct_source(), ToolCallSource::Direct);
+            call.encrypted_function_args = Some(vec!["message".into()]);
+            assert_eq!(call.direct_source(), ToolCallSource::Direct);
+        }
+    }
+}
+
+#[test]
 fn tool_log_payload_redacts_plaintext_multi_agent_messages() {
     let payload = ToolPayload::Function {
         arguments: json!({"target": "/root/worker", "message": "secret message"}).to_string(),

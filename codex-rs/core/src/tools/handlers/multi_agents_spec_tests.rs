@@ -196,6 +196,7 @@ fn spawn_agent_tool_keeps_model_controls_when_spawn_metadata_is_hidden(
 
     assert!(!properties.contains_key("agent_type"));
     assert!(properties.contains_key("model"));
+    assert!(properties.contains_key("model_provider"));
     assert!(properties.contains_key("reasoning_effort"));
     assert!(!properties.contains_key("service_tier"));
     assert!(!description.contains(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE));
@@ -232,7 +233,13 @@ fn spawn_agent_tool_hides_model_controls_without_override_exposure() {
         .as_ref()
         .expect("spawn_agent should use object params");
 
-    for property in ["agent_type", "model", "reasoning_effort", "service_tier"] {
+    for property in [
+        "agent_type",
+        "model",
+        "model_provider",
+        "reasoning_effort",
+        "service_tier",
+    ] {
         assert!(!properties.contains_key(property));
     }
     assert!(!description.contains(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE));

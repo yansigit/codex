@@ -2869,6 +2869,10 @@ async fn try_run_sampling_request(
                 // Hosts can keep the current response intact and deliver mail before the next
                 // model request instead of cutting off its remaining tool calls.
                 if preempt_for_mailbox_mail
+                    && !stream
+                        .session_control
+                        .as_ref()
+                        .is_some_and(|control| control.capabilities.defer_mailbox_preemption)
                     && !turn_context
                         .config
                         .features
@@ -3075,7 +3079,13 @@ async fn try_run_sampling_request(
                     .is_some_and(|control| control.capabilities.terminal_completion)
                     && end_turn == Some(true)
                 {
-                    needs_follow_up = false;
+                    // Mail received during a native session is delivered only after
+                    // its completion fence is durable, before starting another request.
+                    needs_follow_up = stream
+                        .session_control
+                        .as_ref()
+                        .is_some_and(|control| control.capabilities.defer_mailbox_preemption)
+                        && sess.input_queue.has_pending_mailbox_items().await;
                 }
                 break Ok(SamplingRequestResult {
                     needs_follow_up,
