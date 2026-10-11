@@ -10,6 +10,7 @@ mod apps;
 mod client;
 mod client_common;
 mod model_request;
+mod native_provider;
 mod realtime_context;
 mod realtime_conversation;
 mod realtime_history;

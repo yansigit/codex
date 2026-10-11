@@ -5,6 +5,7 @@ mod capabilities;
 mod combined_auth;
 mod models_endpoint;
 mod models_identity;
+pub mod native;
 mod provider;
 mod shared_state;
 pub mod test_support;

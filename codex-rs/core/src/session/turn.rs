@@ -1702,6 +1702,16 @@ async fn run_sampling_request(
             },
         };
 
+        // A native session can have committed inference and tool execution before
+        // losing its stream. Resume is explicit; generic Responses retries cannot
+        // safely reconstruct that provider-owned state.
+        if turn_context
+            .provider
+            .backend()
+            .is_some_and(|backend| !backend.session_capabilities().automatic_inference_retry)
+        {
+            return Err(err);
+        }
         let original_input = original_input.get_or_insert(prompt.input);
 
         let retry = handle_response_stream_error(
@@ -2624,12 +2634,49 @@ async fn try_run_sampling_request(
             codex.usage.total_tokens = field::Empty,
         );
 
-        let event = stream
-            .next()
-            .instrument(trace_span!(parent: &handle_responses, "receiving"))
-            .or_cancel(&preempt)
-            .or_cancel(&cancellation_token)
-            .await;
+        let session_control = stream.session_control.clone();
+        let event = tokio::select! {
+            result = in_flight.next(), if session_control.is_some() && !in_flight.is_empty() => {
+                match result {
+                    Some(Ok(envelope)) => {
+                        let mut result = match crate::native_provider::tool_result(&envelope.item) {
+                            Ok(result) => result,
+                            Err(error) => break Err(error),
+                        };
+                        let execution = tool_runtime.take_execution_output(&result.call_id);
+                        mark_thread_memory_mode_polluted_if_external_context(sess.as_ref(), turn_context.as_ref(), &envelope.item).await;
+                        sess.record_annotated_conversation_items(&turn_context, &step_context.settings.model_info, vec![envelope]).await;
+                        // History applies tool-specific truncation before the next
+                        // prompt. Bind replay to those same model-visible bytes.
+                        let history = sess.clone_history().await;
+                        let recorded = history.raw_items().rev()
+                            .filter_map(|item| crate::native_provider::tool_result(item).ok())
+                            .find(|recorded| recorded.call_id == result.call_id);
+                        let Some(recorded) = recorded else {
+                            break Err(CodexErr::Stream("native tool output was not recorded in history".into()));
+                        };
+                        result.output = recorded.output;
+                        if execution.as_ref().is_some_and(|output| output.denied) {
+                            result.disposition = codex_provider_adapter::CompletionDisposition::Denied;
+                        }
+                        result.structured = execution.map(|output| output.structured);
+                        let Some(control) = session_control else {
+                            break Err(CodexErr::Stream("session tool result channel missing".into()));
+                        };
+                        if control.results.send(result).await.is_err() {
+                            break Err(CodexErr::Stream("native provider closed while a tool was running".into()));
+                        }
+                        continue;
+                    }
+                    Some(Err(error)) => break Err(error),
+                    None => continue,
+                }
+            }
+            event = stream.next()
+                .instrument(trace_span!(parent: &handle_responses, "receiving"))
+                .or_cancel(&preempt)
+                .or_cancel(&cancellation_token) => event,
+        };
         if cancellation_token.is_cancelled() {
             break Err(CodexErr::TurnAborted);
         }
@@ -2990,6 +3037,14 @@ async fn try_run_sampling_request(
                 }
                 if let Some(false) = end_turn {
                     needs_follow_up = true;
+                }
+                if stream
+                    .session_control
+                    .as_ref()
+                    .is_some_and(|control| control.capabilities.terminal_completion)
+                    && end_turn == Some(true)
+                {
+                    needs_follow_up = false;
                 }
                 break Ok(SamplingRequestResult {
                     needs_follow_up,

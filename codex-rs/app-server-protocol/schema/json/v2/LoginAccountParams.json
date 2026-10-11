@@ -12,6 +12,36 @@
   "oneOf": [
     {
       "properties": {
+        "accountId": {
+          "type": "string"
+        },
+        "apiKey": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "provider": {
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "native"
+          ],
+          "title": "Nativev2::LoginAccountParamsType",
+          "type": "string"
+        }
+      },
+      "required": [
+        "accountId",
+        "provider",
+        "type"
+      ],
+      "title": "Nativev2::LoginAccountParams",
+      "type": "object"
+    },
+    {
+      "properties": {
         "apiKey": {
           "type": "string"
         },

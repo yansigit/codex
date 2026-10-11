@@ -760,6 +760,20 @@ impl AppServerSession {
             feedback_audience,
             has_chatgpt_account,
         ) = match account.account {
+            Some(Account::Native {
+                provider,
+                account_id,
+            }) => (
+                None,
+                None,
+                Some(StatusAccountDisplay::Native {
+                    provider,
+                    account_id,
+                }),
+                None,
+                FeedbackAudience::External,
+                false,
+            ),
             Some(Account::ApiKey {}) => (
                 None,
                 Some(TelemetryAuthMode::ApiKey),

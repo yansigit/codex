@@ -50,6 +50,7 @@ message ModelProvider {
   bool supports_websockets = 17;
   bool supports_standalone_web_search = 18;
   optional string model_catalog_url = 19;
+  optional string native_provider = 20;
 }
 
 message StringMap {
@@ -67,4 +68,9 @@ message ModelProviderAuthInfo {
 enum WireApi {
   WIRE_API_UNSPECIFIED = 0;
   WIRE_API_RESPONSES = 1;
+  WIRE_API_CURSOR = 2;
+  WIRE_API_OPEN_CODE_GO = 3;
+  WIRE_API_CLAUDE = 4;
+  WIRE_API_ANTIGRAVITY = 5;
+  WIRE_API_NATIVE = 6;
 }
