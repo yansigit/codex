@@ -109,6 +109,13 @@
       "minimum_tests": 7
     },
     {
+      "name": "core-background-terminal-lifetime",
+      "packages": ["codex-core"],
+      "test_target": "all",
+      "filter": "unified_exec_interrupt_preserves_long_running_session",
+      "minimum_tests": 1
+    },
+    {
       "name": "app-server-account-and-fork",
       "packages": ["codex-app-server"],
       "test_target": "all",

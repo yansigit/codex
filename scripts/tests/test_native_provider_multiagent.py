@@ -8,6 +8,7 @@ from native_provider_acceptance import AcceptanceError
 from native_provider_multiagent_acceptance import (
     MultiagentServer,
     completed_commands,
+    fixture_terminal,
     verify_children,
 )
 
@@ -44,6 +45,24 @@ class MultiagentAcceptanceTests(unittest.TestCase):
             ("cwd", "/other"),
         ]:
             self.assertFalse(server._is_expected_approval({**params, field: value}))
+
+    def test_terminal_termination_requires_the_exact_fixture(self):
+        terminal = {
+            "command": "python3 acceptance-cancel.py",
+            "cwd": str(self.workspace),
+            "processId": "42",
+        }
+        self.assertEqual(
+            fixture_terminal([terminal], terminal["command"], self.workspace), "42"
+        )
+        for terminals in [
+            [],
+            [terminal, terminal],
+            [{**terminal, "command": "other"}],
+            [{**terminal, "cwd": "/other"}],
+        ]:
+            with self.assertRaisesRegex(AcceptanceError, "refusing termination"):
+                fixture_terminal(terminals, terminal["command"], self.workspace)
 
     def test_provider_and_model_must_both_match(self):
         verify_children(self.children, self.expected, "parent", self.workspace)

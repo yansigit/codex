@@ -72,8 +72,17 @@ child ownership, provider/model routing, effective account labels, command recor
 exact temporary file contents, chained tools, deliberate exit-code failure,
 follow-up delivery, and parent aggregation. It never accepts an agent's final
 claim as sufficient evidence. Add `--lifecycle` to exercise child approval
-decline/accept and cancellation of an active child command. The harness approves
-only its exact temporary-file command and workspace.
+decline/accept, child turn interruption, and explicit background-terminal
+termination. The harness approves only its exact temporary-file command,
+workspace, and child thread.
+
+`exec_command` creates a resumable process. `interrupt_agent` stops the child's
+turn; the process deliberately survives until explicitly terminated or the session
+shuts down. The lifecycle runner uses `thread/backgroundTerminals/terminate` for
+the exact fixture process, then waits past its delayed-write deadline to verify
+that it stopped. Interruption and process termination are separate checks. A
+rejected approval can have no command item because process creation never occurred;
+the harness requires the matching child approval request and absence of its write.
 
 Fixture threads disable connected apps and plugins by default. `--with-apps`
 advertises them too, but Antigravity currently refuses some app schemas (including
@@ -88,3 +97,43 @@ quota failures nor changes pool membership. Separate test-only transport wrapper
 cover the handoff boundaries described in [account-pools.md](account-pools.md).
 Passing representative workflows does not establish every model, tool, operating
 system, or simultaneous quota-failure combination.
+
+## Recorded acceptance, 2026-10-11
+
+Successful live workflows used managed pools in the private `.nyacode` home:
+
+| Parent                                 | Children                                                             | Effective account labels                |
+| -------------------------------------- | -------------------------------------------------------------------- | --------------------------------------- |
+| Cursor `gpt-5.6-luna-none`             | Go Chat `glm-5.3`, Antigravity Claude `claude-sonnet-4-6`            | `house`, `opencode_go_1`, `adn`         |
+| Go Responses `gpt-6-luna`              | Go Messages `minimax-m3`, Antigravity Gemini `gemini-3.5-flash-lite` | `opencode_go_1`, `opencode_go_1`, `adn` |
+| Antigravity Claude `claude-sonnet-4-6` | Go Chat `glm-5.3`, Go Responses `gpt-6-luna`                         | `adn`, `opencode_go_1`, `opencode_go_1` |
+
+The Antigravity parent also passed child approval decline/accept, turn
+interruption, and explicit terminal termination. The delayed write remained absent
+after its deadline.
+
+The [live receipts](multi-provider-agents-live.json) retain failed attempts as well
+as successful runs. Early attempts exposed adapter and mailbox bugs fixed in this
+change. Later model errors included shell quoting, a mistyped path, concurrent
+execution of dependent commands, and a parent doing work assigned to children.
+The strict fixture rejected these even when the final answer claimed success.
+Simplified commands and explicit dependency instructions improved reproducibility;
+a successful representative run is not a reliability guarantee for every model.
+
+The [deterministic check receipts](multi-provider-agents-checks.json) include the
+parallel-tool handoff regression, child routing and reload, mailbox ordering,
+schema compatibility, architecture boundaries, lint, feature builds, and Bazel.
+The shared manifest is consumed by the existing Linux workflow and upstream probe;
+those remote jobs were not dispatched in this local run.
+
+These workflows did not trigger live account exhaustion or combine live failover
+with active children. The existing [pool acceptance](account-pools-live-acceptance.json)
+uses test-only conclusive rejection injection around real transports; the new
+parallel handoff test is deterministic. Native Claude has no new two-account
+multiagent acceptance; Claude through Antigravity is a separate route.
+
+Cursor native shell requests above the host's one-hour timeout limit remain
+explicitly rejected; the fixture uses `exec_command`. Connected app schema
+restrictions, encrypted messages, cross-provider full-history forks, and unsafe
+mid-turn account handoffs retain the refusal boundaries described above and in
+[account-pools.md](account-pools.md).
