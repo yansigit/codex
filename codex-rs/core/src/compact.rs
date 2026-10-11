@@ -829,6 +829,23 @@ async fn drain_to_completed(
                     .await;
                 }
             }
+            Ok(ResponseEvent::ProviderAccountChanged {
+                provider,
+                previous,
+                account,
+            }) => {
+                sess.send_event(
+                    turn_context,
+                    EventMsg::ProviderAccountChanged(
+                        codex_protocol::protocol::ProviderAccountChangedEvent {
+                            provider,
+                            previous_account: previous,
+                            account,
+                        },
+                    ),
+                )
+                .await;
+            }
             Ok(ResponseEvent::ServerReasoningIncluded(included)) => {
                 sess.set_server_reasoning_included(included).await;
             }

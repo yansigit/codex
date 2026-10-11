@@ -24,6 +24,7 @@ pub async fn drive_session(
     let mut queued = VecDeque::<ToolCall>::new();
     let mut active_ids = HashSet::new();
     let mut completed = false;
+    let mut namespace = request.namespace.clone();
     let result = async {
         loop {
             while (request.parallel_tool_calls || pending.is_empty()) && let Some(call) = queued.pop_front() {
@@ -65,7 +66,7 @@ pub async fn drive_session(
                             queued.push_back(call.clone());
                         }
                         Event::Checkpoint(checkpoint) => {
-                            if checkpoint.version != 1 || checkpoint.namespace != request.namespace {
+                            if checkpoint.version != 1 || checkpoint.namespace != namespace {
                                 return Err(ProviderError::Checkpoint("checkpoint namespace/version mismatch".into()));
                             }
                             tokio::select! {
@@ -73,6 +74,21 @@ pub async fn drive_session(
                                 _ = events.closed() => return Err(ProviderError::Cancelled),
                                 result = host.checkpoint(checkpoint.clone()) => result?,
                             }
+                        }
+                        Event::ContinuationReady => {
+                            if !pending.is_empty() || !queued.is_empty() || !active_ids.is_empty() {
+                                return Err(ProviderError::Protocol("continuation while host work is pending".into()));
+                            }
+                            let history = host.persisted_history().await?;
+                            session.authorize_continuation(history).await?;
+                            continue;
+                        }
+                        Event::AccountChanged { namespace: next, prior_journals, .. } => {
+                            if !pending.is_empty() || !queued.is_empty() || next.provider != namespace.provider || next.model != namespace.model || next.thread != namespace.thread {
+                                return Err(ProviderError::Checkpoint("invalid account handoff boundary".into()));
+                            }
+                            host.account_changed(next.clone(), prior_journals.clone()).await?;
+                            namespace = next.clone();
                         }
                         Event::Completed { .. } => {
                             if !pending.is_empty() || !queued.is_empty() {

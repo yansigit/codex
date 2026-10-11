@@ -149,6 +149,8 @@ mod command_popup;
 pub(crate) mod custom_prompt_view;
 mod effort_status_line;
 mod experimental_features_view;
+mod provider_manager;
+pub(crate) use provider_manager::ProviderManager;
 mod file_search_popup;
 mod footer;
 mod list_selection_view;

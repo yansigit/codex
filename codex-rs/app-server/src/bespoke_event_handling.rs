@@ -272,6 +272,18 @@ pub(crate) async fn apply_bespoke_event_handling(
                 ))
                 .await;
         }
+        EventMsg::ProviderAccountChanged(event) => {
+            outgoing
+                .send_server_notification(ServerNotification::ThreadProviderAccountChanged(
+                    codex_app_server_protocol::ThreadProviderAccountChangedNotification {
+                        thread_id: conversation_id.to_string(),
+                        provider: event.provider,
+                        previous_account: event.previous_account,
+                        account: event.account,
+                    },
+                ))
+                .await;
+        }
         EventMsg::Warning(warning_event) => {
             let notification = WarningNotification {
                 thread_id: Some(conversation_id.to_string()),

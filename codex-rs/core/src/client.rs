@@ -2354,6 +2354,10 @@ impl ModelClientSession {
                 } else {
                     "turn"
                 },
+                matches!(
+                    responses_metadata.request_kind,
+                    Some(crate::responses_metadata::CodexResponsesRequestKind::Turn)
+                ),
             )
             .await;
         }

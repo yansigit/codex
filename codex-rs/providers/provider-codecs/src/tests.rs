@@ -347,6 +347,12 @@ async fn native_http_session_continues_tool_round_and_checkpoints_before_executi
         .unwrap();
     assert_eq!(
         session.next_event().await.unwrap(),
+        Some(Event::ContinuationReady)
+    );
+    assert_eq!(server.received_requests().await.unwrap().len(), 1);
+    session.continue_round().await.unwrap();
+    assert_eq!(
+        session.next_event().await.unwrap(),
         Some(Event::TextDelta("done".into()))
     );
     assert!(matches!(
@@ -648,6 +654,12 @@ async fn parallel_tool_results_preserve_original_call_order_and_wait_for_full_ba
         })
         .await
         .unwrap();
+    assert_eq!(
+        session.next_event().await.unwrap(),
+        Some(Event::ContinuationReady)
+    );
+    assert_eq!(server.received_requests().await.unwrap().len(), 1);
+    session.continue_round().await.unwrap();
     let requests = server.received_requests().await.unwrap();
     let second: serde_json::Value = serde_json::from_slice(&requests[1].body).unwrap();
     assert_eq!(second["messages"][3]["tool_call_id"], "z-call");
@@ -1141,4 +1153,51 @@ fn antigravity_claude_fresh_branch_omits_empty_canonical_text_before_interrupted
             .flat_map(|content| content["parts"].as_array().unwrap())
             .all(|part| part.get("text").is_none_or(|text| text != ""))
     );
+}
+
+#[test]
+fn account_handoff_refuses_thinking_and_unknown_replay_without_mutating_history() {
+    let mut original = request("claude");
+    original.messages.push(Message {
+        role: Role::Assistant,
+        content: vec![Content::Thinking {
+            text: "thinking".into(),
+            signature: Some("signed-original".into()),
+        }],
+    });
+    assert!(crate::portable_history(&original).is_err());
+    assert!(
+        matches!(&original.messages.last().unwrap().content[0], Content::Thinking { signature: Some(value), .. } if value == "signed-original")
+    );
+    original.messages.last_mut().unwrap().content = vec![Content::Opaque {
+        namespace: original.namespace.clone(),
+        value: json!({"anthropic_blocks":[{"type":"redacted_thinking","data":"opaque"}]}),
+    }];
+    assert!(crate::portable_history(&original).is_err());
+}
+
+#[test]
+fn account_handoff_exports_only_verified_ordinary_history() {
+    let mut original = request("claude");
+    original.messages.push(Message {
+        role: Role::Assistant,
+        content: vec![
+            Content::Text {
+                text: "recorded".into(),
+            },
+            Content::Opaque {
+                namespace: original.namespace.clone(),
+                value: json!({"anthropic_blocks":[{"type":"text","text":"recorded"}]}),
+            },
+        ],
+    });
+    let exported = crate::portable_history(&original).unwrap();
+    assert!(exported.checkpoint.is_none());
+    assert_eq!(
+        exported.messages.last().unwrap().content,
+        vec![Content::Text {
+            text: "recorded".into()
+        }]
+    );
+    assert_eq!(original.messages.last().unwrap().content.len(), 2);
 }

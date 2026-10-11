@@ -682,6 +682,11 @@ impl Session {
             )
         };
 
+        if let InitialHistory::Resumed(history) = &conversation_history {
+            models_manager.bind_thread(&history.conversation_id.to_string());
+        } else if let Some(thread) = reserved_thread_id {
+            models_manager.bind_thread(&thread.to_string());
+        }
         let mut config = Arc::new(config);
         let refresh_strategy = if session_source.is_non_root_agent() {
             codex_models_manager::manager::RefreshStrategy::Offline

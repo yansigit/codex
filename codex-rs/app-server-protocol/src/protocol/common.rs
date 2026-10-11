@@ -1298,6 +1298,23 @@ client_request_definitions! {
         response: v2::WindowsSandboxReadinessResponse,
     },
 
+    ProviderAccounts => "provider/accounts/list" {
+        params: v2::ProviderAccountsParams,
+        serialization: global_shared_read("provider-accounts"),
+        response: v2::ProviderAccountsResponse,
+    },
+    ProviderPoolUpdate => "provider/pool/update" {
+        params: v2::ProviderPoolUpdateParams,
+        serialization: global("provider-accounts"),
+        manual_payload_conversion: manual,
+        response: v2::ProviderAccountsResponse,
+    },
+    ProviderAccountLogout => "provider/account/logout" {
+        params: v2::ProviderAccountLogoutParams,
+        serialization: global("provider-accounts"),
+        manual_payload_conversion: manual,
+        response: v2::ProviderAccountsResponse,
+    },
     LoginAccount => "account/login/start" {
         params: v2::LoginAccountParams,
         inspect_params: true,
@@ -2015,6 +2032,8 @@ server_notification_definitions! {
     McpServerStatusUpdated => "mcpServer/startupStatus/updated" (v2::McpServerStatusUpdatedNotification),
     #[experimental("mcpServer/event/stream/notification")]
     McpServerEventStream => "mcpServer/event/stream/notification" (v2::McpServerEventStreamNotification),
+    ProviderPoolChanged => "provider/pool/changed" (v2::ProviderPoolChangedNotification),
+    ThreadProviderAccountChanged => "thread/providerAccount/changed" (v2::ThreadProviderAccountChangedNotification),
     AccountUpdated => "account/updated" (v2::AccountUpdatedNotification),
     GatewayOAuthChanged => "account/gatewayOAuth/changed" (v2::GatewayOAuthChangedNotification),
     AccountRateLimitsUpdated => "account/rateLimits/updated" (v2::AccountRateLimitsUpdatedNotification),

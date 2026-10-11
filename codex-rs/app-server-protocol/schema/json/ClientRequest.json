@@ -1858,6 +1858,21 @@
             "provider": {
               "type": "string"
             },
+            "select": {
+              "default": null,
+              "description": "Defaults to selecting this account, preserving existing clients.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "threadId": {
+              "default": null,
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "type": {
               "enum": [
                 "native"
@@ -2815,6 +2830,211 @@
         "recencyAt"
       ],
       "type": "string"
+    },
+    "ProviderAccountLogoutParams": {
+      "properties": {
+        "account": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "revision": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "threadId": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "account",
+        "provider",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "ProviderAccountsParams": {
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "threadId": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "provider"
+      ],
+      "type": "object"
+    },
+    "ProviderPoolUpdate": {
+      "oneOf": [
+        {
+          "properties": {
+            "action": {
+              "enum": [
+                "enable"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "title": "EnableProviderPoolUpdate",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "enum": [
+                "disable"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "title": "DisableProviderPoolUpdate",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "enum": [
+                "enroll"
+              ],
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "action",
+            "label"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "enum": [
+                "remove"
+              ],
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "action",
+            "label"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "enum": [
+                "setAccountEnabled"
+              ],
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "label": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "action",
+            "enabled",
+            "label"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "enum": [
+                "order"
+              ],
+              "type": "string"
+            },
+            "labels": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "action",
+            "labels"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "enum": [
+                "prefer"
+              ],
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "action",
+            "label"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "ProviderPoolUpdateParams": {
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "revision": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "threadId": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "update": {
+          "$ref": "#/definitions/ProviderPoolUpdate"
+        }
+      },
+      "required": [
+        "provider",
+        "revision",
+        "update"
+      ],
+      "type": "object"
     },
     "RealtimeConversationVersion": {
       "enum": [
@@ -8236,6 +8456,78 @@
         "method"
       ],
       "title": "WindowsSandbox/readinessRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "provider/accounts/list"
+          ],
+          "title": "Provider/accounts/listRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/ProviderAccountsParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Provider/accounts/listRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "provider/pool/update"
+          ],
+          "title": "Provider/pool/updateRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/ProviderPoolUpdateParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Provider/pool/updateRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "provider/account/logout"
+          ],
+          "title": "Provider/account/logoutRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/ProviderAccountLogoutParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Provider/account/logoutRequest",
       "type": "object"
     },
     {

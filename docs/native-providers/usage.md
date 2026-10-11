@@ -38,10 +38,12 @@ Availability and supported features can vary by account and model.
 The provider commands are:
 
 ```text
-codex provider login <provider> [--account <name>] [--with-token]
+codex provider login <provider> [--account <name>] [--with-token] [--add]
 codex provider status [<provider>]
-codex provider logout <provider>
+codex provider logout <provider> [--account <name>]
 codex provider models <provider>
+codex provider accounts <provider> [--json]
+codex provider pool <provider> <action>
 ```
 
 For an OAuth provider, start its browser flow and inspect status or available
@@ -78,13 +80,63 @@ codex provider login opencode-go --account work --with-token \
 codex provider status opencode-go
 ```
 
-`login` selects account `default` unless `--account` names another account.
-Each provider has one selected account at a time. Logging in selects that
-account; Codex does not automatically rotate or fall back to another account.
-`status` without a provider lists all four recognized providers and shows names
-or login state, never credential values. `logout <provider>` removes that
-provider's selected stored account; it has no account selector. `models` also
-uses the selected provider account.
+`login` selects the named account (default: `default`). `--add` saves and enrolls
+it without changing the manually selected account. Enrolling a second account
+automatically activates pooling for that provider and endpoint. An explicit
+`disable` persists across subsequent logins and membership changes. Removing
+accounts does not silently deactivate a pool.
+
+```sh
+codex provider login cursor --account personal
+codex provider login cursor --account work --add
+codex provider accounts cursor --json
+codex provider pool cursor order personal work
+codex provider pool cursor disable-account personal
+codex provider pool cursor prefer work
+codex provider pool cursor disable
+codex provider pool cursor enable
+codex provider pool cursor enroll previously-saved-label
+codex provider pool cursor remove personal
+codex provider logout cursor --account personal
+```
+
+Pool actions are `status [--json]`, `enable`, `disable`, `enroll <label>`,
+`remove <label>`, `enable-account <label>`, `disable-account <label>`,
+`order <all labels in priority order>`, and `prefer <label>`. Removal preserves
+credentials; named logout deletes credentials and fences outstanding callbacks.
+Older unselected hashed credential files are enrolled by their known label;
+they are never guessed or deleted.
+
+New conversations try eligible accounts in priority order. Existing conversations
+retain their working account, including after a higher-priority account recovers.
+The selected account pointer is never changed by automatic failover. Model,
+tools, reasoning, provider, endpoint, and billing configuration stay fixed.
+
+Use `/providers` to open the interactive account manager. It supports OAuth
+login/cancellation, masked token entry, enrollment, ordering, enablement,
+preferred selection, removal, and logout. Availability and reset/recheck times
+are shown beside accounts. OAuth URLs can be opened in the browser. The same
+backend powers CLI commands and `provider/accounts/list`, `provider/pool/update`,
+and `provider/account/logout` RPCs. RPC updates require the last observed revision;
+thread context resolves the existing endpoint configuration. Native login accepts
+optional `select` (default true) and `threadId` fields. Pool and thread account
+change notifications contain labels and state, never credentials.
+
+A verified account-specific rejection can switch accounts only at a supported
+continuation boundary. HTTP tool rounds wait for actual persisted history and
+completed tool journals. Signed thinking and opaque histories are refused when
+cross-account validity has not been established. Cursor supports initial rejection
+and ordinary completed-turn history; mid-turn handoffs remain disabled.
+Timeouts, broken streams, and unknown outcomes stop automatic continuation.
+
+Known retry/reset deadlines are honored. Otherwise temporary limits use a
+60-second recheck, doubling up to 15 minutes; exhausted quota uses 15 minutes,
+doubling up to six hours. These are next eligible attempts, not claimed resets.
+Only one process may use the next real request as a recovery probe. There are no
+synthetic probes, background retry loops, or waiting for exhausted pools.
+The error lists account reasons and recovery actions. Login-required credentials
+remain unavailable until repaired. Shared upstream quota identities and duplicate
+keys share restrictions.
 
 ## Credential source and configuration
 
@@ -121,7 +173,7 @@ directly in `config.toml`; use an environment variable or the stdin login path.
 Native providers own their authentication, discovery, headers, and transport.
 Unsupported auth/header/catalog overrides and per-provider stream/connect
 timeout settings are rejected. Request and stream retry settings must be zero;
-native requests do not automatically retry or rotate accounts after failure.
+the provider runtime owns the bounded, evidence-based account failover above.
 Resume is explicit after interruption. Do not set nonzero
 `request_max_retries` or `stream_max_retries`, or set
 `stream_idle_timeout_ms` or `websocket_connect_timeout_ms`, for a native
@@ -134,6 +186,9 @@ interruption markers are stored under
 `$CODEX_HOME/native-providers/` (or the default Codex home when `CODEX_HOME` is
 unset). Filenames are derived from hashed provider/account/session keys. On
 Unix, the state directory is private and state files are owner-readable only.
+Pool settings, account indexes, availability, affinity, and handoff journals are
+additive versioned private records. An older build ignores these records and
+retains the existing credentials/checkpoints/tool-journal formats.
 This state is separate from ChatGPT's `auth.json`; do not edit or remove it
 while Codex is running.
 
@@ -210,12 +265,11 @@ Codex's normal host path. When the upstream stream stays open after `turnEnded`,
 a bounded 500 ms drain collects late checkpoint updates; metadata arriving
 after that period can be missed. Background shells are unsupported. Binary native
 writes, audio/resource input, remote-image resources, and unsupported
-model/protocol combinations return explicit errors. Provider requests do not
+model/protocol combinations return explicit errors. Ambiguous provider requests do not
 automatically retry or switch accounts. Model capability and live acceptance
 are account- and route-specific; see the [coverage matrix](coverage-matrix.md).
 
 See the [pinned reference inventory](references.md) for source revisions and
 the [evidence matrix](coverage-matrix.md) for current local and live acceptance
-limits. The final CLI build, schema fixture suite, strict clippy checks for
-affected crates, and the documented live acceptance scenarios passed. This
-does not establish support for every provider model, account, or platform.
+limits. The published baseline verification is separate from account-pool acceptance;
+see [account-pools.md](account-pools.md) for current verification and gaps.

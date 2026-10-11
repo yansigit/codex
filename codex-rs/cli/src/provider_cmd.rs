@@ -28,11 +28,30 @@ enum ProviderAction {
         account: String,
         #[arg(long)]
         with_token: bool,
+        /// Enroll without changing the manually selected account.
+        #[arg(long)]
+        add: bool,
     },
-    /// Remove the selected account for one provider.
+    /// Log out a named account, or the selected account when omitted.
     Logout {
         #[arg(value_parser = clap::builder::PossibleValuesParser::new(provider_choices()))]
         provider: String,
+        #[arg(long)]
+        account: Option<String>,
+    },
+    /// List saved accounts, pool membership, and availability.
+    Accounts {
+        #[arg(value_parser = clap::builder::PossibleValuesParser::new(provider_choices()))]
+        provider: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Manage endpoint-scoped native account pools.
+    Pool {
+        #[arg(value_parser = clap::builder::PossibleValuesParser::new(provider_choices()))]
+        provider: String,
+        #[command(subcommand)]
+        action: PoolAction,
     },
     /// Show selected native accounts without exposing credentials.
     Status {
@@ -44,6 +63,93 @@ enum ProviderAction {
         #[arg(value_parser = clap::builder::PossibleValuesParser::new(provider_choices()))]
         provider: String,
     },
+}
+
+#[derive(Debug, Subcommand)]
+enum PoolAction {
+    Status {
+        #[arg(long)]
+        json: bool,
+    },
+    Enable,
+    Disable,
+    Enroll {
+        account: String,
+    },
+    Remove {
+        account: String,
+    },
+    EnableAccount {
+        account: String,
+    },
+    DisableAccount {
+        account: String,
+    },
+    Order {
+        #[arg(required = true)]
+        accounts: Vec<String>,
+    },
+    Prefer {
+        account: String,
+    },
+}
+fn deadline(value: Option<u64>) -> String {
+    value
+        .and_then(|value| i64::try_from(value).ok())
+        .and_then(|value| chrono::DateTime::from_timestamp(value, 0))
+        .map(|time| time.format("%Y-%m-%d %H:%M:%S UTC").to_string())
+        .unwrap_or_else(|| "unknown".into())
+}
+fn print_accounts(status: &codex_provider_adapter::PoolStatus, json: bool) -> anyhow::Result<()> {
+    if json {
+        println!("{}", serde_json::to_string_pretty(status)?);
+        return Ok(());
+    }
+    println!(
+        "{} pool: {} (revision {}){}",
+        status.provider,
+        if status.enabled {
+            "enabled"
+        } else {
+            "disabled"
+        },
+        status.settings.revision,
+        if status.configured_token {
+            "; bypassed by configured token"
+        } else {
+            ""
+        }
+    );
+    let mut accounts: Vec<_> = status.accounts.iter().collect();
+    accounts.sort_by_key(|entry| entry.priority.unwrap_or(usize::MAX));
+    for entry in accounts {
+        println!(
+            "{}  {}  {:?}{}",
+            entry.account.reference.label,
+            if entry.enabled {
+                "enabled"
+            } else if entry.member {
+                "disabled"
+            } else {
+                "not enrolled"
+            },
+            entry.account.condition,
+            if status.selected.as_deref() == Some(&entry.account.reference.label) {
+                " (preferred)"
+            } else {
+                ""
+            }
+        );
+        for restriction in &entry.restrictions {
+            println!(
+                "  {:?}; reset: {}; next eligible attempt: {}",
+                restriction.failure.code,
+                deadline(restriction.failure.reset_at),
+                deadline(restriction.next_attempt_at)
+            );
+        }
+    }
+    Ok(())
 }
 
 impl ProviderCommand {
@@ -60,9 +166,12 @@ impl ProviderCommand {
             let info = if config.model_provider.native_provider_id() == Some(id) {
                 config.model_provider.clone()
             } else {
-                codex_model_provider_info::built_in_model_providers(None)
-                    .remove(id)
-                    .ok_or_else(|| anyhow::anyhow!("unknown provider"))?
+                config
+                    .model_providers
+                    .get(id)
+                    .filter(|info| info.native_provider_id() == Some(id))
+                    .cloned()
+                    .ok_or_else(|| anyhow::anyhow!("unknown native provider"))?
             };
             Ok(NativeBackend::new(info, Some(home.to_path_buf())))
         };
@@ -98,15 +207,17 @@ impl ProviderCommand {
                         }
                     }
                 }
-                ProviderAction::Logout { provider } => {
+                ProviderAction::Logout { provider, account } => {
                     anyhow::ensure!(!provider_for(&provider)?.has_configured_token(), "remove the configured environment or bearer token override before logging out");
-                    provider_for(&provider)?.logout(&cancellation).await?;
+                    let backend = provider_for(&provider)?;
+                    if let Some(account) = account { backend.logout_account(&account, &cancellation).await?; } else { backend.logout(&cancellation).await?; }
                     println!("Logged out of {provider}");
                 }
                 ProviderAction::Login {
                     provider,
                     account,
                     with_token,
+                    add,
                 } => {
                     anyhow::ensure!(!account.trim().is_empty(), "account name must not be empty");
                     let backend = provider_for(&provider)?;
@@ -123,14 +234,38 @@ impl ProviderCommand {
                         anyhow::ensure!(token.len() <= 1024 * 1024, "token exceeds 1 MiB");
                         let token = token.trim().to_owned();
                         anyhow::ensure!(!token.is_empty(), "empty token");
-                        backend.login_token(&account, token, &cancellation).await?;
+                        backend.login_token_with_selection(&account, token, !add, &cancellation).await?;
                     } else {
+                        let operation = backend.begin_account_login(&account, &cancellation).await?;
                         let login = backend.begin_login().await?;
                         println!("Open this URL to log in to {provider}:\n{}", login.url());
                         let record = login.finish(&cancellation).await?;
-                        backend.commit_login(&account, record, &cancellation).await?;
+                        backend.finish_account_login(&operation, record, !add, &cancellation).await?;
                     }
                     println!("Logged in to {provider} as {account}");
+                }
+                ProviderAction::Accounts { provider, json } => {
+                    print_accounts(&provider_for(&provider)?.accounts(None, &cancellation).await?, json)?;
+                }
+                ProviderAction::Pool { provider, action } => {
+                    use codex_provider_adapter::PoolUpdate;
+                    let backend = provider_for(&provider)?;
+                    let status = backend.accounts(None, &cancellation).await?;
+                    if let PoolAction::Status { json } = action { print_accounts(&status, json)?; }
+                    else {
+                        let update = match action {
+                            PoolAction::Enable => PoolUpdate::Enable,
+                            PoolAction::Disable => PoolUpdate::Disable,
+                            PoolAction::Enroll { account } => PoolUpdate::Enroll { label: account },
+                            PoolAction::Remove { account } => PoolUpdate::Remove { label: account },
+                            PoolAction::EnableAccount { account } => PoolUpdate::SetAccountEnabled { label: account, enabled: true },
+                            PoolAction::DisableAccount { account } => PoolUpdate::SetAccountEnabled { label: account, enabled: false },
+                            PoolAction::Order { accounts } => PoolUpdate::Order { labels: accounts },
+                            PoolAction::Prefer { account } => PoolUpdate::Prefer { label: account },
+                            PoolAction::Status { .. } => unreachable!(),
+                        };
+                        print_accounts(&backend.update_pool(status.settings.revision, update, &cancellation).await?, false)?;
+                    }
                 }
                 ProviderAction::Models { provider } => {
                     let provider = provider_for(&provider)?;
@@ -159,6 +294,35 @@ impl ProviderCommand {
 mod tests {
     use super::ProviderCommand;
     use clap::Args;
+
+    #[test]
+    fn provider_pool_cli_preserves_named_account_and_management_actions() {
+        let command = ProviderCommand::augment_args(clap::Command::new("provider"));
+        for args in [
+            vec!["provider", "login", "cursor", "--account", "work", "--add"],
+            vec!["provider", "logout", "cursor", "--account", "work"],
+            vec!["provider", "accounts", "cursor", "--json"],
+            vec!["provider", "pool", "cursor", "status", "--json"],
+            vec!["provider", "pool", "cursor", "enable"],
+            vec!["provider", "pool", "cursor", "disable"],
+            vec!["provider", "pool", "cursor", "enroll", "work"],
+            vec!["provider", "pool", "cursor", "remove", "work"],
+            vec!["provider", "pool", "cursor", "enable-account", "work"],
+            vec!["provider", "pool", "cursor", "disable-account", "work"],
+            vec!["provider", "pool", "cursor", "order", "work", "personal"],
+            vec!["provider", "pool", "cursor", "prefer", "work"],
+        ] {
+            assert!(
+                command.clone().try_get_matches_from(args.clone()).is_ok(),
+                "{args:?}"
+            );
+        }
+        assert!(
+            command
+                .try_get_matches_from(["provider", "pool", "cursor", "order"])
+                .is_err()
+        );
+    }
 
     #[test]
     fn provider_cli_parses_each_supported_provider_and_rejects_unknown_values() {

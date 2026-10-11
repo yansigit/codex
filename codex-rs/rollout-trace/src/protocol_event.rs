@@ -354,6 +354,7 @@ pub(crate) fn tool_runtime_trace_event(event: &EventMsg) -> Option<ToolRuntimeTr
         EventMsg::SubAgentActivity(_) => None,
         EventMsg::Error(_)
         | EventMsg::Warning(_)
+        | EventMsg::ProviderAccountChanged(_)
         | EventMsg::AuthRecoveryStarted(_)
         | EventMsg::AuthRecoveryCompleted(_)
         | EventMsg::GuardianWarning(_)
@@ -435,6 +436,7 @@ pub(crate) fn wrapped_protocol_event_type(event: &EventMsg) -> Option<&'static s
         EventMsg::ThreadRolledBack(_) => Some("thread_rolled_back"),
         EventMsg::Error(_) => Some("error"),
         EventMsg::Warning(_) => Some("warning"),
+        EventMsg::ProviderAccountChanged(_) => Some("provider_account_changed"),
         EventMsg::ShutdownComplete => Some("shutdown_complete"),
         EventMsg::AuthRecoveryStarted(_)
         | EventMsg::AuthRecoveryCompleted(_)

@@ -46,6 +46,7 @@ from .v2_all import PlanDeltaNotification
 from .v2_all import ProcessExitedNotification
 from .v2_all import ProcessOutputDeltaNotification
 from .v2_all import ProjectChangedNotification
+from .v2_all import ProviderPoolChangedNotification
 from .v2_all import ReasoningSummaryPartAddedNotification
 from .v2_all import ReasoningSummaryTextDeltaNotification
 from .v2_all import ReasoningTextDeltaNotification
@@ -63,6 +64,7 @@ from .v2_all import ThreadGoalUpdatedNotification
 from .v2_all import ThreadNameUpdatedNotification
 from .v2_all import ThreadPredictionUpdatedNotification
 from .v2_all import ThreadProjectUpdatedNotification
+from .v2_all import ThreadProviderAccountChangedNotification
 from .v2_all import ThreadQueueChangedNotification
 from .v2_all import ThreadReadStateChangedNotification
 from .v2_all import ThreadRealtimeClosedNotification
@@ -131,6 +133,7 @@ KnownNotificationPayload: TypeAlias = (
     | ProcessExitedNotification
     | ProcessOutputDeltaNotification
     | ProjectChangedNotification
+    | ProviderPoolChangedNotification
     | ReasoningSummaryPartAddedNotification
     | ReasoningSummaryTextDeltaNotification
     | ReasoningTextDeltaNotification
@@ -148,6 +151,7 @@ KnownNotificationPayload: TypeAlias = (
     | ThreadNameUpdatedNotification
     | ThreadPredictionUpdatedNotification
     | ThreadProjectUpdatedNotification
+    | ThreadProviderAccountChangedNotification
     | ThreadQueueChangedNotification
     | ThreadReadStateChangedNotification
     | ThreadRealtimeClosedNotification
@@ -221,6 +225,7 @@ NOTIFICATION_MODELS: dict[str, type[KnownNotificationPayload]] = {
     "process/exited": ProcessExitedNotification,
     "process/outputDelta": ProcessOutputDeltaNotification,
     "project/changed": ProjectChangedNotification,
+    "provider/pool/changed": ProviderPoolChangedNotification,
     "remoteControl/status/changed": RemoteControlStatusChangedNotification,
     "serverRequest/resolved": ServerRequestResolvedNotification,
     "skills/changed": SkillsChangedNotification,
@@ -236,6 +241,7 @@ NOTIFICATION_MODELS: dict[str, type[KnownNotificationPayload]] = {
     "thread/name/updated": ThreadNameUpdatedNotification,
     "thread/prediction/updated": ThreadPredictionUpdatedNotification,
     "thread/project/updated": ThreadProjectUpdatedNotification,
+    "thread/providerAccount/changed": ThreadProviderAccountChangedNotification,
     "thread/queue/changed": ThreadQueueChangedNotification,
     "thread/readState/changed": ThreadReadStateChangedNotification,
     "thread/realtime/closed": ThreadRealtimeClosedNotification,

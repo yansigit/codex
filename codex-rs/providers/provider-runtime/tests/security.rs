@@ -123,3 +123,43 @@ async fn checkpoint_scope_changes_at_compaction_but_interrupted_tool_journal_is_
         Err(ProviderError::Checkpoint(message)) if message.contains("refusing automatic replay")
     ));
 }
+
+#[tokio::test]
+async fn account_handoff_replays_prior_call_ids_but_never_command_text() {
+    let home = tempfile::tempdir().unwrap();
+    let cancellation = CancellationToken::new();
+    let old = SessionStore::new(home.path(), namespace());
+    let ToolDisposition::Execute(ticket) =
+        old.begin_tool(tool_call(), &cancellation).await.unwrap()
+    else {
+        panic!("new call");
+    };
+    ticket
+        .finish(ToolResult {
+            call_id: "call-1".into(),
+            output: json!("denied"),
+            is_error: true,
+        })
+        .unwrap();
+    let new = SessionStore::new(
+        home.path(),
+        Namespace {
+            account: "replacement".into(),
+            ..namespace()
+        },
+    )
+    .with_prior_journals(vec![namespace()]);
+    assert!(matches!(
+        new.begin_tool(tool_call(), &cancellation).await.unwrap(),
+        ToolDisposition::Replay(ToolResult { is_error: true, .. })
+    ));
+    let mut conflict = tool_call();
+    conflict.arguments = json!({"cmd":"different"});
+    assert!(new.begin_tool(conflict, &cancellation).await.is_err());
+    let mut distinct = tool_call();
+    distinct.id = "call-2".into();
+    assert!(matches!(
+        new.begin_tool(distinct, &cancellation).await.unwrap(),
+        ToolDisposition::Execute(_)
+    ));
+}

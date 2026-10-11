@@ -45,6 +45,7 @@ pub struct SessionStore {
     store: Store,
     namespace: Namespace,
     checkpoint_scope: String,
+    prior_journals: Vec<Namespace>,
 }
 
 /// Holds the thread execution lock for a whole native request. The durable
@@ -69,12 +70,27 @@ impl SessionStore {
             store: Store::new(codex_home),
             namespace,
             checkpoint_scope: "latest".into(),
+            prior_journals: vec![],
+        }
+    }
+    pub fn prior_journals(&self) -> Vec<Namespace> {
+        self.prior_journals.clone()
+    }
+    pub fn for_namespace(&self, namespace: Namespace) -> Self {
+        Self {
+            namespace,
+            ..self.clone()
         }
     }
     /// Context-window identities survive restart and change after compaction.
     /// Only checkpoints are scoped; the tool journal remains shared by the thread.
     pub fn with_checkpoint_scope(mut self, scope: String) -> Self {
         self.checkpoint_scope = scope;
+        self
+    }
+    /// Retain original journal keys across account attempts; never relabel them.
+    pub fn with_prior_journals(mut self, namespaces: Vec<Namespace>) -> Self {
+        self.prior_journals = namespaces;
         self
     }
     pub async fn begin_execution(
@@ -87,6 +103,12 @@ impl SessionStore {
         // provider selected. A branch has a new thread identity.
         let key = serde_json::json!(("execution", &self.namespace.thread, purpose)).to_string();
         let lock = self.store.lock(&key, cancellation).await?;
+        let handoff_fence =
+            serde_json::json!(("account-handoff-inflight", &self.namespace.thread, purpose))
+                .to_string();
+        if self.store.read::<bool>(&handoff_fence)? == Some(true) {
+            return Err(ProviderError::Checkpoint("account attempt was interrupted after dispatch; inspect its effects and explicitly branch the thread before continuing".into()));
+        }
         if lock.read::<bool>()? == Some(true) {
             return Err(ProviderError::Checkpoint(
                 "native tool execution was interrupted; inspect its effects and explicitly branch the thread before continuing".into(),
@@ -106,6 +128,24 @@ impl SessionStore {
         call: ToolCall,
         cancellation: &CancellationToken,
     ) -> Result<ToolDisposition> {
+        for namespace in &self.prior_journals {
+            let previous = Self {
+                namespace: namespace.clone(),
+                prior_journals: vec![],
+                ..self.clone()
+            };
+            if let Some(entry) = previous
+                .store
+                .read::<JournalEntry>(&previous.key("tool", &call.id))?
+            {
+                if entry.call != call {
+                    return Err(ProviderError::Checkpoint(
+                        "tool ID reused with different arguments across account attempts".into(),
+                    ));
+                }
+                return entry.result.map(ToolDisposition::Replay).ok_or_else(|| ProviderError::Checkpoint("prior account tool execution was interrupted; explicitly branch the thread".into()));
+            }
+        }
         let lock = self
             .store
             .lock(&self.key("tool", &call.id), cancellation)

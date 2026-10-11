@@ -60,6 +60,32 @@ impl Store {
             .join(format!("{}.{}", digest(key.as_bytes()), extension))
     }
 
+    /// Recovery probes never wait behind another process's inference request.
+    pub fn try_lock(&self, key: &str) -> Result<Option<StoreLock>> {
+        self.directory()?;
+        let path = self.path(key, "lock");
+        if fs::symlink_metadata(&path).is_ok_and(|meta| !meta.is_file()) {
+            return Err(io_error("unsafe lock file"));
+        }
+        let mut options = OpenOptions::new();
+        options.read(true).write(true).create(true).truncate(false);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600).custom_flags(libc::O_NOFOLLOW);
+        }
+        let file = options.open(path).map_err(io_error)?;
+        match file.try_lock() {
+            Ok(()) => Ok(Some(StoreLock {
+                file,
+                store: self.clone(),
+                key: key.into(),
+            })),
+            Err(std::fs::TryLockError::WouldBlock) => Ok(None),
+            Err(_) => Err(io_error("lock failed")),
+        }
+    }
+
     pub async fn lock(&self, key: &str, cancellation: &CancellationToken) -> Result<StoreLock> {
         self.directory()?;
         let path = self.path(key, "lock");
@@ -168,7 +194,13 @@ impl StoreLock {
     }
     pub fn delete(&self) -> Result<()> {
         match fs::remove_file(self.store.path(&self.key, "json")) {
-            Ok(()) => Ok(()),
+            Ok(()) => {
+                #[cfg(unix)]
+                File::open(&self.store.root)
+                    .and_then(|dir| dir.sync_all())
+                    .map_err(io_error)?;
+                Ok(())
+            }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
             Err(error) => Err(io_error(error)),
         }

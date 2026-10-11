@@ -24,6 +24,21 @@
         "provider": {
           "type": "string"
         },
+        "select": {
+          "default": null,
+          "description": "Defaults to selecting this account, preserving existing clients.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "threadId": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "type": {
           "enum": [
             "native"

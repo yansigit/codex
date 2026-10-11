@@ -2,6 +2,7 @@
 //! Tool execution is exclusively provided by the host's executable catalog.
 pub mod auth;
 mod connect;
+mod failure;
 pub mod native;
 pub mod operations;
 mod state;
@@ -176,7 +177,7 @@ impl CursorProvider {
                 response.map_err(|_| ProviderError::Transport("Cursor connect timed out".into()))?
                     .map_err(|_| ProviderError::Transport("Cursor HTTP/2 connection failed".into()))?,
         };
-        validate_status(&response)?;
+        let response = validate_status(response, &context).await?;
         if response.version() != reqwest::Version::HTTP_2 {
             return Err(ProviderError::Protocol(
                 "Cursor bidirectional Run requires HTTP/2".into(),
@@ -227,6 +228,33 @@ impl Provider for CursorProvider {
         "cursor"
     }
 
+    fn handoff_request(
+        &self,
+        request: &Request,
+        boundary: codex_provider_api::ContinuationBoundary,
+    ) -> Result<Request> {
+        if boundary == codex_provider_api::ContinuationBoundary::RecordedTools
+            || request
+                .messages
+                .iter()
+                .flat_map(|message| &message.content)
+                .any(|content| {
+                    matches!(
+                        content,
+                        codex_provider_api::Content::Thinking { .. }
+                            | codex_provider_api::Content::Opaque { .. }
+                    )
+                })
+        {
+            return Err(ProviderError::Unsupported("Cursor account handoff is only verified before generation or between completed ordinary turns".into()));
+        }
+        let mut exported = request.clone();
+        exported.checkpoint = None;
+        if let Some(metadata) = exported.metadata.as_object_mut() {
+            metadata.remove("host_checkpoint_prefix");
+        }
+        Ok(exported)
+    }
     fn models(&self, context: Context) -> ProviderFuture<'_, Vec<Model>> {
         Box::pin(async move {
             let bearer = self.bearer(&context).await?;
@@ -242,7 +270,7 @@ impl Provider for CursorProvider {
                     response.map_err(|_| ProviderError::Transport("Cursor discovery timed out".into()))?
                         .map_err(|_| ProviderError::Transport("Cursor discovery connection failed".into()))?,
             };
-            validate_status(&response)?;
+            let response = validate_status(response, &context).await?;
             let body = tokio::time::timeout(
                 self.options.idle_timeout,
                 connect::bounded_body(response, &context.cancellation),
@@ -591,19 +619,59 @@ fn attach_image(
     Ok(path)
 }
 
-fn validate_status(response: &reqwest::Response) -> Result<()> {
+async fn validate_status(
+    mut response: reqwest::Response,
+    context: &Context,
+) -> Result<reqwest::Response> {
     if response.status().is_success() {
-        Ok(())
-    } else if matches!(response.status().as_u16(), 401 | 403) {
-        Err(ProviderError::Authentication(
-            "Cursor rejected credentials".into(),
-        ))
-    } else {
-        Err(ProviderError::Transport(format!(
-            "Cursor returned HTTP {}",
-            response.status().as_u16()
-        )))
+        return Ok(response);
     }
+    let status = response.status().as_u16();
+    let retry_after_seconds = response
+        .headers()
+        .get("retry-after")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| {
+            codex_provider_api::retry_after_seconds(
+                value,
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs(),
+            )
+        });
+    let read = async {
+        let mut bytes = Vec::new();
+        while let Some(chunk) = response
+            .chunk()
+            .await
+            .map_err(|_| ProviderError::Transport("Cursor rejection read failed".into()))?
+        {
+            if bytes.len() + chunk.len() > 64 * 1024 {
+                return Ok(Vec::new());
+            }
+            bytes.extend_from_slice(&chunk);
+        }
+        Ok::<_, ProviderError>(bytes)
+    };
+    let bytes = tokio::select! {
+        biased;
+        _ = context.cancellation.cancelled() => return Err(ProviderError::Cancelled),
+        result = tokio::time::timeout(std::time::Duration::from_secs(30), read) => result.map_err(|_| ProviderError::Transport("Cursor rejection timeout".into()))??,
+    };
+    Err(ProviderError::Classified(failure::classify(
+        codex_provider_api::FailureResponse {
+            status,
+            body: &bytes,
+            retry_after_seconds,
+            model: "",
+            now: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            outcome: codex_provider_api::RequestOutcome::Rejected,
+        },
+    )))
 }
 
 fn json_value(value: &Value) -> prost_types::Value {

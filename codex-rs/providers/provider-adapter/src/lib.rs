@@ -9,6 +9,8 @@ pub use codex_provider_api::CompletionDisposition;
 pub use codex_provider_api::HostCompletion;
 pub use codex_provider_auth as auth;
 pub use codex_provider_registry as registry;
+pub use codex_provider_runtime::PoolStatus;
+pub use codex_provider_runtime::PoolUpdate;
 
 /// Host-side controls for a bidirectional inference session.
 #[derive(Clone)]

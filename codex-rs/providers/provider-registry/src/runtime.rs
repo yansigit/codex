@@ -27,8 +27,19 @@ impl crate::Descriptor {
         store: &'a AuthStore,
         cancellation: &'a CancellationToken,
     ) -> ProviderFuture<'a, Credentials> {
+        Box::pin(async move {
+            let account = store.selected_reference(self.id)?;
+            self.credentials_for(store, &account, cancellation).await
+        })
+    }
+    pub fn credentials_for<'a>(
+        &'static self,
+        store: &'a AuthStore,
+        account: &'a codex_provider_api::AccountRef,
+        cancellation: &'a CancellationToken,
+    ) -> ProviderFuture<'a, Credentials> {
         match self.auth_driver {
-            Some(driver) => driver.credentials(self.id, store, cancellation),
+            Some(driver) => driver.credentials(self.id, store, account, cancellation),
             None => Box::pin(async move { Err(not_compiled(self.id)) }),
         }
     }
@@ -52,6 +63,7 @@ impl AuthDriver {
         &self,
         id: &'static str,
         store: &'a AuthStore,
+        account: &'a codex_provider_api::AccountRef,
         cancellation: &'a CancellationToken,
     ) -> ProviderFuture<'a, Credentials> {
         let config = self.oauth_config();
@@ -59,8 +71,9 @@ impl AuthDriver {
         if matches!(self, Self::Cursor) {
             return Box::pin(async move {
                 store
-                    .credentials_with_refresh(
+                    .credentials_for_with_refresh(
                         id,
+                        account,
                         cancellation,
                         |record, refresh_cancel| async move {
                             let refresh = record.refresh_token.ok_or_else(|| {
@@ -85,7 +98,11 @@ impl AuthDriver {
                     .await
             });
         }
-        Box::pin(async move { store.credentials(id, config?.as_ref(), cancellation).await })
+        Box::pin(async move {
+            store
+                .credentials_for(id, account, config?.as_ref(), cancellation)
+                .await
+        })
     }
 }
 

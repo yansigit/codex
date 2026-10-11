@@ -43,13 +43,27 @@ pub struct HttpSession {
     pending_order: Vec<String>,
     round_bytes: usize,
     terminal_deadline: Option<Instant>,
+    classifier: FailureClassifier,
+    continuation_ready: bool,
 }
 impl HttpSession {
     pub async fn start(
         client: Client,
         codec: Box<dyn WireCodec>,
+        request: Request,
+        context: Context,
+    ) -> Result<Self> {
+        Self::start_with_policy(client, codec, request, context, |response| {
+            response.unknown()
+        })
+        .await
+    }
+    pub async fn start_with_policy(
+        client: Client,
+        codec: Box<dyn WireCodec>,
         mut request: Request,
         context: Context,
+        classifier: FailureClassifier,
     ) -> Result<Self> {
         if context.credentials.account_id != request.namespace.account {
             return Err(ProviderError::Authentication(
@@ -73,6 +87,8 @@ impl HttpSession {
             pending_order: Vec::new(),
             round_bytes: 0,
             terminal_deadline: None,
+            classifier,
+            continuation_ready: false,
         };
         session.send().await?;
         Ok(session)
@@ -96,13 +112,13 @@ impl HttpSession {
             response = tokio::time::timeout(Duration::from_secs(60), builder.send()) => response.map_err(|_| ProviderError::Transport("provider request timed out".into()))?.map_err(|_| ProviderError::Transport("provider request failed".into()))?,
         };
         if !response.status().is_success() {
-            let status = response.status().as_u16();
-            // Error bodies can contain tokens or prompts. Keep the native error bounded and private.
-            return Err(if status == 401 || status == 403 {
-                ProviderError::Authentication(format!("HTTP {status}"))
-            } else {
-                ProviderError::Transport(format!("HTTP {status}"))
-            });
+            return Err(classify_response(
+                response,
+                &self.context,
+                &self.request.namespace.model,
+                self.classifier,
+            )
+            .await?);
         }
         self.codec.reset();
         self.round_bytes = 0;
@@ -188,6 +204,23 @@ impl HttpSession {
                         return Err(protocol("provider stream exceeds 64 MiB"));
                     }
                     for (event, data) in self.decoder.push(&chunk)? {
+                        let body = serde_json::from_str::<Value>(&data).ok();
+                        if event == "error"
+                            || body.as_ref().is_some_and(|value| {
+                                value.get("error").is_some() || value["type"] == "response.failed"
+                            })
+                        {
+                            return Err(ProviderError::Classified((self.classifier)(
+                                FailureResponse {
+                                    status: 200,
+                                    body: data.as_bytes(),
+                                    retry_after_seconds: None,
+                                    model: &self.request.namespace.model,
+                                    now: unix_time(),
+                                    outcome: RequestOutcome::PotentiallyProcessed,
+                                },
+                            )));
+                        }
                         self.events.extend(self.codec.frame(&event, &data)?);
                     }
                     if self.codec.finished() {
@@ -212,6 +245,31 @@ impl HttpSession {
     }
 }
 impl ProviderSession for HttpSession {
+    fn retry_authentication(&mut self, credentials: Credentials) -> ProviderFuture<'_, ()> {
+        Box::pin(async move {
+            if self.response.is_some()
+                || !self.pending.is_empty()
+                || self.completed
+                || !self.events.is_empty()
+                || credentials.account_id != self.request.namespace.account
+            {
+                return Err(protocol("no rejected authentication boundary"));
+            }
+            self.context.credentials = credentials;
+            self.send().await
+        })
+    }
+    fn continuation_request(&self) -> Result<Request> {
+        if self.response.is_some() || !self.pending.is_empty() || self.completed {
+            return Err(protocol("no completed HTTP continuation boundary"));
+        }
+        let mut request = self.request.clone();
+        request.checkpoint = None;
+        if let Some(metadata) = request.metadata.as_object_mut() {
+            metadata.remove("host_checkpoint_prefix");
+        }
+        Ok(request)
+    }
     fn next_event(&mut self) -> ProviderFuture<'_, Option<Event>> {
         Box::pin(self.next())
     }
@@ -239,9 +297,23 @@ impl ProviderSession for HttpSession {
                     role: Role::Tool,
                     content: results,
                 });
-                self.send().await?;
+                self.continuation_ready = true;
+                self.events.push_back(Event::ContinuationReady);
             }
             Ok(())
+        })
+    }
+    fn continue_round(&mut self) -> ProviderFuture<'_, ()> {
+        Box::pin(async move {
+            if !self.continuation_ready
+                || !self.pending.is_empty()
+                || self.response.is_some()
+                || !self.events.is_empty()
+            {
+                return Err(protocol("no acknowledged continuation boundary"));
+            }
+            self.continuation_ready = false;
+            self.send().await
         })
     }
     fn cancel(&mut self) -> ProviderFuture<'_, ()> {
@@ -280,4 +352,52 @@ pub async fn bounded_json(mut response: Response, context: &Context) -> Result<V
         _ = context.cancellation.cancelled() => Err(ProviderError::Cancelled),
         result = tokio::time::timeout(Duration::from_secs(30), operation) => result.map_err(|_| ProviderError::Transport("provider discovery timeout".into()))?,
     }
+}
+
+fn unix_time() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+/// Read only bounded error evidence. Bodies are discarded after provider classification.
+pub async fn classify_response(
+    mut response: Response,
+    context: &Context,
+    model: &str,
+    classifier: FailureClassifier,
+) -> Result<ProviderError> {
+    let status = response.status().as_u16();
+    let retry_after_seconds = response
+        .headers()
+        .get("retry-after")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| codex_provider_api::retry_after_seconds(value, unix_time()));
+    let operation = async {
+        let mut bytes = Vec::new();
+        while let Some(chunk) = response
+            .chunk()
+            .await
+            .map_err(|_| protocol("unable to read provider rejection"))?
+        {
+            if bytes.len() + chunk.len() > 64 * 1024 {
+                return Ok(Vec::new());
+            }
+            bytes.extend_from_slice(&chunk);
+        }
+        Ok::<_, ProviderError>(bytes)
+    };
+    let bytes = tokio::select! {
+        biased;
+        _ = context.cancellation.cancelled() => return Err(ProviderError::Cancelled),
+        result = tokio::time::timeout(Duration::from_secs(30), operation) => result.map_err(|_| protocol("provider rejection read timed out"))??,
+    };
+    Ok(ProviderError::Classified(classifier(FailureResponse {
+        status,
+        body: &bytes,
+        retry_after_seconds,
+        model,
+        now: unix_time(),
+        outcome: RequestOutcome::Rejected,
+    })))
 }

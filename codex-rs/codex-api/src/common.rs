@@ -79,6 +79,14 @@ pub struct ResponseId(pub String);
 
 #[derive(Debug)]
 pub enum ResponseEvent {
+    HistoryPersistenceRequested {
+        reply: tokio::sync::oneshot::Sender<std::result::Result<Option<Vec<ResponseItem>>, String>>,
+    },
+    ProviderAccountChanged {
+        provider: String,
+        previous: String,
+        account: String,
+    },
     Created {
         /// Existing server response ID, when supplied by the stream.
         response_id: Option<String>,

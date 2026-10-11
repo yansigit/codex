@@ -1,5 +1,6 @@
 //! Native Cloud Code Assist transport for Antigravity. Project onboarding is an RPC,
 //! not a delegated `agy` process. All signed parts stay with their exact assistant turn.
+mod failure;
 use codex_provider_api::*;
 use codex_provider_auth::Store;
 use codex_provider_auth::StoreLock;
@@ -252,6 +253,13 @@ impl Provider for AntigravityProvider {
     fn id(&self) -> &'static str {
         "antigravity"
     }
+    fn handoff_request(
+        &self,
+        request: &Request,
+        _boundary: ContinuationBoundary,
+    ) -> Result<Request> {
+        portable_history(request)
+    }
     fn models(&self, context: Context) -> ProviderFuture<'_, Vec<Model>> {
         Box::pin(async move {
             self.discover_project(&context).await?;
@@ -305,7 +313,14 @@ impl Provider for AntigravityProvider {
                 &request.tools,
             );
             Ok(Box::new(
-                HttpSession::start(self.client.clone(), Box::new(codec), request, context).await?,
+                HttpSession::start_with_policy(
+                    self.client.clone(),
+                    Box::new(codec),
+                    request,
+                    context,
+                    failure::classify,
+                )
+                .await?,
             ) as Box<dyn ProviderSession>)
         })
     }
