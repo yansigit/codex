@@ -218,6 +218,17 @@ async fn native_provider_selection_survives_fork_and_cold_resume() -> Result<()>
     assert_eq!(started.model_provider, "go_native_fixture");
     assert_eq!(started.model, "glm-5.3");
 
+    // Account management must use the thread's configured alias and endpoint,
+    // even while the app-server's default provider is different.
+    let accounts_id = server
+        .send_request(
+            "provider/accounts/list",
+            Some(json!({"provider":"opencode-go", "threadId":started.thread.id})),
+        )
+        .await?;
+    let scoped: Value = timeout(READ_TIMEOUT, server.read_response(accounts_id)).await??;
+    assert_eq!(scoped["endpoint"], upstream.uri());
+
     // Empty threads have no durable rollout. Persist a real native turn before
     // exercising fork and a separate app-server process's cold resume.
     timeout(
@@ -266,18 +277,6 @@ async fn native_provider_selection_survives_fork_and_cold_resume() -> Result<()>
 async fn native_account_pool_revision_redaction_and_named_logout() -> Result<()> {
     let home = TempDir::new()?;
     write_claude_config(home.path())?;
-    let config_path = home.path().join("config.toml");
-    let mut config = std::fs::read_to_string(&config_path)?;
-    config.push_str(
-        r#"
-[model_providers.opencode-go]
-name = "Scoped Go fixture"
-wire_api = "native"
-native_provider = "opencode-go"
-base_url = "https://fixture.example.test/go"
-"#,
-    );
-    std::fs::write(config_path, config)?;
     let mut server = TestAppServer::builder()
         .with_codex_home(home.path())
         .without_auto_env()
@@ -290,8 +289,9 @@ base_url = "https://fixture.example.test/go"
             Some(json!({"provider":"opencode-go"})),
         )
         .await?;
-    let scoped: Value = timeout(READ_TIMEOUT, server.read_response(id)).await??;
-    assert_eq!(scoped["endpoint"], "https://fixture.example.test/go");
+    let other_provider: Value = timeout(READ_TIMEOUT, server.read_response(id)).await??;
+    assert_eq!(other_provider["provider"], "opencode-go");
+    assert_eq!(other_provider["endpoint"], "");
     login_claude_with_token(&mut server).await?;
     let id = server.send_login_account_request(json!({"type":"native","provider":"claude","accountId":"work","apiKey":"second-fixture-secret","select":false})).await?;
     let _: Value = timeout(READ_TIMEOUT, server.read_response(id)).await??;
