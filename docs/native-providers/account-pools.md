@@ -67,6 +67,16 @@ fifth-provider handoffs, CLI management, and RPC compatibility to the existing
 hosted Linux suite and upstream probe. The fifth provider exercises the generic
 runtime/backend without adding a provider wire enum or caller branches.
 
+The [local check receipt](account-pools-checks.json) records the consolidated
+suite, strict host linting, affected Bazel targets, Python SDK contracts, and an
+isolated CLI smoke test. The CLI test covers token input, JSON redaction,
+automatic activation, selection, ordering, enablement, removal, enrollment,
+and named logout. Hosted workflow and upstream-probe commands are extended through
+the shared manifest; the remote jobs were not dispatched during this local run.
+All 29 local check stages have passing results, with the schema stage rerun after
+regenerating the experimental export bundle. The receipt preserves the initial
+schema failure and its passing rerun.
+
 Deterministic coverage includes second-account activation, persistent disable,
 priority and affinity, duplicate quota groups, model/endpoint separation,
 coordinated probes, stale observations, generation/login/logout races, recorded
