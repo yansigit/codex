@@ -81,6 +81,22 @@ pub enum InstallMethod {
     Other,
 }
 
+fn managed_method_override(is_set: impl Fn(&str) -> bool) -> Option<InstallMethod> {
+    for prefix in ["NYACODE", "CODEX"] {
+        for (suffix, method) in [
+            ("VITE_PLUS", InstallMethod::VitePlus),
+            ("PNPM", InstallMethod::Pnpm),
+            ("NPM", InstallMethod::Npm),
+            ("BUN", InstallMethod::Bun),
+        ] {
+            if is_set(&format!("{prefix}_MANAGED_BY_{suffix}")) {
+                return Some(method);
+            }
+        }
+    }
+    None
+}
+
 impl InstallContext {
     pub fn from_exe(
         is_macos: bool,
@@ -120,17 +136,7 @@ impl InstallContext {
     pub fn current() -> &'static Self {
         INSTALL_CONTEXT.get_or_init(|| {
             let current_exe = std::env::current_exe().ok();
-            let method_override = if std::env::var_os("CODEX_MANAGED_BY_VITE_PLUS").is_some() {
-                Some(InstallMethod::VitePlus)
-            } else if std::env::var_os("CODEX_MANAGED_BY_PNPM").is_some() {
-                Some(InstallMethod::Pnpm)
-            } else if std::env::var_os("CODEX_MANAGED_BY_NPM").is_some() {
-                Some(InstallMethod::Npm)
-            } else if std::env::var_os("CODEX_MANAGED_BY_BUN").is_some() {
-                Some(InstallMethod::Bun)
-            } else {
-                None
-            };
+            let method_override = managed_method_override(|name| std::env::var_os(name).is_some());
             Self::from_exe(
                 cfg!(target_os = "macos"),
                 current_exe.as_deref(),
@@ -369,6 +375,22 @@ mod tests {
     use std::fs;
 
     const TEST_RESOURCE_NAME: &str = "codex-test-helper";
+
+    #[test]
+    fn nyacode_managed_method_precedes_legacy_environment() {
+        assert_eq!(
+            managed_method_override(|key| matches!(
+                key,
+                "NYACODE_MANAGED_BY_BUN" | "CODEX_MANAGED_BY_NPM"
+            )),
+            Some(InstallMethod::Bun)
+        );
+        assert_eq!(
+            managed_method_override(|key| key == "CODEX_MANAGED_BY_NPM"),
+            Some(InstallMethod::Npm)
+        );
+        assert_eq!(managed_method_override(|_| false), None);
+    }
 
     #[test]
     fn code_mode_host_program_prefers_package_resource_over_legacy_binary() -> std::io::Result<()> {

@@ -285,7 +285,8 @@ where
     I: IntoIterator<Item = Result<(String, String), dotenvy::Error>>,
 {
     for (key, value) in iter.into_iter().flatten() {
-        if !key.to_ascii_uppercase().starts_with(ILLEGAL_ENV_VAR_PREFIX) {
+        let uppercase = key.to_ascii_uppercase();
+        if !uppercase.starts_with(ILLEGAL_ENV_VAR_PREFIX) && !uppercase.starts_with("NYACODE_") {
             // It is safe to call set_var() because our process is
             // single-threaded at this point in its execution.
             unsafe { std::env::set_var(&key, &value) };

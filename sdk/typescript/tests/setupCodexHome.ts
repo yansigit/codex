@@ -4,17 +4,25 @@ import path from "node:path";
 
 import { afterEach, beforeEach } from "@jest/globals";
 
+const originalNyacodeHome = process.env.NYACODE_HOME;
 const originalCodexHome = process.env.CODEX_HOME;
 let currentCodexHome: string | undefined;
 
 beforeEach(async () => {
   currentCodexHome = await fs.mkdtemp(path.join(os.tmpdir(), "codex-sdk-test-"));
   process.env.CODEX_HOME = currentCodexHome;
+  process.env.NYACODE_HOME = currentCodexHome;
 });
 
 afterEach(async () => {
   const codexHomeToDelete = currentCodexHome;
   currentCodexHome = undefined;
+
+  if (originalNyacodeHome === undefined) {
+    delete process.env.NYACODE_HOME;
+  } else {
+    process.env.NYACODE_HOME = originalNyacodeHome;
+  }
 
   if (originalCodexHome === undefined) {
     delete process.env.CODEX_HOME;

@@ -98,7 +98,7 @@ pub struct GetArgs {
 }
 
 #[derive(Debug, clap::Parser)]
-#[command(override_usage = "codex mcp add [OPTIONS] <NAME> (--url <URL> | -- <COMMAND>...)")]
+#[command(override_usage = "nyacode mcp add [OPTIONS] <NAME> (--url <URL> | -- <COMMAND>...)")]
 pub struct AddArgs {
     /// Name for the MCP server configuration.
     pub name: String,
@@ -492,7 +492,7 @@ async fn run_add(config: &Config, add_args: AddArgs) -> Result<()> {
         }
         McpOAuthLoginSupport::Unsupported => {}
         McpOAuthLoginSupport::Unknown(_) => println!(
-            "MCP server may or may not require login. Run `codex mcp login {name}` to login."
+            "MCP server may or may not require login. Run `nyacode mcp login {name}` to login."
         ),
     }
 
@@ -560,7 +560,7 @@ async fn run_login(config: &Config, login_args: LoginArgs) -> Result<()> {
 
     if matches!(server.auth, codex_config::types::McpServerAuth::EmaAuth) {
         bail!(
-            "Enterprise MCP authorization is managed by Codex account sign-in. Open Codex to sign in."
+            "Enterprise MCP authorization is managed by Nyacode account sign-in. Open Nyacode to sign in."
         );
     }
 
@@ -640,7 +640,7 @@ async fn run_logout(config: &Config, logout_args: LogoutArgs) -> Result<()> {
             AuthManager::shared_from_config(config, /*enable_codex_api_key_env*/ true).await?;
         let auth = auth_manager.auth().await;
         let scope = ema_auth_scope(auth.as_ref())
-            .context("Sign in to your Codex account before removing enterprise authorization")?;
+            .context("Sign in to your Nyacode account before removing enterprise authorization")?;
         // Cleanup must remain available even when this server is no longer eligible
         // for EMA (for example, after disabling the feature or changing its transport).
         let profile = config
@@ -778,7 +778,7 @@ async fn run_list(config: &Config, list_args: ListArgs) -> Result<()> {
     }
 
     if entries.is_empty() {
-        println!("No MCP servers configured yet. Try `codex mcp add my-tool -- my-command`.");
+        println!("No MCP servers configured yet. Try `nyacode mcp add my-tool -- my-command`.");
         return Ok(());
     }
 
@@ -1118,7 +1118,7 @@ async fn run_get(config: &Config, get_args: GetArgs) -> Result<()> {
         };
         println!("  default_tools_approval_mode: {approval_mode}");
     }
-    println!("  remove: codex mcp remove {}", get_args.name);
+    println!("  remove: nyacode mcp remove {}", get_args.name);
 
     Ok(())
 }

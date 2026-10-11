@@ -12,14 +12,15 @@ python := if os_family() == "windows" { "python" } else { "python3" }
 help:
     just -l
 
-# `codex`
-alias c := codex
-codex *args:
-    cargo run --bin codex -- {args}
+# Run Nyacode; retain `just codex` as a compatibility alias.
+alias c := nyacode
+alias codex := nyacode
+nyacode *args:
+    cargo run --bin nyacode -- {args}
 
 # `codex exec`
 exec *args:
-    cargo run --bin codex -- exec {args}
+    cargo run --bin nyacode -- exec {args}
 
 # Start `codex exec-server` and run codex-tui.
 [no-cd]

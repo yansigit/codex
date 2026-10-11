@@ -12,6 +12,7 @@ jobs:
   # version-controlled list that the main-branch ruleset should require.
   bazel:
     name: Bazel
+    if: github.repository == 'openai/codex'
     uses: ./.github/workflows/bazel.yml
     secrets: inherit
 
@@ -37,11 +38,13 @@ jobs:
 
   rust-ci:
     name: rust-ci
+    if: github.repository == 'openai/codex'
     uses: ./.github/workflows/rust-ci.yml
     secrets: inherit
 
   sdk:
     name: sdk
+    if: github.repository == 'openai/codex'
     uses: ./.github/workflows/sdk.yml
     secrets: inherit
 
@@ -49,7 +52,7 @@ jobs:
     name: CI required
     # Without `always()`, GitHub skips this job after a failed dependency and a
     # required check can appear successful instead of reporting the failure.
-    if: ${{ always() }}
+    if: ${{ always() && github.repository == 'openai/codex' }}
     needs:
       - bazel
       - blob-size-policy

@@ -202,17 +202,20 @@ fn session_start_error_surfaces_archived_guidance_without_rollout_path() {
         history_mode: None,
     };
     let expected = format!(
-        "session {thread_id} is archived. Run `codex unarchive {thread_id}` to unarchive it first."
+        "session {thread_id} is archived. Run `nyacode unarchive {thread_id}` to unarchive it first."
     );
 
-    for action in ["resume", "fork"] {
-        let err = color_eyre::eyre::eyre!(
-            "thread/{action} failed during TUI bootstrap: thread/{action} failed: {expected} (code -32600)"
-        );
-
-        assert_eq!(
-            session_start_error(action, &target_session, err).to_string(),
-            expected
-        );
+    for command in ["codex", "nyacode"] {
+        for action in ["resume", "fork"] {
+            let server_guidance =
+                expected.replace("nyacode unarchive", &format!("{command} unarchive"));
+            let err = color_eyre::eyre::eyre!(
+                "thread/{action} failed during TUI bootstrap: thread/{action} failed: {server_guidance} (code -32600)"
+            );
+            assert_eq!(
+                session_start_error(action, &target_session, err).to_string(),
+                expected
+            );
+        }
     }
 }

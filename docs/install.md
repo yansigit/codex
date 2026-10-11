@@ -1,65 +1,68 @@
-## Installing & building
+# Installing and building Nyacode
 
-### System requirements
+Build from source until this fork publishes its own release packages. Upstream Codex installers and packages do not contain Nyacode's native provider features.
 
-| Requirement                 | Details                                                         |
-| --------------------------- | --------------------------------------------------------------- |
-| Operating systems           | macOS 12+, Ubuntu 20.04+/Debian 10+, or Windows 11 **via WSL2** |
-| Git (optional, recommended) | 2.23+ for built-in PR helpers                                   |
-| RAM                         | 4-GB minimum (8-GB recommended)                                 |
+## Build from source
 
-### DotSlash
+Install Git, Python 3.11 or newer, the pinned Rust toolchain (via rustup), and your platform's C/C++ build tools. Linux builds also need `pkg-config`, OpenSSL development headers, Clang/libclang, CMake, and Protocol Buffers. On Ubuntu:
 
-The GitHub Release also contains a [DotSlash](https://dotslash-cli.com/) file for the Codex CLI named `codex`. Using a DotSlash file makes it possible to make a lightweight commit to source control to ensure all contributors use the same version of an executable, regardless of what platform they use for development.
-
-### Build from source
-
-```bash
-# Clone the repository and navigate to the root of the Cargo workspace.
-git clone https://github.com/openai/codex.git
-cd codex/codex-rs
-
-# Install the Rust toolchain, if necessary.
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-source "$HOME/.cargo/env"
-rustup component add rustfmt
-rustup component add clippy
-# Install helper tools used by the workspace justfile:
-cargo install --locked just
-# DotSlash fetches pinned development tools such as buildifier on first use.
-cargo install --locked dotslash
-# Install nextest for the `just test` helper.
-cargo install --locked cargo-nextest
-
-# Build Codex.
-cargo build
-
-# Launch the TUI with a sample prompt.
-cargo run --bin codex -- "explain this codebase to me"
-
-# After making changes, use the root justfile helpers (they default to codex-rs):
-just fmt
-just fix -p <crate-you-touched>
-
-# Run the relevant tests (project-specific is fastest), for example:
-just test -p codex-tui
-# `just test` runs the test suite via nextest:
-just test
-# Avoid `--all-features` for routine local runs because it increases build
-# time and `target/` disk usage by compiling additional feature combinations.
+```sh
+sudo apt-get install build-essential pkg-config libssl-dev clang libclang-dev cmake protobuf-compiler
+git clone https://github.com/yansigit/nyacode.git
+cd nyacode
+python3 scripts/build_nyacode.py
+./codex-rs/target/debug/nyacode
 ```
 
-## Tracing / verbose logging
+The build helper verifies the pinned V8 archive and bindings before building both executable names and the Code Mode host. The default V8 crate download does not provide every artifact used by this fork.
 
-Codex is written in Rust, so it honors the `RUST_LOG` environment variable to configure its logging behavior.
+For an optimized installation into `~/.local/bin` on macOS or Linux:
 
-The TUI records diagnostics in bounded local stores by default. Set `log_dir` explicitly to enable a plaintext TUI log for a run:
-
-```bash
-codex -c log_dir=./.codex-log
-tail -F ./.codex-log/codex-tui.log
+```sh
+python3 scripts/build_nyacode.py --release
+mkdir -p ~/.local/bin
+install -m 755 codex-rs/target/release/nyacode codex-rs/target/release/codex-code-mode-host ~/.local/bin/
+nyacode --help
 ```
 
-The non-interactive mode (`codex exec`) defaults to `RUST_LOG=error`, but messages are printed inline, so there is no need to monitor a separate file.
+Copy the built `codex` binary too if you need the legacy command. Ensure the install directory is on `PATH`. Crate names and source directory names intentionally retain their upstream names.
 
-See the Rust documentation on [`RUST_LOG`](https://docs.rs/env_logger/latest/env_logger/#enabling-logging) for more information on the configuration options.
+## State directory
+
+Nyacode defaults to `~/.nyacode`. To use another existing directory:
+
+```sh
+mkdir -p /path/to/nyacode-home
+NYACODE_HOME=/path/to/nyacode-home nyacode
+```
+
+`NYACODE_HOME` takes precedence over the legacy `CODEX_HOME` variable. Explicit paths must exist and be directories. Empty overrides are ignored. No state is copied or deleted when switching homes.
+
+## Standalone installers and npm
+
+The checked-in `scripts/install/install.sh` and `install.ps1` install the `nyacode` command from **yansigit/nyacode** GitHub releases. They retain the native archive layout for compatibility and never fall back to OpenAI's release service. They require a matching release to have been published first.
+
+The npm launcher and TypeScript SDK target `@yansigit/nyacode` and `@yansigit/nyacode-sdk`. These names are distribution configuration, not a claim that a package is already published. There is no Nyacode Homebrew cask configured.
+
+## Development checks
+
+```sh
+cargo install --locked just cargo-nextest dotslash
+just nyacode --help
+just fmt-check
+just clippy -p codex-cli
+just test -p codex-cli
+```
+
+`just codex` and the internal `codex-*` build targets remain compatible aliases. Run affected crate tests; full workspace builds need substantially more resources.
+
+## Logging
+
+Nyacode honors `RUST_LOG`. The TUI records diagnostics in bounded local stores by default. To enable plaintext logging:
+
+```sh
+nyacode -c log_dir=./.nyacode-log
+tail -F ./.nyacode-log/codex-tui.log
+```
+
+`nyacode exec` defaults to `RUST_LOG=error` and prints messages inline. Internal log filenames remain compatible.

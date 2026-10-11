@@ -1,14 +1,14 @@
 {
-  "name": "@openai/codex-sdk",
+  "name": "@yansigit/nyacode-sdk",
   "version": "0.0.0-dev",
-  "description": "TypeScript SDK for Codex APIs.",
+  "description": "TypeScript SDK for Nyacode.",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/openai/codex.git",
+    "url": "git+https://github.com/yansigit/nyacode.git",
     "directory": "sdk/typescript"
   },
   "keywords": [
-    "openai",
+    "nyacode",
     "codex",
     "sdk",
     "typescript",

@@ -1,17 +1,9 @@
-# Security Policy
+# Security policy
 
-Thank you for helping us keep Codex secure!
+Nyacode is an independent fork of OpenAI Codex. Do not include credentials, private prompts, or vulnerability details in public issues.
 
-## Reporting Security Issues
+For a fork-specific vulnerability, use [GitHub private vulnerability reporting](https://github.com/yansigit/nyacode/security/advisories/new) when available. If the repository does not offer private reporting, contact the repository owner privately before disclosing details.
 
-The security is essential to OpenAI's mission. We appreciate the work of security researchers acting in good faith to identify and responsibly report potential vulnerabilities, helping us maintain strong privacy and security standards for our users and technology.
+Issues affecting upstream OpenAI Codex should follow [OpenAI's security policy](https://github.com/openai/codex/security/policy). OpenAI's bounty program does not imply coverage or support for this fork.
 
-Our security program is managed through Bugcrowd, and we ask that any validated vulnerabilities be reported via the [Bugcrowd program](https://bugcrowd.com/engagements/openai).
-
-## Vulnerability Disclosure Program
-
-Our Vulnerability Program Guidelines are defined on our [Bugcrowd program page](https://bugcrowd.com/engagements/openai).
-
-## How to operate CODEX safely
-
-For details on Codex security boundaries, including sandboxing, approvals, and network controls, see [Agent approvals & security](https://developers.openai.com/codex/agent-approvals-security).
+Nyacode retains the upstream sandbox, approval, and network-control interfaces. See the [upstream security boundaries](https://developers.openai.com/codex/agent-approvals-security) and this fork's [provider limitations](docs/native-providers/account-pools.md).

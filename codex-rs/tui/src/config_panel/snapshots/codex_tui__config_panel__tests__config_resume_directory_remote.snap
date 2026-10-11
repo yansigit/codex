@@ -5,7 +5,7 @@ expression: "render(&picker, 100)"
 
   Resume directory
   Choose which working directory to use when the current directory and saved session differ. A
-  directory passed with --cd takes precedence for that Codex session.
+  directory passed with --cd takes precedence for that Nyacode session.
 
 
 › 1. Ask (current)

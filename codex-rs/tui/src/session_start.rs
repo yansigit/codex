@@ -155,13 +155,19 @@ fn session_start_error(
 fn archived_session_guidance(err: &color_eyre::Report) -> Option<String> {
     let err = err.to_string();
     let message = &err[err.find("session ")?..];
-    if !message.contains(" is archived. Run `codex unarchive ") {
+    if ![
+        " is archived. Run `nyacode unarchive ",
+        " is archived. Run `codex unarchive ",
+    ]
+    .iter()
+    .any(|prefix| message.contains(prefix))
+    {
         return None;
     }
     let message = message
         .split_once(" (code ")
         .map_or(message, |(message, _)| message);
-    Some(message.to_string())
+    Some(message.replace("Run `codex unarchive ", "Run `nyacode unarchive "))
 }
 
 #[cfg(test)]

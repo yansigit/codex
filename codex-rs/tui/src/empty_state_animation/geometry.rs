@@ -8,7 +8,7 @@ pub(super) const GRID: usize = 160;
 pub(super) const EXTENT: f64 = 1.08;
 pub(super) const STEP: f64 = EXTENT * 2.0 / (GRID - 1) as f64;
 pub(super) static FIELDS: LazyLock<[Vec<f32>; 2]> =
-    LazyLock::new(|| [field(paths::CODEX), field(paths::OPENAI)]);
+    LazyLock::new(|| [field(paths::NYACODE), field(paths::CAT)]);
 
 struct Path<'a> {
     remaining: &'a str,

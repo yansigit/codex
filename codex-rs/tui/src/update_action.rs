@@ -10,19 +10,19 @@ use codex_install_context::StandalonePlatform;
 pub enum UpdateAction {
     /// Replace the local daemon after restoring the terminal.
     Daemon(DaemonUpdateSource),
-    /// Update via `npm install -g @openai/codex@latest`.
+    /// Update via `npm install -g @yansigit/nyacode@latest`.
     NpmGlobalLatest,
-    /// Update via `bun install -g @openai/codex@latest`.
+    /// Update via `bun install -g @yansigit/nyacode@latest`.
     BunGlobalLatest,
-    /// Update via `vp install -g @openai/codex@latest`.
+    /// Update via `vp install -g @yansigit/nyacode@latest`.
     VitePlusGlobalLatest,
-    /// Update via `pnpm add -g @openai/codex@latest`.
+    /// Update via `pnpm add -g @yansigit/nyacode@latest`.
     PnpmGlobalLatest,
     /// Update via `brew upgrade codex`.
     BrewUpgrade,
-    /// Update via `curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_NON_INTERACTIVE=1 sh`.
+    /// Update via `curl -fsSL https://raw.githubusercontent.com/yansigit/nyacode/main/scripts/install/install.sh | CODEX_NON_INTERACTIVE=1 sh`.
     StandaloneUnix,
-    /// Update via `$env:CODEX_NON_INTERACTIVE=1; irm https://chatgpt.com/codex/install.ps1 | iex`.
+    /// Update via `$env:CODEX_NON_INTERACTIVE=1; irm https://raw.githubusercontent.com/yansigit/nyacode/main/scripts/install/install.ps1 | iex`.
     StandaloneWindows,
 }
 
@@ -34,7 +34,8 @@ impl UpdateAction {
             InstallMethod::Bun => Some(UpdateAction::BunGlobalLatest),
             InstallMethod::VitePlus => Some(UpdateAction::VitePlusGlobalLatest),
             InstallMethod::Pnpm => Some(UpdateAction::PnpmGlobalLatest),
-            InstallMethod::Brew => Some(UpdateAction::BrewUpgrade),
+            // Nyacode has no Homebrew cask; never upgrade this fork into upstream Codex.
+            InstallMethod::Brew => None,
             InstallMethod::Standalone { platform, .. } => Some(match platform {
                 StandalonePlatform::Unix => UpdateAction::StandaloneUnix,
                 StandalonePlatform::Windows => UpdateAction::StandaloneWindows,
@@ -46,17 +47,17 @@ impl UpdateAction {
     /// Returns the list of command-line arguments for invoking the update.
     pub fn command_args(self) -> (&'static str, &'static [&'static str]) {
         match self {
-            UpdateAction::Daemon(source) => ("codex", source.command_args()),
-            UpdateAction::NpmGlobalLatest => ("npm", &["install", "-g", "@openai/codex"]),
-            UpdateAction::BunGlobalLatest => ("bun", &["install", "-g", "@openai/codex"]),
-            UpdateAction::VitePlusGlobalLatest => ("vp", &["install", "-g", "@openai/codex"]),
-            UpdateAction::PnpmGlobalLatest => ("pnpm", &["add", "-g", "@openai/codex"]),
-            UpdateAction::BrewUpgrade => ("brew", &["upgrade", "--cask", "codex"]),
+            UpdateAction::Daemon(source) => ("nyacode", source.command_args()),
+            UpdateAction::NpmGlobalLatest => ("npm", &["install", "-g", "@yansigit/nyacode"]),
+            UpdateAction::BunGlobalLatest => ("bun", &["install", "-g", "@yansigit/nyacode"]),
+            UpdateAction::VitePlusGlobalLatest => ("vp", &["install", "-g", "@yansigit/nyacode"]),
+            UpdateAction::PnpmGlobalLatest => ("pnpm", &["add", "-g", "@yansigit/nyacode"]),
+            UpdateAction::BrewUpgrade => ("brew", &["upgrade", "--cask", "nyacode"]),
             UpdateAction::StandaloneUnix => (
                 "sh",
                 &[
                     "-c",
-                    "curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_NON_INTERACTIVE=1 sh",
+                    "curl -fsSL https://raw.githubusercontent.com/yansigit/nyacode/main/scripts/install/install.sh | CODEX_NON_INTERACTIVE=1 sh",
                 ],
             ),
             UpdateAction::StandaloneWindows => (
@@ -65,7 +66,7 @@ impl UpdateAction {
                     "-ExecutionPolicy",
                     "Bypass",
                     "-c",
-                    "$env:CODEX_NON_INTERACTIVE=1; irm https://chatgpt.com/codex/install.ps1 | iex",
+                    "$env:CODEX_NON_INTERACTIVE=1; irm https://raw.githubusercontent.com/yansigit/nyacode/main/scripts/install/install.ps1 | iex",
                 ],
             ),
         }
@@ -129,7 +130,7 @@ mod tests {
                 method: InstallMethod::Brew,
                 package_layout: None,
             }),
-            Some(UpdateAction::BrewUpgrade)
+            None
         );
         assert_eq!(
             UpdateAction::from_install_context(&InstallContext {
@@ -163,7 +164,7 @@ mod tests {
                 "sh",
                 &[
                     "-c",
-                    "curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_NON_INTERACTIVE=1 sh"
+                    "curl -fsSL https://raw.githubusercontent.com/yansigit/nyacode/main/scripts/install/install.sh | CODEX_NON_INTERACTIVE=1 sh"
                 ][..],
             )
         );
@@ -175,7 +176,7 @@ mod tests {
                     "-ExecutionPolicy",
                     "Bypass",
                     "-c",
-                    "$env:CODEX_NON_INTERACTIVE=1; irm https://chatgpt.com/codex/install.ps1 | iex"
+                    "$env:CODEX_NON_INTERACTIVE=1; irm https://raw.githubusercontent.com/yansigit/nyacode/main/scripts/install/install.ps1 | iex"
                 ][..],
             )
         );

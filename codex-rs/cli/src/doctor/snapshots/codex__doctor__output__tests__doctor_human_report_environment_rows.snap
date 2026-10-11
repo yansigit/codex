@@ -2,14 +2,14 @@
 source: cli/src/doctor/output.rs
 expression: "render_human_report(&report, detailed_no_color_unicode_options())"
 ---
-Codex Doctor v0.0.0
+Nyacode Doctor v0.0.0
 
 Notes
    ↑ desktop      build 123 available (ready to install)
    ⚠ terminal     narrow terminal
-   ✗ auth         token expired - Run `codex login`.
+   ✗ auth         token expired - Run `nyacode login`.
    ⚠ git          this worktree is not on a Windows Dev Drive - create a trusted Windows Dev Drive: https://learn.microsoft.com/en-us/windows/dev-drive/
-   ⚠ security     Microsoft Defender can interfere with Codex. Verify Codex exclusions.
+   ⚠ security     Microsoft Defender can interfere with Nyacode. Verify Nyacode exclusions.
 ─────────────────────────────────────────────────────────────
 
 Environment
@@ -23,11 +23,11 @@ Environment
       GH_PAGER                 less
       LESS                     -FRX
   ✓ disk         sufficient free disk space (42.0 GiB)
-  ⚠ security     Microsoft Defender can interfere with Codex. Verify Codex exclusions.
+  ⚠ security     Microsoft Defender can interfere with Nyacode. Verify Nyacode exclusions.
       endpoint products        Microsoft Defender
       exclusion targets        verified Codex app and required helpers
-    ▸ Codex exclusions         not verified (expected Codex application and helper exclusions)
-    → Microsoft Defender: Add a certificate or executable-path exclusion for Codex and its helpers. If Attack Surface Reduction blocks Codex, add a rule exclusion. If Controlled Folder Access blocks Codex, allow the app.
+    ▸ Nyacode exclusions       not verified (expected Nyacode application and helper exclusions)
+    → Microsoft Defender: Add a certificate or executable-path exclusion for Nyacode and its helpers. If Attack Surface Reduction blocks Nyacode, add a rule exclusion. If Controlled Folder Access blocks Nyacode, allow the app.
   ✓ runtime      running local build on darwin-arm64
   ✓ install      consistent
       managed by               npm: no · bun: no · pnpm: no · Vite+: no · package root —
@@ -48,7 +48,7 @@ Configuration
   ✓ config       loaded
       feature flags            0 enabled · 0 overridden
       configured TUI mode      fullscreen
-  ✗ auth         token expired — Run `codex login`.
+  ✗ auth         token expired — Run `nyacode login`.
       OPENAI_API_KEY           present
 
 Desktop App

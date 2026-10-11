@@ -30,6 +30,7 @@ result
 *~
 
 # cli tools
+.nyacode/
 CLAUDE.md
 .claude/
 AGENTS.override.md

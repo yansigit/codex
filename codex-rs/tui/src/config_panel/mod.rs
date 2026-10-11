@@ -287,7 +287,7 @@ fn settings(tui: &Tui, status: ConfigPanelStatus) -> Vec<ConfigSetting> {
         ConfigSetting {
             section: ConfigSection::Appearance,
             label: "Animations",
-            description: "Animate the welcome screen, working indicator, and transitions. Restart Codex to apply.",
+            description: "Animate the welcome screen, working indicator, and transitions. Restart Nyacode to apply.",
             keywords: "motion accessibility spinner",
             value: ConfigSettingValue::Toggle {
                 setting: ConfigToggle::Animations,
@@ -303,13 +303,13 @@ fn settings(tui: &Tui, status: ConfigPanelStatus) -> Vec<ConfigSetting> {
                 setting: ConfigToggle::ComposerStars,
                 enabled: ConfigToggle::ComposerStars.enabled(tui),
                 dependency_met: tui.animations,
-                unavailable_reason: "Turn on animations, then restart Codex to enable composer stars.",
+                unavailable_reason: "Turn on animations, then restart Nyacode to enable composer stars.",
             },
         },
         ConfigSetting {
             section: ConfigSection::Appearance,
             label: "Tips",
-            description: "Show helpful shortcuts and suggestions. Restart Codex to apply.",
+            description: "Show helpful shortcuts and suggestions. Restart Nyacode to apply.",
             keywords: "welcome hints tooltips",
             value: ConfigSettingValue::Toggle {
                 setting: ConfigToggle::Tips,
@@ -396,7 +396,7 @@ fn settings(tui: &Tui, status: ConfigPanelStatus) -> Vec<ConfigSetting> {
         ConfigSetting {
             section: ConfigSection::Input,
             label: "Paste detection",
-            description: "Recognize pasted-text bursts and keep multiline input together. Restart Codex to apply.",
+            description: "Recognize pasted-text bursts and keep multiline input together. Restart Nyacode to apply.",
             keywords: "burst clipboard multiline",
             value: ConfigSettingValue::Toggle {
                 setting: ConfigToggle::PasteDetection,
@@ -406,7 +406,7 @@ fn settings(tui: &Tui, status: ConfigPanelStatus) -> Vec<ConfigSetting> {
         ConfigSetting {
             section: ConfigSection::Sessions,
             label: "Automatic recaps",
-            description: "Prepare recaps while the terminal is unfocused. Restart Codex to apply.",
+            description: "Prepare recaps while the terminal is unfocused. Restart Nyacode to apply.",
             keywords: "summary background",
             value: ConfigSettingValue::Toggle {
                 setting: ConfigToggle::AutomaticRecaps,
