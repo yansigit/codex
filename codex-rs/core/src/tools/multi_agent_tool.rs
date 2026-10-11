@@ -31,6 +31,17 @@ pub(super) fn multi_agent_v2_handler(
         {
             // Argument transport requires these markers even without server encryption config.
             for (name, schema) in properties {
+                // Provider selection is owned by the host, and older model catalogs
+                // do not know this optional spawn argument. Keep it when the catalog
+                // still exposes model selection and the local settings permit it.
+                if handler.tool_name().name == "spawn_agent" && name == "model_provider" {
+                    if let Some(properties) = parameters.properties.as_mut()
+                        && properties.contains_key("model")
+                    {
+                        properties.insert(name, schema);
+                    }
+                    continue;
+                }
                 if schema.encrypted == Some(true) {
                     let property = parameters
                         .properties
@@ -129,5 +140,37 @@ impl CoreToolRuntime for MultiAgentV2ToolOverrides {
         &self,
     ) -> Option<Box<dyn crate::tools::registry::ToolArgumentDiffConsumer>> {
         self.handler.create_diff_consumer()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tools::handlers::multi_agents_spec::SpawnAgentToolOptions;
+    use crate::tools::handlers::multi_agents_v2::SpawnAgentHandler;
+
+    #[test_case::test_case(true; "provider_selection_exposed")]
+    #[test_case::test_case(false; "provider_selection_hidden")]
+    fn catalog_override_retains_locally_enabled_provider_selection(expose: bool) {
+        let handler = multi_agent_v2_handler(
+            SpawnAgentHandler::new(
+                SpawnAgentToolOptions {
+                    expose_spawn_agent_model_overrides: expose,
+                    ..Default::default()
+                },
+                None,
+            ),
+            None,
+            None,
+            Some(
+                r#"{"type":"object","properties":{"message":{"type":"string"},"model":{"type":"string"}},"required":["message"]}"#,
+            ),
+        );
+        let ToolSpec::Function(tool) = handler.spec() else {
+            panic!("function expected");
+        };
+        let properties = tool.parameters.properties.expect("object parameters");
+        assert_eq!(properties.contains_key("model_provider"), expose);
+        assert_eq!(properties["message"].encrypted, Some(true));
     }
 }

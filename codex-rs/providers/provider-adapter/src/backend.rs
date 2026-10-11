@@ -37,6 +37,9 @@ pub struct SessionCapabilities {
     pub automatic_inference_retry: bool,
     pub terminal_completion: bool,
     pub structured_host_completion: bool,
+    /// Agent mail must wait until the session has durably completed. Dropping a
+    /// live native stream cannot authorize another request with uncertain history.
+    pub defer_mailbox_preemption: bool,
 }
 #[derive(Clone)]
 pub struct NativeBackend {
@@ -92,6 +95,7 @@ impl NativeBackend {
             automatic_inference_retry: false,
             terminal_completion: true,
             structured_host_completion: true,
+            defer_mailbox_preemption: true,
         }
     }
     pub fn with_provider(

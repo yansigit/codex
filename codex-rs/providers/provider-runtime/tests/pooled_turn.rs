@@ -460,3 +460,240 @@ async fn ephemeral_history_does_not_authorize_tool_round_handoff() {
         "a"
     );
 }
+
+struct ParallelRoundProvider;
+
+fn parallel_call(id: &str) -> ToolCall {
+    ToolCall {
+        id: id.into(),
+        name: "shell".into(),
+        arguments: json!({"cmd":"same command"}),
+    }
+}
+
+impl Provider for ParallelRoundProvider {
+    fn id(&self) -> &'static str {
+        "fifth"
+    }
+    fn models(&self, _: Context) -> ProviderFuture<'_, Vec<Model>> {
+        Box::pin(async { Ok(vec![]) })
+    }
+    fn handoff_request(&self, request: &Request, _: ContinuationBoundary) -> Result<Request> {
+        let mut copy = request.clone();
+        copy.checkpoint = None;
+        Ok(copy)
+    }
+    fn start(&self, request: Request, _: Context) -> ProviderFuture<'_, Box<dyn ProviderSession>> {
+        Box::pin(async move {
+            let first = request.namespace.account.starts_with("a:");
+            if !first {
+                let results: Vec<_> = request
+                    .messages
+                    .iter()
+                    .flat_map(|m| &m.content)
+                    .filter_map(|c| {
+                        if let Content::ToolResult(r) = c {
+                            Some(r)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                assert_eq!(results.len(), 2);
+                assert_eq!(results[0].call_id, "denied");
+                assert!(results[0].is_error);
+                assert_eq!(results[1].call_id, "ok");
+            }
+            let ids = if first {
+                vec!["ok", "denied"]
+            } else {
+                vec!["ok", "denied", "new"]
+            };
+            Ok(Box::new(ParallelRoundSession {
+                pending: ids.len(),
+                events: ids
+                    .into_iter()
+                    .map(|id| Event::ToolCall(parallel_call(id)))
+                    .collect(),
+                request,
+                first,
+            }) as Box<dyn ProviderSession>)
+        })
+    }
+}
+
+struct ParallelRoundSession {
+    request: Request,
+    events: std::collections::VecDeque<Event>,
+    pending: usize,
+    first: bool,
+}
+impl ProviderSession for ParallelRoundSession {
+    fn next_event(&mut self) -> ProviderFuture<'_, Option<Event>> {
+        Box::pin(async move {
+            if let Some(event) = self.events.pop_front() {
+                return Ok(Some(event));
+            }
+            std::future::pending().await
+        })
+    }
+    fn submit_tool_result(&mut self, result: ToolResult) -> ProviderFuture<'_, ()> {
+        Box::pin(async move {
+            self.request.messages.push(Message {
+                role: Role::Tool,
+                content: vec![Content::ToolResult(result)],
+            });
+            self.pending -= 1;
+            if self.pending == 0 {
+                self.events.push_back(Event::ContinuationReady);
+            }
+            Ok(())
+        })
+    }
+    fn continuation_request(&self) -> Result<Request> {
+        Ok(self.request.clone())
+    }
+    fn continue_round(&mut self) -> ProviderFuture<'_, ()> {
+        Box::pin(async move {
+            if self.first {
+                return Err(quota(RequestOutcome::Rejected));
+            }
+            self.events
+                .push_back(Event::Completed { id: "done".into() });
+            Ok(())
+        })
+    }
+    fn cancel(&mut self) -> ProviderFuture<'_, ()> {
+        Box::pin(async { Ok(()) })
+    }
+}
+
+struct JournaledParallelHost {
+    home: std::path::PathBuf,
+    store: Mutex<SessionStore>,
+    executed: Mutex<Vec<String>>,
+    results: Mutex<Vec<ToolResult>>,
+    both_started: tokio::sync::Barrier,
+    denied_finished: tokio::sync::Notify,
+}
+impl Host for JournaledParallelHost {
+    fn execute(
+        &self,
+        call: ToolCall,
+        cancellation: CancellationToken,
+    ) -> ProviderFuture<'_, ToolResult> {
+        Box::pin(async move {
+            let store = self.store.lock().expect("journal store lock").clone();
+            let ticket = match store.begin_tool(call.clone(), &cancellation).await? {
+                ToolDisposition::Replay(result) => return Ok(result),
+                ToolDisposition::Execute(ticket) => ticket,
+            };
+            self.executed
+                .lock()
+                .expect("execution log lock")
+                .push(call.id.clone());
+            if call.id != "new" {
+                self.both_started.wait().await;
+            }
+            if call.id == "ok" {
+                self.denied_finished.notified().await;
+            }
+            let result = ticket.finish(ToolResult {
+                call_id: call.id.clone(),
+                output: json!({"id":call.id}),
+                is_error: call.id == "denied",
+            })?;
+            self.results
+                .lock()
+                .expect("recorded results lock")
+                .push(result.clone());
+            if call.id == "denied" {
+                self.denied_finished.notify_one();
+            }
+            Ok(result)
+        })
+    }
+    fn checkpoint(&self, _: Checkpoint) -> ProviderFuture<'_, ()> {
+        Box::pin(async { Ok(()) })
+    }
+    fn persisted_history(&self) -> ProviderFuture<'_, Option<HistoryAcknowledgement>> {
+        Box::pin(async move {
+            let results = self.results.lock().expect("recorded results lock").clone();
+            Store::new(&self.home)
+                .lock("complex-history", &CancellationToken::new())
+                .await?
+                .write(&results)?;
+            Ok(Some(HistoryAcknowledgement {
+                hash: digest(&serde_json::to_vec(&results).expect("serialize recorded history")),
+                length: results.len(),
+                checkpoint_scope: "window".into(),
+            }))
+        })
+    }
+    fn account_changed(
+        &self,
+        namespace: Namespace,
+        prior: Vec<Namespace>,
+    ) -> ProviderFuture<'_, ()> {
+        Box::pin(async move {
+            let mut store = self.store.lock().expect("journal store lock");
+            *store = store.for_namespace(namespace).with_prior_journals(prior);
+            Ok(())
+        })
+    }
+}
+
+#[tokio::test]
+async fn parallel_denial_and_success_handoff_replays_ids_but_executes_new_identical_command() {
+    let home = tempfile::tempdir().unwrap();
+    let credentials = setup(home.path()).await;
+    let cancel = CancellationToken::new();
+    let turn = start_turn(
+        home.path(),
+        "endpoint",
+        "turn",
+        "window",
+        request("complex"),
+        Arc::new(ParallelRoundProvider),
+        credentials,
+        cancel.clone(),
+    )
+    .await
+    .unwrap();
+    turn.execution.mark_tools_started().unwrap();
+    let host = Arc::new(JournaledParallelHost {
+        home: home.path().to_path_buf(),
+        store: Mutex::new(turn.store),
+        executed: Mutex::new(vec![]),
+        results: Mutex::new(vec![]),
+        both_started: tokio::sync::Barrier::new(2),
+        denied_finished: tokio::sync::Notify::new(),
+    });
+    let (events, mut received) = tokio::sync::mpsc::channel(32);
+    tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        drive_session(turn.session, host.clone(), &turn.request, cancel, events),
+    )
+    .await
+    .expect("parallel tools must not deadlock")
+    .unwrap();
+    turn.execution.complete().unwrap();
+    let mut calls = host.executed.lock().unwrap().clone();
+    calls.sort();
+    assert_eq!(calls, vec!["denied", "new", "ok"]);
+    let mut changes = 0;
+    while let Some(event) = received.recv().await {
+        if matches!(event.unwrap(), Event::AccountChanged { .. }) {
+            changes += 1;
+        }
+    }
+    assert_eq!(changes, 1);
+    assert_eq!(
+        PoolStore::new(home.path(), "fifth", "endpoint")
+            .affinity("complex")
+            .unwrap()
+            .unwrap()
+            .label,
+        "b"
+    );
+}

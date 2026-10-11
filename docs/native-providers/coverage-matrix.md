@@ -12,6 +12,12 @@ The additive pool implementation and its new evidence are tracked separately in
 [account-pools.md](account-pools.md). Earlier live receipts below cover the
 published single-account baseline, not cross-account continuation.
 
+## Cross-provider children and complex tools
+
+[Multi-provider agents](multi-provider-agents.md) describes explicit fresh-child
+provider selection and the complex-tool acceptance runner. Account-pool and
+single-agent receipts do not by themselves establish cross-provider collaboration.
+
 ## Compiled boundary refactor
 
 Fresh results and exact receipt paths are in

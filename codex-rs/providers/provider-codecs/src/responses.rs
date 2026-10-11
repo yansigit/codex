@@ -80,7 +80,10 @@ impl WireCodec for ResponsesCodec {
         }
         let mut body = json!({"model":request.namespace.model,"input":input,"instructions":request.system,"stream":true,"store":false,"include":["reasoning.encrypted_content"],"parallel_tool_calls":request.parallel_tool_calls});
         if !request.tools.is_empty() {
-            body["tools"] = json!(request.tools.iter().map(|tool| json!({"type":"function","name":tool.name,"description":tool.description,"parameters":tool.parameters})).collect::<Vec<_>>());
+            // Host tools contain optional arguments (including spawn settings).
+            // Responses normalizes omitted strict settings differently from Chat;
+            // preserve the host's permissive schema instead of requiring every field.
+            body["tools"] = json!(request.tools.iter().map(|tool| json!({"type":"function","name":tool.name,"description":tool.description,"parameters":tool.parameters,"strict":false})).collect::<Vec<_>>());
         }
         if let Some(max) = request.max_output_tokens {
             body["max_output_tokens"] = json!(max);
@@ -174,6 +177,13 @@ impl WireCodec for ResponsesCodec {
                     }
                 }
                 Some("function_call") => {
+                    if item.get("encrypted_function_args").is_some_and(|args| {
+                        !args.is_null() && args.as_array().is_none_or(|args| !args.is_empty())
+                    }) {
+                        return Err(ProviderError::Unsupported(
+                            "native Responses received encrypted tool arguments".into(),
+                        ));
+                    }
                     let name = string(item, "name")?;
                     if !self.declared.contains(&name) {
                         return Err(protocol("Responses returned undeclared tool"));

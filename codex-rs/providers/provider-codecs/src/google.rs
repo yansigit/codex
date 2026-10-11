@@ -180,7 +180,118 @@ impl GoogleCodec {
         Ok(parts)
     }
 }
-/// Preserve supported constraints; reject reference/combinator schemas rather than
+/// Expand only local references, with explicit depth and allocation bounds. Remote,
+/// recursive and conflicting schemas cannot silently become weaker declarations.
+fn inline_schema_refs(
+    value: &Value,
+    root: &Value,
+    depth: usize,
+    budget: &mut usize,
+) -> Result<Value> {
+    let cost = value.as_str().map_or(16, str::len);
+    if depth > 64 || *budget < cost {
+        return Err(ProviderError::Unsupported(
+            "Antigravity schema expansion limit".into(),
+        ));
+    }
+    *budget -= cost;
+    match value {
+        Value::Object(object) => {
+            if ["$id", "$anchor", "$dynamicRef", "$dynamicAnchor"]
+                .iter()
+                .any(|key| object.contains_key(*key))
+            {
+                return Err(ProviderError::Unsupported(
+                    "Antigravity schema reference scopes are unsupported".into(),
+                ));
+            }
+            let mut result = if let Some(reference) = object.get("$ref") {
+                let pointer = reference
+                    .as_str()
+                    .and_then(|s| s.strip_prefix('#'))
+                    .filter(|s| s.starts_with('/'))
+                    .ok_or_else(|| {
+                        ProviderError::Unsupported(
+                            "Antigravity requires local schema references".into(),
+                        )
+                    })?;
+                let target = root.pointer(pointer).ok_or_else(|| {
+                    ProviderError::Unsupported("Antigravity schema reference is unresolved".into())
+                })?;
+                inline_schema_refs(target, root, depth + 1, budget)?
+                    .as_object()
+                    .cloned()
+                    .ok_or_else(|| {
+                        ProviderError::Unsupported(
+                            "Antigravity schema reference must resolve to an object".into(),
+                        )
+                    })?
+            } else {
+                serde_json::Map::new()
+            };
+            for (key, child) in object {
+                if matches!(key.as_str(), "$ref" | "$defs" | "definitions") {
+                    continue;
+                }
+                if *budget < key.len() {
+                    return Err(ProviderError::Unsupported(
+                        "Antigravity schema expansion limit".into(),
+                    ));
+                }
+                *budget -= key.len();
+                let child = if key == "properties" {
+                    let properties = child.as_object().ok_or_else(|| {
+                        protocol("Antigravity schema properties must be an object")
+                    })?;
+                    let mut mapped = serde_json::Map::new();
+                    for (name, schema) in properties {
+                        if *budget < name.len() {
+                            return Err(ProviderError::Unsupported(
+                                "Antigravity schema expansion limit".into(),
+                            ));
+                        }
+                        *budget -= name.len();
+                        mapped.insert(
+                            name.clone(),
+                            inline_schema_refs(schema, root, depth + 1, budget)?,
+                        );
+                    }
+                    Value::Object(mapped)
+                } else if matches!(key.as_str(), "enum" | "default" | "examples" | "const") {
+                    let size = child.to_string().len();
+                    if *budget < size {
+                        return Err(ProviderError::Unsupported(
+                            "Antigravity schema expansion limit".into(),
+                        ));
+                    }
+                    *budget -= size;
+                    child.clone()
+                } else {
+                    inline_schema_refs(child, root, depth + 1, budget)?
+                };
+                if let Some(existing) = result.get(key)
+                    && existing != &child
+                    && !matches!(key.as_str(), "description" | "title")
+                {
+                    return Err(ProviderError::Unsupported(
+                        "Antigravity schema reference has conflicting constraints".into(),
+                    ));
+                }
+                result.insert(key.clone(), child);
+            }
+            Ok(Value::Object(result))
+        }
+        Value::Array(array) => Ok(Value::Array(
+            array
+                .iter()
+                .map(|v| inline_schema_refs(v, root, depth + 1, budget))
+                .collect::<Result<_>>()?,
+        )),
+        value => Ok(value.clone()),
+    }
+}
+
+/// Preserve supported constraints; reject unsupported combinator schemas rather than
 /// quietly changing what a tool accepts. `additionalProperties: false` is a host
 /// validation constraint and has no equivalent in Google's function declaration schema.
 fn tool_schema(value: &Value) -> Result<Value> {
@@ -280,7 +391,10 @@ impl WireCodec for GoogleCodec {
             inner["systemInstruction"] = json!({"parts":system});
         }
         if !request.tools.is_empty() {
-            let declarations = request.tools.iter().map(|tool| Ok(json!({"name":tool.name,"description":tool.description,"parameters":tool_schema(&tool.parameters)?}))).collect::<Result<Vec<_>>>()?;
+            let declarations = request.tools.iter().map(|tool| {
+                let schema = inline_schema_refs(&tool.parameters, &tool.parameters, 0, &mut (512 * 1024))?;
+                Ok(json!({"name":tool.name,"description":tool.description,"parameters":tool_schema(&schema)?}))
+            }).collect::<Result<Vec<_>>>()?;
             inner["tools"] = json!([{"functionDeclarations":declarations}]);
             inner["toolConfig"] = json!({"functionCallingConfig":{"mode":if request.namespace.model.to_lowercase().contains("claude") {"VALIDATED"} else {"AUTO"}}});
         }

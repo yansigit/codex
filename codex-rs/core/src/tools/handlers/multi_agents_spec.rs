@@ -21,6 +21,7 @@ const SPAWN_AGENT_MODEL_CATALOG_GUIDANCE: &str =
 const SPAWN_AGENT_TYPE_OVERRIDE_DESCRIPTION_V1: &str = "Agent type override for the new agent. Omit to inherit the parent agent type with a full-history fork; otherwise, `default` is used.";
 const SPAWN_AGENT_MODEL_OVERRIDE_DESCRIPTION: &str =
     "Model override for the new agent. Omit unless an explicit override is needed.";
+const SPAWN_AGENT_PROVIDER_OVERRIDE_DESCRIPTION: &str = "Configured model provider ID for the new agent. Omit to inherit the parent provider. Changing provider requires an explicit model from that provider and a fresh child (fork_turns=none or fork_context=false). The model catalog shown here belongs to the parent provider.";
 const MAX_REASONING_EFFORT_CHARS_IN_SPAWN_AGENT_DESCRIPTION: usize = 64;
 
 #[derive(Debug, Clone)]
@@ -128,6 +129,7 @@ pub fn create_spawn_agent_tool_v2(
     }
     if !options.expose_spawn_agent_model_overrides {
         properties.remove("model");
+        properties.remove("model_provider");
         properties.remove("reasoning_effort");
     }
     properties.insert(
@@ -610,6 +612,10 @@ fn create_collab_input_items_schema() -> JsonSchema {
 fn spawn_agent_common_properties_v1(agent_type_description: &str) -> BTreeMap<String, JsonSchema> {
     BTreeMap::from([
         (
+            "model_provider".to_string(),
+            JsonSchema::string(Some(SPAWN_AGENT_PROVIDER_OVERRIDE_DESCRIPTION.to_string())),
+        ),
+        (
             "message".to_string(),
             JsonSchema::string(Some(
                 "Initial plain-text task for the new agent. Use either message or items."
@@ -649,6 +655,10 @@ fn spawn_agent_common_properties_v1(agent_type_description: &str) -> BTreeMap<St
 fn spawn_agent_common_properties_v2(agent_type_description: &str) -> BTreeMap<String, JsonSchema> {
     BTreeMap::from([
         (
+            "model_provider".to_string(),
+            JsonSchema::string(Some(SPAWN_AGENT_PROVIDER_OVERRIDE_DESCRIPTION.to_string())),
+        ),
+        (
             "message".to_string(),
             JsonSchema::string(Some(
                 "Initial plain-text task for the new agent.".to_string(),
@@ -686,6 +696,7 @@ fn spawn_agent_common_properties_v2(agent_type_description: &str) -> BTreeMap<St
 fn hide_spawn_agent_metadata_options(properties: &mut BTreeMap<String, JsonSchema>) {
     properties.remove("agent_type");
     properties.remove("model");
+    properties.remove("model_provider");
     properties.remove("reasoning_effort");
 }
 

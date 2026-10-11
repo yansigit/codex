@@ -44,6 +44,29 @@ fn context() -> Context {
     }
 }
 
+#[test]
+fn collaboration_sized_catalog_keeps_complete_descriptions_and_parameter_schemas() {
+    let mut req = request();
+    req.tools[0].description = "host instructions ".repeat(9_000);
+    req.tools[0].parameters = json!({"type":"object","properties":{
+        "model_provider":{"type":"string"},"model":{"type":"string"},
+        "fork_turns":{"type":"string","enum":["none","all"]}
+    },"required":["model"],"additionalProperties":false});
+    let mut state = state::State::restore(&req).unwrap();
+    let (_, context) = prepare(&req, &mut state).unwrap();
+    assert_eq!(context.tools.len(), 1);
+    assert_eq!(context.tools[0].description, req.tools[0].description);
+    assert_eq!(
+        context.tools[0].schema,
+        json_value(&req.tools[0].parameters).encode_to_vec()
+    );
+    req.tools[0].description = "x".repeat(MAX_TOOL_BYTES);
+    assert!(matches!(
+        prepare(&req, &mut state),
+        Err(ProviderError::Unsupported(_))
+    ));
+}
+
 async fn send_message(send: &mut h2::SendStream<Bytes>, message: wire::ServerMessage, end: bool) {
     let data = connect::encode(&message.encode_to_vec()).unwrap();
     // Split even the envelope header across DATA frames.

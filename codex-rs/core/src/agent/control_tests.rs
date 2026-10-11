@@ -1303,6 +1303,9 @@ async fn check_v2_agent_reload(route: V2ReloadRoute) {
         .get("ollama")
         .cloned()
         .expect("ollama provider should be configured");
+    sender_config.model_context_window = Some(123);
+    sender_config.model_auto_compact_token_limit = Some(100);
+    sender_config.agent_default_subagent_model = Some("sender-only-model".into());
 
     let mut parent_turn = parent_thread.session.new_default_turn().await;
     let residency_pin = match route {
@@ -1354,6 +1357,10 @@ async fn check_v2_agent_reload(route: V2ReloadRoute) {
         .await
         .expect("reloaded child thread should exist");
     if matches!(route, V2ReloadRoute::Sender) {
+        let config = reloaded_child.session.get_config().await;
+        assert_eq!(config.model_context_window, None);
+        assert_eq!(config.model_auto_compact_token_limit, None);
+        assert_eq!(config.agent_default_subagent_model, None);
         assert_eq!(
             harness
                 .manager
