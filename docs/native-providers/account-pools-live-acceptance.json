@@ -14,7 +14,8 @@
           "evidence": [
             "LIVE_POOL provider=cursor model=gpt-5.6-luna-none first=natural rejection=injected-before-dispatch second=natural restart=passed"
           ],
-          "log_sha256": "1aab1864e26cd17d40918857b110ffc5d90fc4f9b4f9f435f3a20722775ff4c9"
+          "log_sha256": "564c2eef5b091324420ba61f209f5405b9b07dec1bdb7c0c674e9ec678c879b8",
+          "source_commit": "a1bcb8842"
         },
         "lifecycle": {
           "result": "passed",
@@ -54,7 +55,8 @@
           "evidence": [
             "LIVE_POOL provider=opencode-go model=glm-5.3 first=natural rejection=injected-before-dispatch second=natural restart=passed"
           ],
-          "log_sha256": "38b7726a1e2e676ae7d2abdadb30c8adaa20a7c98a6b85450d9d5a2b8bd2bf26"
+          "log_sha256": "c73f693cdc1bb23ad5852759abef0d42861613cba26129687e9b7ba453e76d86",
+          "source_commit": "a1bcb8842"
         },
         "lifecycle": {
           "result": "passed",
@@ -84,7 +86,8 @@
           "evidence": [
             "LIVE_POOL provider=opencode-go model=glm-5.3 recorded_tool=natural rejection=injected-before-continuation handoff=explicit-signature-refusal"
           ],
-          "log_sha256": "43e2992d2e05c246893ed25ddf48d91de278524c5605537726749f0245fff6e5"
+          "log_sha256": "c519f4b0197f8f7bbb8908c4a2ca2c3acc04914a9a1e8a0fc60295e17844eebe",
+          "source_commit": "a1bcb8842"
         }
       }
     },
@@ -97,7 +100,8 @@
           "evidence": [
             "LIVE_POOL provider=opencode-go model=minimax-m3 first=natural rejection=injected-before-dispatch second=natural restart=passed"
           ],
-          "log_sha256": "8ef574644cad59273bf4241f280b9351031a514ba7f34c840e4f30efd34092e3"
+          "log_sha256": "3eefb1e4ca0249b800d5f7dd3d7cd3834de2896b4e0809d731a449e60ba8751a",
+          "source_commit": "a1bcb8842"
         },
         "lifecycle": {
           "result": "passed",
@@ -127,7 +131,8 @@
           "evidence": [
             "LIVE_POOL provider=opencode-go model=minimax-m3 recorded_tool=natural rejection=injected-before-continuation handoff=accepted"
           ],
-          "log_sha256": "13909036baff497d361b993afd05762a4c54dc73a903f0bb97e1333fc02b5bf9"
+          "log_sha256": "2ddfb9e7cdc13bbee5ff338560046e23b952ccaf820128ac027b4f274d9be085",
+          "source_commit": "a1bcb8842"
         }
       }
     },
@@ -140,7 +145,8 @@
           "evidence": [
             "LIVE_POOL provider=opencode-go model=gpt-6-luna first=natural rejection=injected-before-dispatch second=natural restart=passed"
           ],
-          "log_sha256": "0721252bdab19c61e8afa64215798acc510253830d3a824fde15b48d7888cb28"
+          "log_sha256": "2fbf586ad897987601d4cf2f507f941eae5393e1b47fa8cc3a85421f36cc0a34",
+          "source_commit": "a1bcb8842"
         },
         "lifecycle": {
           "result": "passed",
@@ -170,7 +176,8 @@
           "evidence": [
             "LIVE_POOL provider=opencode-go model=gpt-6-luna recorded_tool=natural rejection=injected-before-continuation handoff=accepted"
           ],
-          "log_sha256": "cca95012f3ca6113d7b48c3233a959fe3c415578f7cf2594e0222b8ebb4a26f3"
+          "log_sha256": "7c7f1cebb9310632e2c9ddc5b6d6eda07c04de0bf68b1ca9ae3899ea4228353a",
+          "source_commit": "a1bcb8842"
         }
       }
     },
@@ -183,7 +190,8 @@
           "evidence": [
             "LIVE_POOL provider=antigravity model=gemini-3.5-flash-lite first=natural rejection=injected-before-dispatch second=natural restart=passed"
           ],
-          "log_sha256": "57d0c8f29326c60c7ab96dfe8ffc092775a52b626d55bb18335ea699adafac82"
+          "log_sha256": "5cd5ec8c0035f6f2e7a9f88b767b4f1b3a2e6b23dd0baeed75d03facff6121ff",
+          "source_commit": "a1bcb8842"
         },
         "lifecycle": {
           "result": "passed",
@@ -213,7 +221,8 @@
           "evidence": [
             "LIVE_POOL provider=antigravity model=gemini-3.5-flash-lite recorded_tool=natural rejection=injected-before-continuation handoff=explicit-signature-refusal"
           ],
-          "log_sha256": "6fb0437d8a8b0b3046e62a3657626a5f1569829ae924f9fad5ffae201fb46619"
+          "log_sha256": "e86f8c6c6fabc85832312ee1bb34fc983a4ea2c2b221615e3c7a7583925105d3",
+          "source_commit": "a1bcb8842"
         }
       }
     },
@@ -226,7 +235,8 @@
           "evidence": [
             "LIVE_POOL provider=antigravity model=claude-sonnet-4-6 first=natural rejection=injected-before-dispatch second=natural restart=passed"
           ],
-          "log_sha256": "d37356a8b2d323e1e46b77fa443a438c6fc94e6b5eea036bf04839a5f707c09f"
+          "log_sha256": "028fa15c7d43d094acac722feb9d74d9c42fe964f392b6f045d68acaf7e7cfc4",
+          "source_commit": "a1bcb8842"
         },
         "lifecycle": {
           "result": "passed",
@@ -256,7 +266,8 @@
           "evidence": [
             "LIVE_POOL provider=antigravity model=claude-sonnet-4-6 recorded_tool=natural rejection=injected-before-continuation handoff=explicit-signature-refusal"
           ],
-          "log_sha256": "abc95a262fdbd253f2985b5b4068a4b6c87852b5cdc6e9fde8cb8f28089f8346"
+          "log_sha256": "5d267c89d4f40fbc025ee1541d60db42c13b1e4296b5dd9cf7bddaf72af3b2f1",
+          "source_commit": "a1bcb8842"
         }
       }
     }
@@ -272,5 +283,6 @@
     "Cursor lifecycle initially returned READY after compaction although the saved summary contained the code word; one repeat passed.",
     "MiniMax initially did not call an empty-argument test tool; a concrete required-key tool fixture reached the boundary and handoff passed.",
     "A diagnostic GLM-5.3 request with reasoning none was rejected; runtime did not downgrade or retry it. Default thinking is retained and refused for cross-account handoff."
-  ]
+  ],
+  "pool_runtime_source_commit": "a1bcb8842"
 }
