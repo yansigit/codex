@@ -3212,6 +3212,9 @@ impl App {
                     ));
                 }
             },
+            AppEvent::OpenProviders => {
+                self.chat_widget.show_provider_manager(app_server.request_handle());
+            }
             AppEvent::FullscreenTranscriptSelected { enabled } => {
                 self.save_fullscreen_transcript(enabled).await;
             }

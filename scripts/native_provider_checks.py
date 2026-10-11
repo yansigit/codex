@@ -29,7 +29,7 @@ def run_checks(root: Path, artifact_dir: Path) -> list[dict[str, Any]]:
     env["CARGO_TERM_COLOR"] = "never"
     # Match the repository's `just test` stack size for large host test futures.
     env.setdefault("RUST_MIN_STACK", "8388608")
-    env["CARGO_BUILD_JOBS"] = "2"
+    env.setdefault("CARGO_BUILD_JOBS", "2")
     env["CARGO_INCREMENTAL"] = "0"
     revision = subprocess.run(
         ["git", "rev-parse", "HEAD"],

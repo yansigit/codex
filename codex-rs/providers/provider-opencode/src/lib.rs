@@ -1,4 +1,5 @@
 //! Native OpenCode Go HTTP provider. Route families come from the pinned provider catalog.
+mod failure;
 use codex_provider_api::*;
 use codex_provider_codecs::*;
 use reqwest::Client;
@@ -45,6 +46,13 @@ impl OpenCodeProvider {
 impl Provider for OpenCodeProvider {
     fn id(&self) -> &'static str {
         "opencode-go"
+    }
+    fn handoff_request(
+        &self,
+        request: &Request,
+        _boundary: ContinuationBoundary,
+    ) -> Result<Request> {
+        portable_history(request)
     }
     fn models(&self, context: Context) -> ProviderFuture<'_, Vec<Model>> {
         Box::pin(async move {
@@ -112,10 +120,16 @@ impl Provider for OpenCodeProvider {
                     ));
                 }
             };
-            Ok(
-                Box::new(HttpSession::start(self.client.clone(), codec, request, context).await?)
-                    as Box<dyn ProviderSession>,
-            )
+            Ok(Box::new(
+                HttpSession::start_with_policy(
+                    self.client.clone(),
+                    codec,
+                    request,
+                    context,
+                    failure::classify,
+                )
+                .await?,
+            ) as Box<dyn ProviderSession>)
         })
     }
 }

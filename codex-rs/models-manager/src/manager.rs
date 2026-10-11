@@ -46,6 +46,9 @@ pub trait ModelsEndpointClient: fmt::Debug + Send + Sync {
     /// Return `None` when identity is unavailable; cached catalog reuse is then disabled.
     fn identity(&self) -> Option<String>;
 
+    /// Bind discovery to a conversation when credentials can vary by thread.
+    fn bind_thread(&self, _thread: &str) {}
+
     /// Returns whether this provider can authenticate command-scoped requests.
     fn has_command_auth(&self) -> bool;
 
@@ -117,6 +120,8 @@ pub trait ModelsManager: fmt::Debug + Send + Sync {
     /// Supply startup API-key discovery policy; live changes require a new session.
     /// Static catalogs ignore this setting.
     fn set_api_key_model_discovery_enabled(&self, _enabled: bool) {}
+
+    fn bind_thread(&self, _thread: &str) {}
 
     /// List all available models, refreshing according to the specified strategy.
     ///
@@ -379,6 +384,9 @@ impl StaticModelsManager {
 }
 
 impl ModelsManager for OpenAiModelsManager {
+    fn bind_thread(&self, thread: &str) {
+        self.endpoint_client.bind_thread(thread);
+    }
     fn set_api_key_model_discovery_enabled(&self, enabled: bool) {
         self.api_key_model_discovery_enabled
             .store(enabled, Ordering::SeqCst);

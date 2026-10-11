@@ -890,6 +890,7 @@ impl Session {
                 ));
             }
         };
+        models_manager.bind_thread(&thread_id.to_string());
         let isolation = thread_extension_init
             .get::<codex_extension_api::SessionIsolation>()
             .map(|policy| *policy)

@@ -68,7 +68,8 @@ impl Decoder {
             self.buffer[3],
             self.buffer[4],
         ]) as usize;
-        if length > MAX_FRAME {
+        let limit = if flags & 2 != 0 { 64 * 1024 } else { MAX_FRAME };
+        if length > limit {
             return Err(ProviderError::Protocol("Cursor frame exceeds limit".into()));
         }
         if self.buffer.len() < 5 + length {
@@ -79,10 +80,10 @@ impl Decoder {
         if flags & 1 != 0 {
             let mut decoded = Vec::new();
             flate2::read::GzDecoder::new(payload.as_ref())
-                .take((MAX_FRAME + 1) as u64)
+                .take((limit + 1) as u64)
                 .read_to_end(&mut decoded)
                 .map_err(|_| ProviderError::Protocol("invalid Cursor gzip frame".into()))?;
-            if decoded.len() > MAX_FRAME {
+            if decoded.len() > limit {
                 return Err(ProviderError::Protocol(
                     "decompressed Cursor frame exceeds limit".into(),
                 ));
@@ -97,24 +98,24 @@ impl Decoder {
                     .get("code")
                     .and_then(|v| v.as_str())
                     .unwrap_or("unknown");
-                return Err(if code == "unauthenticated" {
-                    ProviderError::Authentication("Cursor rejected credentials".into())
-                } else {
-                    let detail = error.get("message").and_then(|v| v.as_str()).unwrap_or("");
-                    let detail = detail
-                        .split_whitespace()
-                        .take(80)
-                        .map(|word| {
-                            if word.len() > 48 || word.contains("crsr_") || word.contains("eyJ") {
-                                "<redacted>"
-                            } else {
-                                word
-                            }
-                        })
-                        .collect::<Vec<_>>()
-                        .join(" ");
-                    ProviderError::Protocol(format!("Cursor Connect ended with {code}: {detail}"))
-                });
+                let status = match code {
+                    "unauthenticated" => 401,
+                    "resource_exhausted" => 429,
+                    "unavailable" => 503,
+                    "invalid_argument" => 400,
+                    _ => 0,
+                };
+                return Err(ProviderError::Classified(crate::failure::classify(
+                    codex_provider_api::FailureResponse {
+                        status,
+                        body: &payload,
+                        retry_after_seconds: None,
+                        model: "",
+                        now: 0,
+                        // Connect may already have consumed inference; no automatic replay.
+                        outcome: codex_provider_api::RequestOutcome::PotentiallyProcessed,
+                    },
+                )));
             }
             self.ended = true;
             if !self.buffer.is_empty() {
@@ -263,6 +264,29 @@ mod tests {
     }
 
     #[test]
+    fn connect_error_body_is_bounded_before_json_or_gzip_expansion() {
+        use std::io::Write;
+        for compressed in [false, true] {
+            let large = vec![b' '; 64 * 1024 + 1];
+            let payload = if compressed {
+                let mut encoder =
+                    flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+                encoder.write_all(&large).unwrap();
+                encoder.finish().unwrap()
+            } else {
+                large
+            };
+            let mut frame = encode(&payload).unwrap().to_vec();
+            frame[0] = if compressed { 3 } else { 2 };
+            let mut decoder = Decoder::default();
+            decoder.push(&frame).unwrap();
+            assert!(
+                matches!(decoder.next(), Err(ProviderError::Protocol(message)) if message.contains("exceeds limit"))
+            );
+        }
+    }
+
+    #[test]
     fn connect_authentication_error_is_typed() {
         let payload = br#"{"error":{"code":"unauthenticated","message":"secret echo"}}"#;
         let mut frame = encode(payload).unwrap().to_vec();
@@ -271,7 +295,7 @@ mod tests {
         decoder.push(&frame).unwrap();
         assert!(matches!(
             decoder.next(),
-            Err(ProviderError::Authentication(_))
+            Err(ProviderError::Classified(failure)) if failure.category == codex_provider_api::FailureCategory::Authentication && !failure.can_fail_over()
         ));
     }
     #[test]

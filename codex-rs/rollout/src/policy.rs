@@ -171,6 +171,7 @@ fn persisted_event_msg(
         | EventMsg::DynamicToolCallRequest(_)
         | EventMsg::DynamicToolCallResponse(_)
         | EventMsg::Warning(_)
+        | EventMsg::ProviderAccountChanged(_)
         | EventMsg::AuthRecoveryStarted(_)
         | EventMsg::AuthRecoveryCompleted(_)
         | EventMsg::GuardianWarning(_)

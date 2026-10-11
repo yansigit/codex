@@ -3772,6 +3772,78 @@
             },
             "method": {
               "enum": [
+                "provider/accounts/list"
+              ],
+              "title": "Provider/accounts/listRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/ProviderAccountsParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Provider/accounts/listRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
+                "provider/pool/update"
+              ],
+              "title": "Provider/pool/updateRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/ProviderPoolUpdateParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Provider/pool/updateRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
+                "provider/account/logout"
+              ],
+              "title": "Provider/account/logoutRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/ProviderAccountLogoutParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Provider/account/logoutRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
                 "account/login/start"
               ],
               "title": "Account/login/startRequestMethod",
@@ -10207,6 +10279,21 @@
             "provider": {
               "type": "string"
             },
+            "select": {
+              "default": null,
+              "description": "Defaults to selecting this account, preserving existing clients.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "threadId": {
+              "default": null,
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "type": {
               "enum": [
                 "native"
@@ -14066,6 +14153,367 @@
       ],
       "type": "string"
     },
+    "ProviderAccountAvailability": {
+      "properties": {
+        "knownResetAt": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "nextAttemptAt": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "reason"
+      ],
+      "type": "object"
+    },
+    "ProviderAccountLogoutParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "account": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "revision": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "threadId": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "account",
+        "provider",
+        "revision"
+      ],
+      "title": "ProviderAccountLogoutParams",
+      "type": "object"
+    },
+    "ProviderAccountStatus": {
+      "properties": {
+        "availability": {
+          "items": {
+            "$ref": "#/definitions/ProviderAccountAvailability"
+          },
+          "type": "array"
+        },
+        "credentialCondition": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "enrolled": {
+          "type": "boolean"
+        },
+        "label": {
+          "type": "string"
+        },
+        "priority": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "availability",
+        "credentialCondition",
+        "enabled",
+        "enrolled",
+        "label"
+      ],
+      "type": "object"
+    },
+    "ProviderAccountsParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "threadId": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "provider"
+      ],
+      "title": "ProviderAccountsParams",
+      "type": "object"
+    },
+    "ProviderAccountsResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "accounts": {
+          "items": {
+            "$ref": "#/definitions/ProviderAccountStatus"
+          },
+          "type": "array"
+        },
+        "configuredToken": {
+          "type": "boolean"
+        },
+        "effectiveAccount": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "endpoint": {
+          "type": "string"
+        },
+        "explicitlyEnabled": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "preferredAccount": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "provider": {
+          "type": "string"
+        },
+        "revision": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "accounts",
+        "configuredToken",
+        "enabled",
+        "endpoint",
+        "provider",
+        "revision"
+      ],
+      "title": "ProviderAccountsResponse",
+      "type": "object"
+    },
+    "ProviderPoolChangedNotification": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "endpoint": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "revision": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "endpoint",
+        "provider",
+        "revision"
+      ],
+      "title": "ProviderPoolChangedNotification",
+      "type": "object"
+    },
+    "ProviderPoolUpdate": {
+      "oneOf": [
+        {
+          "properties": {
+            "action": {
+              "enum": [
+                "enable"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "title": "EnableProviderPoolUpdate",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "enum": [
+                "disable"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "title": "DisableProviderPoolUpdate",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "enum": [
+                "enroll"
+              ],
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "action",
+            "label"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "enum": [
+                "remove"
+              ],
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "action",
+            "label"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "enum": [
+                "setAccountEnabled"
+              ],
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "label": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "action",
+            "enabled",
+            "label"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "enum": [
+                "order"
+              ],
+              "type": "string"
+            },
+            "labels": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "action",
+            "labels"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "enum": [
+                "prefer"
+              ],
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "action",
+            "label"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "ProviderPoolUpdateParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "revision": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "threadId": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "update": {
+          "$ref": "#/definitions/ProviderPoolUpdate"
+        }
+      },
+      "required": [
+        "provider",
+        "revision",
+        "update"
+      ],
+      "title": "ProviderPoolUpdateParams",
+      "type": "object"
+    },
     "QueuedSubmission": {
       "properties": {
         "clientUserMessageId": {
@@ -17294,6 +17742,46 @@
             "params"
           ],
           "title": "McpServer/event/stream/notificationNotification",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "enum": [
+                "provider/pool/changed"
+              ],
+              "title": "Provider/pool/changedNotificationMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/ProviderPoolChangedNotification"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "title": "Provider/pool/changedNotification",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "enum": [
+                "thread/providerAccount/changed"
+              ],
+              "title": "Thread/providerAccount/changedNotificationMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/ThreadProviderAccountChangedNotification"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "title": "Thread/providerAccount/changedNotification",
           "type": "object"
         },
         {
@@ -21301,6 +21789,31 @@
         "threadId"
       ],
       "title": "ThreadProjectUpdatedNotification",
+      "type": "object"
+    },
+    "ThreadProviderAccountChangedNotification": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "account": {
+          "type": "string"
+        },
+        "previousAccount": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "account",
+        "previousAccount",
+        "provider",
+        "threadId"
+      ],
+      "title": "ThreadProviderAccountChangedNotification",
       "type": "object"
     },
     "ThreadQueueChangedNotification": {

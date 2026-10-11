@@ -2251,6 +2251,11 @@ class NativeLoginAccountParams(BaseModel):
     account_id: Annotated[str, Field(alias="accountId")]
     api_key: Annotated[str | None, Field(alias="apiKey")] = None
     provider: str
+    select: Annotated[
+        bool | None,
+        Field(description="Defaults to selecting this account, preserving existing clients."),
+    ] = None
+    thread_id: Annotated[str | None, Field(alias="threadId")] = None
     type: Annotated[Literal["native"], Field(title="Nativev2::LoginAccountParamsType")]
 
 
@@ -3669,6 +3674,160 @@ class ProjectSortKey(Enum):
     recency_at = "recencyAt"
 
 
+class ProviderAccountAvailability(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    known_reset_at: Annotated[int | None, Field(alias="knownResetAt", ge=0)] = None
+    model: str | None = None
+    next_attempt_at: Annotated[int | None, Field(alias="nextAttemptAt", ge=0)] = None
+    reason: str
+
+
+class ProviderAccountLogoutParams(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    account: str
+    provider: str
+    revision: Annotated[int, Field(ge=0)]
+    thread_id: Annotated[str | None, Field(alias="threadId")] = None
+
+
+class ProviderAccountStatus(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    availability: list[ProviderAccountAvailability]
+    credential_condition: Annotated[str, Field(alias="credentialCondition")]
+    enabled: bool
+    enrolled: bool
+    label: str
+    priority: Annotated[int | None, Field(ge=0)] = None
+
+
+class ProviderAccountsParams(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    provider: str
+    thread_id: Annotated[str | None, Field(alias="threadId")] = None
+
+
+class ProviderAccountsResponse(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    accounts: list[ProviderAccountStatus]
+    configured_token: Annotated[bool, Field(alias="configuredToken")]
+    effective_account: Annotated[str | None, Field(alias="effectiveAccount")] = None
+    enabled: bool
+    endpoint: str
+    explicitly_enabled: Annotated[bool | None, Field(alias="explicitlyEnabled")] = None
+    preferred_account: Annotated[str | None, Field(alias="preferredAccount")] = None
+    provider: str
+    revision: Annotated[int, Field(ge=0)]
+
+
+class ProviderPoolChangedNotification(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    endpoint: str
+    provider: str
+    revision: Annotated[int, Field(ge=0)]
+
+
+class EnableProviderPoolUpdate(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    action: Literal["enable"]
+
+
+class DisableProviderPoolUpdate(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    action: Literal["disable"]
+
+
+class ProviderPoolUpdate1(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    action: Literal["enroll"]
+    label: str
+
+
+class ProviderPoolUpdate2(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    action: Literal["remove"]
+    label: str
+
+
+class ProviderPoolUpdate3(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    action: Literal["setAccountEnabled"]
+    enabled: bool
+    label: str
+
+
+class ProviderPoolUpdate4(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    action: Literal["order"]
+    labels: list[str]
+
+
+class ProviderPoolUpdate5(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    action: Literal["prefer"]
+    label: str
+
+
+class ProviderPoolUpdate(
+    RootModel[
+        EnableProviderPoolUpdate
+        | DisableProviderPoolUpdate
+        | ProviderPoolUpdate1
+        | ProviderPoolUpdate2
+        | ProviderPoolUpdate3
+        | ProviderPoolUpdate4
+        | ProviderPoolUpdate5
+    ]
+):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    root: (
+        EnableProviderPoolUpdate
+        | DisableProviderPoolUpdate
+        | ProviderPoolUpdate1
+        | ProviderPoolUpdate2
+        | ProviderPoolUpdate3
+        | ProviderPoolUpdate4
+        | ProviderPoolUpdate5
+    )
+
+
+class ProviderPoolUpdateParams(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    provider: str
+    revision: Annotated[int, Field(ge=0)]
+    thread_id: Annotated[str | None, Field(alias="threadId")] = None
+    update: ProviderPoolUpdate
+
+
 class RateLimitReachedType(Enum):
     rate_limit_reached = "rate_limit_reached"
     workspace_owner_credits_depleted = "workspace_owner_credits_depleted"
@@ -4610,6 +4769,23 @@ class McpServerEventStreamNotificationServerNotification(BaseModel):
         Field(title="McpServer/event/stream/notificationNotificationMethod"),
     ]
     params: McpServerEventStreamNotification
+
+
+class ProviderPoolChangedServerNotification(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    emitted_at_ms: Annotated[
+        int | None,
+        Field(
+            alias="emittedAtMs",
+            description="Unix timestamp (in milliseconds) when app-server emitted this notification.",
+        ),
+    ] = None
+    method: Annotated[
+        Literal["provider/pool/changed"], Field(title="Provider/pool/changedNotificationMethod")
+    ]
+    params: ProviderPoolChangedNotification
 
 
 class RemoteControlStatusChangedServerNotification(BaseModel):
@@ -5776,6 +5952,16 @@ class ThreadProjectUpdatedNotification(BaseModel):
         populate_by_name=True,
     )
     project_id: Annotated[str | None, Field(alias="projectId")] = None
+    thread_id: Annotated[str, Field(alias="threadId")]
+
+
+class ThreadProviderAccountChangedNotification(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    account: str
+    previous_account: Annotated[str, Field(alias="previousAccount")]
+    provider: str
     thread_id: Annotated[str, Field(alias="threadId")]
 
 
@@ -7683,6 +7869,39 @@ class WindowsSandboxReadinessRequest(BaseModel):
         Literal["windowsSandbox/readiness"], Field(title="WindowsSandbox/readinessRequestMethod")
     ]
     params: None = None
+
+
+class ProviderAccountsListRequest(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    id: RequestId
+    method: Annotated[
+        Literal["provider/accounts/list"], Field(title="Provider/accounts/listRequestMethod")
+    ]
+    params: ProviderAccountsParams
+
+
+class ProviderPoolUpdateRequest(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    id: RequestId
+    method: Annotated[
+        Literal["provider/pool/update"], Field(title="Provider/pool/updateRequestMethod")
+    ]
+    params: ProviderPoolUpdateParams
+
+
+class ProviderAccountLogoutRequest(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    id: RequestId
+    method: Annotated[
+        Literal["provider/account/logout"], Field(title="Provider/account/logoutRequestMethod")
+    ]
+    params: ProviderAccountLogoutParams
 
 
 class AccountLoginCancelRequest(BaseModel):
@@ -9609,6 +9828,24 @@ class ServerRequestResolvedServerNotification(BaseModel):
         Literal["serverRequest/resolved"], Field(title="ServerRequest/resolvedNotificationMethod")
     ]
     params: ServerRequestResolvedNotification
+
+
+class ThreadProviderAccountChangedServerNotification(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    emitted_at_ms: Annotated[
+        int | None,
+        Field(
+            alias="emittedAtMs",
+            description="Unix timestamp (in milliseconds) when app-server emitted this notification.",
+        ),
+    ] = None
+    method: Annotated[
+        Literal["thread/providerAccount/changed"],
+        Field(title="Thread/providerAccount/changedNotificationMethod"),
+    ]
+    params: ThreadProviderAccountChangedNotification
 
 
 class AccountUpdatedServerNotification(BaseModel):
@@ -12899,6 +13136,9 @@ class ClientRequest(
         | McpServerToolCallRequest
         | WindowsSandboxSetupStartRequest
         | WindowsSandboxReadinessRequest
+        | ProviderAccountsListRequest
+        | ProviderPoolUpdateRequest
+        | ProviderAccountLogoutRequest
         | AccountLoginStartRequest
         | AccountLoginCancelRequest
         | AccountLogoutRequest
@@ -13010,6 +13250,9 @@ class ClientRequest(
         | McpServerToolCallRequest
         | WindowsSandboxSetupStartRequest
         | WindowsSandboxReadinessRequest
+        | ProviderAccountsListRequest
+        | ProviderPoolUpdateRequest
+        | ProviderAccountLogoutRequest
         | AccountLoginStartRequest
         | AccountLoginCancelRequest
         | AccountLogoutRequest
@@ -13257,6 +13500,8 @@ class ServerNotification(
         | McpServerOauthLoginCompletedServerNotification
         | McpServerStartupStatusUpdatedServerNotification
         | McpServerEventStreamNotificationServerNotification
+        | ProviderPoolChangedServerNotification
+        | ThreadProviderAccountChangedServerNotification
         | AccountUpdatedServerNotification
         | AccountGatewayOAuthChangedServerNotification
         | AccountRateLimitsUpdatedServerNotification
@@ -13348,6 +13593,8 @@ class ServerNotification(
         | McpServerOauthLoginCompletedServerNotification
         | McpServerStartupStatusUpdatedServerNotification
         | McpServerEventStreamNotificationServerNotification
+        | ProviderPoolChangedServerNotification
+        | ThreadProviderAccountChangedServerNotification
         | AccountUpdatedServerNotification
         | AccountGatewayOAuthChangedServerNotification
         | AccountRateLimitsUpdatedServerNotification

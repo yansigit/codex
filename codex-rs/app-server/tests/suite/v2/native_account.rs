@@ -261,3 +261,80 @@ async fn native_provider_selection_survives_fork_and_cold_resume() -> Result<()>
     assert_eq!(resumed.model, "glm-5.3");
     Ok(())
 }
+
+#[tokio::test]
+async fn native_account_pool_revision_redaction_and_named_logout() -> Result<()> {
+    let home = TempDir::new()?;
+    write_claude_config(home.path())?;
+    let config_path = home.path().join("config.toml");
+    let mut config = std::fs::read_to_string(&config_path)?;
+    config.push_str(
+        r#"
+[model_providers.opencode-go]
+name = "Scoped Go fixture"
+wire_api = "native"
+native_provider = "opencode-go"
+base_url = "https://fixture.example.test/go"
+"#,
+    );
+    std::fs::write(config_path, config)?;
+    let mut server = TestAppServer::builder()
+        .with_codex_home(home.path())
+        .without_auto_env()
+        .with_env_overrides(&[("ANTHROPIC_API_KEY", None), ("OPENAI_API_KEY", None)])
+        .build_initialized_with_timeout(READ_TIMEOUT)
+        .await?;
+    let id = server
+        .send_request(
+            "provider/accounts/list",
+            Some(json!({"provider":"opencode-go"})),
+        )
+        .await?;
+    let scoped: Value = timeout(READ_TIMEOUT, server.read_response(id)).await??;
+    assert_eq!(scoped["endpoint"], "https://fixture.example.test/go");
+    login_claude_with_token(&mut server).await?;
+    let id = server.send_login_account_request(json!({"type":"native","provider":"claude","accountId":"work","apiKey":"second-fixture-secret","select":false})).await?;
+    let _: Value = timeout(READ_TIMEOUT, server.read_response(id)).await??;
+    let id = server
+        .send_request("provider/accounts/list", Some(json!({"provider":"claude"})))
+        .await?;
+    let status: Value = timeout(READ_TIMEOUT, server.read_response(id)).await??;
+    assert_eq!(status["enabled"], true);
+    assert_eq!(status["preferredAccount"], "default");
+    assert_eq!(status["accounts"].as_array().unwrap().len(), 2);
+    assert!(!status.to_string().contains(API_KEY));
+    assert!(!status.to_string().contains("second-fixture-secret"));
+    let revision = status["revision"].as_u64().unwrap();
+    let id = server
+        .send_request(
+            "provider/pool/update",
+            Some(json!({"provider":"claude","revision":revision,"update":{"action":"disable"}})),
+        )
+        .await?;
+    let disabled: Value = timeout(READ_TIMEOUT, server.read_response(id)).await??;
+    assert_eq!(disabled["enabled"], false);
+    let id = server
+        .send_request(
+            "provider/pool/update",
+            Some(json!({"provider":"claude","revision":revision,"update":{"action":"enable"}})),
+        )
+        .await?;
+    let stale = timeout(
+        READ_TIMEOUT,
+        server.read_stream_until_error_message(codex_app_server_protocol::RequestId::Integer(id)),
+    )
+    .await??;
+    assert!(stale.error.message.contains("reload"));
+    let id = server
+        .send_request(
+            "provider/account/logout",
+            Some(json!({"provider":"claude","account":"work","revision":disabled["revision"]})),
+        )
+        .await?;
+    let after: Value = timeout(READ_TIMEOUT, server.read_response(id)).await??;
+    assert_eq!(after["enabled"], false);
+    let auth = AuthStore::new(home.path());
+    assert!(auth.account_reference("claude", "work").is_err());
+    assert_eq!(auth.selected("claude")?.as_deref(), Some("default"));
+    Ok(())
+}

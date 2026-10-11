@@ -167,6 +167,83 @@ pub fn restore_checkpoint(request: &mut Request) -> Result<()> {
     Ok(())
 }
 
+/// Export ordinary, fully understood history. Signed thinking and unfamiliar
+/// replay blocks are refused intact; they are never rewritten to force a fit.
+pub fn portable_history(request: &Request) -> Result<Request> {
+    let mut exported = request.clone();
+    restore_checkpoint(&mut exported)?;
+    for message in &mut exported.messages {
+        for block in &message.content {
+            match block {
+                Content::Thinking { .. } => {
+                    return Err(ProviderError::Unsupported(
+                        "account handoff with thinking requires verified signature portability"
+                            .into(),
+                    ));
+                }
+                Content::Opaque { namespace, value }
+                    if namespace != &request.namespace || !ordinary_replay(value) =>
+                {
+                    return Err(ProviderError::Unsupported(
+                        "account handoff with opaque or signed history is not verified".into(),
+                    ));
+                }
+                _ => {}
+            }
+        }
+        message
+            .content
+            .retain(|block| !matches!(block, Content::Opaque { .. }));
+    }
+    exported.checkpoint = None;
+    if let Some(metadata) = exported.metadata.as_object_mut() {
+        metadata.remove("host_checkpoint_prefix");
+    }
+    Ok(exported)
+}
+fn ordinary_replay(value: &serde_json::Value) -> bool {
+    let Some(object) = value.as_object().filter(|object| object.len() == 1) else {
+        return false;
+    };
+    if let Some(blocks) = object
+        .get("anthropic_blocks")
+        .and_then(serde_json::Value::as_array)
+    {
+        return blocks.iter().all(|block| match block["type"].as_str() {
+            Some("text") => keys_only(block, &["type", "text"]),
+            Some("tool_use") => keys_only(block, &["type", "id", "name", "input"]),
+            _ => false,
+        });
+    }
+    if let Some(items) = object
+        .get("responses_output")
+        .and_then(serde_json::Value::as_array)
+    {
+        return items.iter().all(|item| match item["type"].as_str() {
+            Some("function_call") => keys_only(
+                item,
+                &["type", "id", "status", "call_id", "name", "arguments"],
+            ),
+            Some("message") => {
+                keys_only(item, &["type", "id", "status", "role", "content"])
+                    && item["content"].as_array().is_some_and(|parts| {
+                        parts.iter().all(|part| {
+                            part["type"] == "output_text"
+                                && keys_only(part, &["type", "text", "annotations", "logprobs"])
+                        })
+                    })
+            }
+            _ => false,
+        });
+    }
+    false
+}
+fn keys_only(value: &serde_json::Value, keys: &[&str]) -> bool {
+    value
+        .as_object()
+        .is_some_and(|object| object.keys().all(|key| keys.contains(&key.as_str())))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -111,10 +111,12 @@ async fn checkpoint_after_tool_dispatch_cannot_clear_interruption_fence() {
         latest: None,
         previous: request.checkpoint.clone(),
         tools_started: false,
+        prior_journals: vec![],
     }));
     let (calls, mut receive) = tokio::sync::mpsc::channel(1);
     let cancel = tokio_util::sync::CancellationToken::new();
     let host = Arc::new(super::ChannelHost {
+        history_requests: None,
         store: store.clone(),
         calls,
         cancellation: cancel.clone(),
@@ -162,6 +164,7 @@ async fn oversized_native_output_drains_the_foreground_process_before_returning_
     let cancel = tokio_util::sync::CancellationToken::new();
     let (calls, mut receive) = tokio::sync::mpsc::channel(1);
     let host = super::ChannelHost {
+        history_requests: None,
         store: store.clone(),
         calls,
         cancellation: cancel.clone(),
@@ -173,6 +176,7 @@ async fn oversized_native_output_drains_the_foreground_process_before_returning_
             latest: None,
             previous: None,
             tools_started: false,
+            prior_journals: vec![],
         })),
         execution: Arc::new(store.begin_execution("turn", &cancel).await.unwrap()),
     };
@@ -293,6 +297,7 @@ async fn channel_fixture(
     let execution = Arc::new(store.begin_execution("turn", &cancellation).await.unwrap());
     let (calls, receive) = tokio::sync::mpsc::channel(1);
     let host = super::ChannelHost {
+        history_requests: None,
         store,
         calls,
         cancellation,
@@ -308,6 +313,7 @@ async fn channel_fixture(
             latest: None,
             previous: None,
             tools_started: false,
+            prior_journals: vec![],
         })),
         execution,
     };

@@ -20,6 +20,7 @@ mod bedrock_gov_cloud;
 mod bedrock_setup;
 mod enterprise_login;
 mod gateway_oauth;
+mod provider_pool;
 mod rate_limit_resets;
 mod workspace_routing;
 
@@ -362,8 +363,18 @@ impl AccountRequestProcessor {
                 provider,
                 account_id,
                 api_key,
+                select,
+                thread_id,
             } => {
-                let result = self.login_native(provider, account_id, api_key).await;
+                let result = self
+                    .login_native(
+                        provider,
+                        account_id,
+                        api_key,
+                        select.unwrap_or(true),
+                        thread_id.as_deref(),
+                    )
+                    .await;
                 self.outgoing.send_result(request_id, result).await;
             }
             LoginAccountParams::ApiKey { api_key } => {
@@ -764,6 +775,8 @@ impl AccountRequestProcessor {
         provider: String,
         account: String,
         token: Option<String>,
+        select: bool,
+        thread: Option<&str>,
     ) -> Result<LoginAccountResponse, JSONRPCErrorError> {
         if codex_provider_adapter::registry::get(&provider).is_none() || account.is_empty() {
             return Err(invalid_request(
@@ -771,18 +784,7 @@ impl AccountRequestProcessor {
             ));
         }
         self.cancel_active_login().await;
-        let config = self.load_latest_config().await;
-        let info = if config.model_provider.native_provider_id() == Some(provider.as_str()) {
-            config.model_provider.clone()
-        } else {
-            codex_model_provider_info::built_in_model_providers(None)
-                .remove(&provider)
-                .ok_or_else(|| invalid_request("unknown native provider"))?
-        };
-        let backend = codex_provider_adapter::backend::NativeBackend::new(
-            info,
-            Some(config.codex_home.to_path_buf()),
-        );
+        let backend = self.provider_backend(&provider, thread).await?;
         if backend.has_configured_token() {
             return Err(invalid_request(
                 "native authentication is configured by an environment variable or bearer token; remove that override before logging in",
@@ -794,9 +796,12 @@ impl AccountRequestProcessor {
                 return Err(invalid_request("empty provider token"));
             }
             backend
-                .login_token(&account, token, &cancellation)
+                .login_token_with_selection(&account, token, select, &cancellation)
                 .await
                 .map_err(|error| internal_error(error.to_string()))?;
+            if let Ok(status) = backend.accounts(None, &cancellation).await {
+                self.provider_pool_changed(&status).await;
+            }
             self.send_login_success_notifications(None).await;
             return Ok(LoginAccountResponse::Native {
                 provider,
@@ -804,6 +809,10 @@ impl AccountRequestProcessor {
                 auth_url: None,
             });
         }
+        let operation = backend
+            .begin_account_login(&account, &cancellation)
+            .await
+            .map_err(|error| internal_error(error.to_string()))?;
         let login = backend
             .begin_login()
             .await
@@ -825,11 +834,20 @@ impl AccountRequestProcessor {
                 return;
             }
             let result = match result {
-                Ok(record) => backend.commit_login(&account, record, &cancellation).await,
+                Ok(record) => {
+                    backend
+                        .finish_account_login(&operation, record, select, &cancellation)
+                        .await
+                }
                 Err(error) => Err(error),
             };
             *active = None;
             drop(active);
+            if result.is_ok()
+                && let Ok(status) = backend.accounts(None, &CancellationToken::new()).await
+            {
+                processor.provider_pool_changed(&status).await;
+            }
             processor
                 .send_account_login_notifications(AccountLoginCompletedNotification {
                     login_id: Some(login_id.to_string()),

@@ -11,6 +11,7 @@ use codex_provider_api::ProviderError;
 use codex_provider_api::Result;
 pub use google::GoogleCodec;
 pub use messages::MessagesCodec;
+pub use replay::portable_history;
 pub use replay::restore_checkpoint;
 pub use responses::ResponsesCodec;
 use serde_json::Value;
@@ -18,6 +19,7 @@ pub use session::HttpSession;
 pub use session::WireCodec;
 pub use session::WireRequest;
 pub use session::bounded_json;
+pub use session::classify_response;
 pub use sse::SseDecoder;
 
 pub(crate) fn protocol(message: impl Into<String>) -> ProviderError {

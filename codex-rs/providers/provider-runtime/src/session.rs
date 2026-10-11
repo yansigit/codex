@@ -14,6 +14,10 @@ fn error(message: impl std::fmt::Display) -> api::ProviderError {
     api::ProviderError::Checkpoint(message.to_string())
 }
 
+pub struct HistoryRequest {
+    pub reply: oneshot::Sender<api::Result<Option<api::HistoryAcknowledgement>>>,
+}
+
 pub struct HostCall {
     pub call: api::ToolCall,
     pub reply: oneshot::Sender<api::HostCompletion>,
@@ -24,6 +28,7 @@ pub struct TurnCheckpoint {
     pub latest: Option<api::Checkpoint>,
     pub previous: Option<api::Checkpoint>,
     pub tools_started: bool,
+    pub prior_journals: Vec<api::Namespace>,
 }
 impl TurnCheckpoint {
     fn pending(&self, mut checkpoint: api::Checkpoint) -> api::Checkpoint {
@@ -51,7 +56,10 @@ impl TurnCheckpoint {
                 "length":history.len(), "hash":lineage_hash(system, history)?,
                 "failed_results":failed_result_bindings(history)?
             });
-            store.save(&checkpoint, cancellation).await?;
+            store
+                .for_namespace(self.namespace.clone())
+                .save(&checkpoint, cancellation)
+                .await?;
         }
         execution.complete()
     }
@@ -60,6 +68,7 @@ impl TurnCheckpoint {
 pub struct ChannelHost {
     pub store: SessionStore,
     pub calls: mpsc::Sender<HostCall>,
+    pub history_requests: Option<mpsc::Sender<HistoryRequest>>,
     pub cancellation: CancellationToken,
     pub poll_tool: Option<String>,
     pub native_tools: std::collections::BTreeSet<String>,
@@ -85,6 +94,36 @@ impl ChannelHost {
     }
 }
 impl api::Host for ChannelHost {
+    fn persisted_history(&self) -> api::ProviderFuture<'_, Option<api::HistoryAcknowledgement>> {
+        Box::pin(async move {
+            let Some(requests) = &self.history_requests else {
+                return Ok(None);
+            };
+            let (reply, receive) = oneshot::channel();
+            tokio::select! {
+                _ = self.cancellation.cancelled() => Err(api::ProviderError::Cancelled),
+                result = async {
+                    requests.send(HistoryRequest { reply }).await.map_err(|_| api::ProviderError::Cancelled)?;
+                    receive.await.map_err(|_| api::ProviderError::Cancelled)?
+                } => result,
+            }
+        })
+    }
+    fn account_changed(
+        &self,
+        namespace: api::Namespace,
+        prior_journals: Vec<api::Namespace>,
+    ) -> api::ProviderFuture<'_, ()> {
+        Box::pin(async move {
+            let mut state = self.checkpoint.lock().await;
+            state.namespace = namespace;
+            state.prior_journals = prior_journals;
+            state.latest = None;
+            state.previous = None;
+            // The execution fence remains set until terminal host persistence.
+            Ok(())
+        })
+    }
     // The lock serializes durable interruption fences with checkpoint writes.
     #[allow(clippy::await_holding_invalid_type)]
     fn execute(
@@ -108,11 +147,20 @@ impl api::Host for ChannelHost {
                             context_hash: String::new(),
                             state: json!({}),
                         }));
-                    self.store.save(&checkpoint, &cancellation).await?;
+                    self.store
+                        .for_namespace(state.namespace.clone())
+                        .save(&checkpoint, &cancellation)
+                        .await?;
                     state.latest = Some(checkpoint);
                 }
             }
-            let ticket = match self.store.begin_tool(call.clone(), &cancellation).await? {
+            let store = {
+                let state = self.checkpoint.lock().await;
+                self.store
+                    .for_namespace(state.namespace.clone())
+                    .with_prior_journals(state.prior_journals.clone())
+            };
+            let ticket = match store.begin_tool(call.clone(), &cancellation).await? {
                 ToolDisposition::Replay(result) => return Ok(result),
                 ToolDisposition::Execute(ticket) => ticket,
             };
@@ -203,7 +251,10 @@ impl api::Host for ChannelHost {
             }
             let mut state = self.checkpoint.lock().await;
             let checkpoint = state.pending(checkpoint);
-            self.store.save(&checkpoint, &self.cancellation).await?;
+            self.store
+                .for_namespace(state.namespace.clone())
+                .save(&checkpoint, &self.cancellation)
+                .await?;
             state.latest = Some(checkpoint);
             Ok(())
         })

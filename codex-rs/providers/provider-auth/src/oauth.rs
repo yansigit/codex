@@ -66,23 +66,23 @@ pub struct AccountInfo {
     pub revoked: bool,
 }
 
-fn now() -> u64 {
+pub(crate) fn now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs()
 }
-fn auth_error(message: &str) -> ProviderError {
+pub(crate) fn auth_error(message: &str) -> ProviderError {
     ProviderError::Authentication(message.into())
 }
-fn credential_key(provider: &str, account: &str) -> String {
+pub(crate) fn credential_key(provider: &str, account: &str) -> String {
     serde_json::json!(("credentials", provider, account)).to_string()
 }
-fn selected_key(provider: &str) -> String {
+pub(crate) fn selected_key(provider: &str) -> String {
     serde_json::json!(("selected", provider)).to_string()
 }
 
-fn account_identity(account: &str, record: &TokenRecord) -> String {
+pub(crate) fn account_identity(account: &str, record: &TokenRecord) -> String {
     match record
         .metadata
         .get("codex_account_generation")
@@ -93,10 +93,10 @@ fn account_identity(account: &str, record: &TokenRecord) -> String {
     }
 }
 
-/// One explicit account per provider; no automatic account rotation.
+/// Explicit credential generations, with selected-account compatibility wrappers.
 #[derive(Clone, Debug)]
 pub struct AuthStore {
-    store: Store,
+    pub(crate) store: Store,
 }
 impl AuthStore {
     pub fn new(codex_home: &Path) -> Self {
@@ -134,44 +134,18 @@ impl AuthStore {
         &self,
         provider: &str,
         account: &str,
-        mut record: TokenRecord,
+        record: TokenRecord,
         cancellation: &CancellationToken,
     ) -> Result<()> {
-        if provider.is_empty() || account.is_empty() || record.access_token.is_empty() {
-            return Err(auth_error("empty provider/account/token"));
-        }
-        let selected = self
-            .store
-            .lock(&selected_key(provider), cancellation)
-            .await?;
-        let credential = self
-            .store
-            .lock(&credential_key(provider, account), cancellation)
-            .await?;
-        // Reusing a display label does not establish the same upstream identity.
-        // A new login gets fresh replay state; refresh preserves the generation.
-        let mut generation = [0u8; 32];
-        rand::rng().fill_bytes(&mut generation);
-        if !record.metadata.is_object() {
-            record.metadata = serde_json::json!({});
-        }
-        record.metadata["codex_account_generation"] =
-            Value::String(URL_SAFE_NO_PAD.encode(generation));
-        credential.write(&record)?;
-        selected.write(&account)
+        let operation = self.begin_login(provider, account, cancellation).await?;
+        self.commit_login(&operation, record, true, cancellation)
+            .await
+            .map(|_| ())
     }
     pub async fn logout(&self, provider: &str, cancellation: &CancellationToken) -> Result<()> {
-        let selected = self
-            .store
-            .lock(&selected_key(provider), cancellation)
-            .await?;
-        if let Some(account) = selected.read::<String>()? {
-            let credential = self
-                .store
-                .lock(&credential_key(provider, &account), cancellation)
+        if let Some(account) = self.selected(provider)? {
+            self.logout_account(provider, &account, cancellation)
                 .await?;
-            credential.delete()?;
-            selected.delete()?;
         }
         Ok(())
     }
@@ -181,9 +155,21 @@ impl AuthStore {
         config: Option<&OAuthConfig>,
         cancellation: &CancellationToken,
     ) -> Result<Credentials> {
+        let account = self.selected_reference(provider)?;
+        self.credentials_for(provider, &account, config, cancellation)
+            .await
+    }
+    pub async fn credentials_for(
+        &self,
+        provider: &str,
+        account: &codex_provider_api::AccountRef,
+        config: Option<&OAuthConfig>,
+        cancellation: &CancellationToken,
+    ) -> Result<Credentials> {
         let config = config.cloned();
-        self.credentials_with_refresh(
+        self.credentials_for_with_refresh(
             provider,
+            account,
             cancellation,
             move |record, refresh_cancel| async move {
                 let config = config
@@ -218,20 +204,37 @@ impl AuthStore {
         F: FnOnce(TokenRecord, CancellationToken) -> Fut + Send + 'static,
         Fut: std::future::Future<Output = Result<TokenRecord>> + Send + 'static,
     {
-        let selected = self
-            .store
-            .lock(&selected_key(provider), cancellation)
-            .await?;
-        let account = selected
-            .read::<String>()?
-            .ok_or_else(|| auth_error("log in to the selected provider"))?;
+        let account = self.selected_reference(provider)?;
+        self.credentials_for_with_refresh(provider, &account, cancellation, refresh)
+            .await
+    }
+
+    pub async fn credentials_for_with_refresh<F, Fut>(
+        &self,
+        provider: &str,
+        reference: &codex_provider_api::AccountRef,
+        cancellation: &CancellationToken,
+        refresh: F,
+    ) -> Result<Credentials>
+    where
+        F: FnOnce(TokenRecord, CancellationToken) -> Fut + Send + 'static,
+        Fut: std::future::Future<Output = Result<TokenRecord>> + Send + 'static,
+    {
+        let account = reference.label.clone();
         let lock = self
             .store
             .lock(&credential_key(provider, &account), cancellation)
             .await?;
+        self.recover_account(provider, &account, &lock, cancellation)
+            .await?;
         let mut record = lock
             .read::<TokenRecord>()?
             .ok_or_else(|| auth_error("provider credentials missing"))?;
+        if account_identity(&account, &record) != reference.identity() {
+            return Err(auth_error(
+                "provider account was replaced; select its new generation",
+            ));
+        }
         if record.revoked {
             return Err(auth_error("provider credentials revoked; log in again"));
         }
@@ -266,8 +269,8 @@ impl AuthStore {
         record.metadata["codex_refresh_pending"] = Value::Bool(true);
         lock.write(&record)?;
         let refresh_task = tokio::spawn(async move {
-            // These stable locks outlive a caller that stops awaiting this task.
-            let _selected = selected;
+            // Only this account's stable credential lock spans the network operation.
+            // It outlives cancellation; logout/replacement serialize after its commit.
             match tokio::time::timeout(
                 Duration::from_secs(120),
                 refresh(record.clone(), CancellationToken::new()),
@@ -448,7 +451,7 @@ async fn token_request(
         } => result,
     }
 }
-fn parse_token(value: Value, metadata: Value) -> Result<TokenRecord> {
+fn parse_token(value: Value, mut metadata: Value) -> Result<TokenRecord> {
     let access_token = value
         .get("access_token")
         .and_then(Value::as_str)
@@ -464,6 +467,22 @@ fn parse_token(value: Value, metadata: Value) -> Result<TokenRecord> {
         .get("expires_in")
         .and_then(Value::as_u64)
         .map(|seconds| now().saturating_add(seconds));
+    if !metadata.is_object() {
+        metadata = serde_json::json!({});
+    }
+    for (field, source) in [
+        ("account_id", &value["account"]["uuid"]),
+        ("organization_id", &value["organization"]["uuid"]),
+        ("workspace_id", &value["workspace_id"]),
+        ("project_id", &value["project_id"]),
+    ] {
+        if let Some(id) = source
+            .as_str()
+            .filter(|id| !id.is_empty() && id.len() <= 512 && !id.chars().any(char::is_control))
+        {
+            metadata[field] = Value::String(id.into());
+        }
+    }
     Ok(TokenRecord {
         access_token,
         refresh_token,

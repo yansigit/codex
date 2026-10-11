@@ -25,6 +25,13 @@ use std::sync::Arc;
 use std::sync::OnceLock;
 use tokio_util::sync::CancellationToken;
 
+type ActiveAccountSessions =
+    std::collections::BTreeMap<(PathBuf, String, String), Vec<CancellationToken>>;
+static ACTIVE_ACCOUNT_SESSIONS: OnceLock<std::sync::Mutex<ActiveAccountSessions>> = OnceLock::new();
+fn account_sessions() -> &'static std::sync::Mutex<ActiveAccountSessions> {
+    ACTIVE_ACCOUNT_SESSIONS.get_or_init(Default::default)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SessionCapabilities {
     pub automatic_inference_retry: bool,
@@ -37,6 +44,7 @@ pub struct NativeBackend {
     descriptor: Option<&'static Descriptor>,
     home: Option<PathBuf>,
     transport: Arc<OnceLock<Arc<dyn Provider>>>,
+    discovery_thread: Arc<std::sync::Mutex<Option<String>>>,
 }
 impl std::fmt::Debug for NativeBackend {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -54,6 +62,7 @@ impl NativeBackend {
             info,
             home,
             transport: Arc::new(OnceLock::new()),
+            discovery_thread: Arc::new(std::sync::Mutex::new(None)),
         }
     }
     pub fn id(&self) -> &str {
@@ -104,6 +113,7 @@ impl NativeBackend {
             home,
             descriptor: Some(descriptor),
             transport: Arc::new(OnceLock::new()),
+            discovery_thread: Arc::new(std::sync::Mutex::new(None)),
         }
     }
     fn auth_store(&self) -> codex_provider_api::Result<AuthStore> {
@@ -115,8 +125,10 @@ impl NativeBackend {
         if let Some(catalog) = catalog {
             return Arc::new(StaticModelsManager::new(None, catalog));
         }
+        let mut endpoint = self.clone();
+        endpoint.discovery_thread = Arc::new(std::sync::Mutex::new(None));
         Arc::new(
-            OpenAiModelsManager::new_without_cache(Arc::new(self.clone()), None)
+            OpenAiModelsManager::new_without_cache(Arc::new(endpoint), None)
                 .with_provider_catalog(),
         )
     }
@@ -193,25 +205,135 @@ impl NativeBackend {
         self.ensure_stored_auth()?;
         NativeLogin::begin(self.descriptor()?).await
     }
+    fn register_session(
+        &self,
+        account: &codex_provider_api::AccountRef,
+        cancellation: CancellationToken,
+    ) -> codex_provider_api::Result<()> {
+        let Some(home) = &self.home else {
+            return Ok(());
+        };
+        let mut sessions = account_sessions().lock().map_err(|_| {
+            ProviderError::Authentication("account session registry unavailable".into())
+        })?;
+        sessions.retain(|_, values| {
+            values.retain(|token| !token.is_cancelled());
+            !values.is_empty()
+        });
+        sessions
+            .entry((home.clone(), self.id().into(), account.identity()))
+            .or_default()
+            .push(cancellation);
+        Ok(())
+    }
+    fn cancel_account_sessions(&self, account: &codex_provider_api::AccountRef) {
+        if let Some(home) = &self.home
+            && let Ok(mut sessions) = account_sessions().lock()
+            && let Some(tokens) =
+                sessions.remove(&(home.clone(), self.id().into(), account.identity()))
+        {
+            for token in tokens {
+                token.cancel();
+            }
+        }
+    }
+    pub fn pool_store(&self) -> codex_provider_api::Result<codex_provider_runtime::PoolStore> {
+        self.descriptor()?;
+        let home = self.home.as_deref().ok_or_else(|| {
+            ProviderError::Checkpoint("native provider requires local state storage".into())
+        })?;
+        Ok(codex_provider_runtime::PoolStore::new(
+            home,
+            self.id(),
+            self.info.base_url.as_deref().unwrap_or(""),
+        ))
+    }
+    pub async fn accounts(
+        &self,
+        thread: Option<&str>,
+        cancellation: &CancellationToken,
+    ) -> codex_provider_api::Result<codex_provider_runtime::PoolStatus> {
+        let mut status = self.pool_store()?.status(thread, cancellation).await?;
+        status.configured_token = self.has_configured_token();
+        Ok(status)
+    }
+    pub async fn update_pool(
+        &self,
+        revision: u64,
+        update: codex_provider_runtime::PoolUpdate,
+        cancellation: &CancellationToken,
+    ) -> codex_provider_api::Result<codex_provider_runtime::PoolStatus> {
+        self.ensure_stored_auth()?;
+        let pool = self.pool_store()?;
+        match update {
+            codex_provider_runtime::PoolUpdate::Prefer { label } => {
+                pool.prefer(revision, label, cancellation).await?
+            }
+            update => {
+                pool.update(revision, update, cancellation).await?;
+            }
+        }
+        self.accounts(None, cancellation).await
+    }
+    pub async fn begin_account_login(
+        &self,
+        account: &str,
+        cancellation: &CancellationToken,
+    ) -> codex_provider_api::Result<codex_provider_auth::LoginOperation> {
+        self.ensure_stored_auth()?;
+        self.pool_store()?.settings(cancellation).await?;
+        self.auth_store()?
+            .begin_login(self.id(), account, cancellation)
+            .await
+    }
+    pub async fn finish_account_login(
+        &self,
+        operation: &codex_provider_auth::LoginOperation,
+        record: TokenRecord,
+        select: bool,
+        cancellation: &CancellationToken,
+    ) -> codex_provider_api::Result<()> {
+        self.ensure_stored_auth()?;
+        if operation.provider != self.id() {
+            return Err(ProviderError::Authentication(
+                "login provider mismatch".into(),
+            ));
+        }
+        let previous = self
+            .auth_store()?
+            .account_reference(self.id(), &operation.account)
+            .ok();
+        let pool = self.pool_store()?;
+        self.auth_store()?
+            .commit_login_with(operation, record, select, cancellation, |account| {
+                pool.prepare_login(account, select, cancellation)
+            })
+            .await?;
+        if let Some(previous) = previous {
+            self.cancel_account_sessions(&previous);
+        }
+        pool.settings(&CancellationToken::new()).await.map(|_| ())
+    }
     pub async fn commit_login(
         &self,
         account: &str,
         record: TokenRecord,
         cancellation: &CancellationToken,
     ) -> codex_provider_api::Result<()> {
-        self.ensure_stored_auth()?;
-        self.auth_store()?
-            .login(self.id(), account, record, cancellation)
+        let operation = self.begin_account_login(account, cancellation).await?;
+        self.finish_account_login(&operation, record, true, cancellation)
             .await
     }
-    pub async fn login_token(
+    pub async fn login_token_with_selection(
         &self,
         account: &str,
         token: String,
+        select: bool,
         cancellation: &CancellationToken,
     ) -> codex_provider_api::Result<()> {
-        self.commit_login(
-            account,
+        let operation = self.begin_account_login(account, cancellation).await?;
+        self.finish_account_login(
+            &operation,
             TokenRecord {
                 access_token: token,
                 refresh_token: None,
@@ -219,13 +341,66 @@ impl NativeBackend {
                 metadata: serde_json::Value::Null,
                 revoked: false,
             },
+            select,
             cancellation,
         )
         .await
     }
+    pub async fn login_token(
+        &self,
+        account: &str,
+        token: String,
+        cancellation: &CancellationToken,
+    ) -> codex_provider_api::Result<()> {
+        self.login_token_with_selection(account, token, true, cancellation)
+            .await
+    }
+    pub async fn logout_account_at_revision(
+        &self,
+        account: &str,
+        revision: u64,
+        cancellation: &CancellationToken,
+    ) -> codex_provider_api::Result<()> {
+        self.ensure_stored_auth()?;
+        let previous = self
+            .auth_store()?
+            .account_reference(self.id(), account)
+            .ok();
+        let pool = self.pool_store()?;
+        self.auth_store()?
+            .logout_account_checked(self.id(), account, cancellation, || {
+                pool.touch(revision, cancellation)
+            })
+            .await?;
+        if let Some(previous) = previous {
+            self.cancel_account_sessions(&previous);
+        }
+        Ok(())
+    }
+    pub async fn logout_account(
+        &self,
+        account: &str,
+        cancellation: &CancellationToken,
+    ) -> codex_provider_api::Result<()> {
+        self.ensure_stored_auth()?;
+        let previous = self
+            .auth_store()?
+            .account_reference(self.id(), account)
+            .ok();
+        self.auth_store()?
+            .logout_account(self.id(), account, cancellation)
+            .await?;
+        if let Some(previous) = previous {
+            self.cancel_account_sessions(&previous);
+        }
+        Ok(())
+    }
     pub async fn logout(&self, cancellation: &CancellationToken) -> codex_provider_api::Result<()> {
         self.ensure_stored_auth()?;
-        self.auth_store()?.logout(self.id(), cancellation).await
+        if let Some(account) = self.auth_store()?.selected(self.id())? {
+            self.logout_account(&account, cancellation).await?;
+        }
+        Ok(())
     }
     pub fn status(&self) -> codex_provider_api::Result<Option<AccountInfo>> {
         self.descriptor()?;
@@ -258,12 +433,106 @@ impl NativeBackend {
         }))
     }
 }
+impl codex_provider_runtime::AccountCredentials for NativeBackend {
+    fn configured_token(&self) -> bool {
+        self.has_configured_token()
+    }
+    fn namespace_account(&self, account: &codex_provider_api::AccountRef) -> String {
+        self.scope_account(account.identity())
+    }
+    fn credentials_for<'a>(
+        &'a self,
+        account: Option<&'a codex_provider_api::AccountRef>,
+        cancellation: CancellationToken,
+    ) -> ProviderFuture<'a, Credentials> {
+        Box::pin(async move {
+            let Some(account) = account.filter(|_| !self.has_configured_token()) else {
+                return self.credentials(cancellation).await;
+            };
+            let credentials = self
+                .descriptor()?
+                .credentials_for(&self.auth_store()?, account, &cancellation)
+                .await?;
+            self.register_session(account, cancellation)?;
+            codex_provider_runtime::AccountCredentials::validate_account(self, account)?;
+            Ok(self.scope_credentials(credentials))
+        })
+    }
+    fn refresh_rejected<'a>(
+        &'a self,
+        account: &'a codex_provider_api::AccountRef,
+        token: &'a str,
+        cancellation: CancellationToken,
+    ) -> ProviderFuture<'a, Option<Credentials>> {
+        Box::pin(async move {
+            if self.has_configured_token()
+                || self.descriptor()?.authentication
+                    == codex_provider_registry::Authentication::ApiKey
+            {
+                return Ok(None);
+            }
+            if !self
+                .auth_store()?
+                .expire_rejected(self.id(), account, token, &cancellation)
+                .await?
+            {
+                return Ok(None);
+            }
+            self.descriptor()?
+                .credentials_for(&self.auth_store()?, account, &cancellation)
+                .await
+                .map(|credentials| Some(self.scope_credentials(credentials)))
+        })
+    }
+    fn validate_account(
+        &self,
+        account: &codex_provider_api::AccountRef,
+    ) -> codex_provider_api::Result<()> {
+        if self
+            .auth_store()?
+            .account_reference(self.id(), &account.label)?
+            != *account
+        {
+            return Err(ProviderError::Authentication(
+                "account credentials were replaced; stop this attempt".into(),
+            ));
+        }
+        Ok(())
+    }
+}
+impl NativeBackend {
+    fn discovery_account(&self) -> codex_provider_api::Result<codex_provider_api::AccountRef> {
+        let thread = self
+            .discovery_thread
+            .lock()
+            .map_err(|_| ProviderError::Checkpoint("model discovery context unavailable".into()))?
+            .clone();
+        if let Some(thread) = thread
+            && let Some(account) = self.pool_store()?.affinity(&thread)?
+            && self
+                .auth_store()?
+                .account_reference(self.id(), &account.label)
+                .is_ok_and(|current| current == account)
+        {
+            return Ok(account);
+        }
+        self.pool_store()?
+            .preferred_reference()?
+            .map(Ok)
+            .unwrap_or_else(|| self.auth_store()?.selected_reference(self.id()))
+    }
+}
 impl ModelsEndpointClient for NativeBackend {
+    fn bind_thread(&self, thread: &str) {
+        if let Ok(mut current) = self.discovery_thread.lock() {
+            *current = Some(thread.into());
+        }
+    }
     fn identity(&self) -> Option<String> {
         self.descriptor().ok()?;
         let account = match self.environment_token() {
             Some(token) => format!("token-{}", codex_provider_auth::digest(token.as_bytes())),
-            None => self.auth_store().ok()?.identity(self.id()).ok()??,
+            None => self.discovery_account().ok()?.identity(),
         };
         let account = self.scope_account(account);
         Some(codex_provider_auth::digest(
@@ -283,10 +552,22 @@ impl ModelsEndpointClient for NativeBackend {
     ) -> ModelsEndpointFuture<'a, codex_protocol::error::Result<ModelsEndpointResponse>> {
         Box::pin(async move {
             let cancellation = CancellationToken::new();
-            let credentials = self
-                .credentials(cancellation.clone())
-                .await
-                .map_err(|error| CodexErr::InvalidRequest(error.to_string()))?;
+            let account = if self.has_configured_token() {
+                None
+            } else {
+                Some(
+                    self.discovery_account()
+                        .map_err(|error| CodexErr::InvalidRequest(error.to_string()))?,
+                )
+            };
+            let _guard = cancellation.clone().drop_guard();
+            let credentials = codex_provider_runtime::AccountCredentials::credentials_for(
+                self,
+                account.as_ref(),
+                cancellation.clone(),
+            )
+            .await
+            .map_err(|error| CodexErr::InvalidRequest(error.to_string()))?;
             let identity = codex_provider_auth::digest(
                 format!(
                     "{}:{}:{:?}",
@@ -485,6 +766,84 @@ mod tests {
         );
         backend.logout(&cancellation).await.unwrap();
         assert_eq!(backend.account().unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn fifth_provider_pool_add_affinity_discovery_and_logout_are_isolated() {
+        use codex_provider_runtime::AccountCredentials;
+        let home = tempfile::tempdir().unwrap();
+        let info = ModelProviderInfo {
+            name: "Fifth".into(),
+            wire_api: codex_model_provider_info::WireApi::Native,
+            native_provider: Some("fifth-provider".into()),
+            base_url: Some("https://fifth.example.test".into()),
+            ..Default::default()
+        };
+        let backend = NativeBackend::with_descriptor(info, Some(home.path().into()), &FIFTH);
+        let cancel = CancellationToken::new();
+        backend
+            .login_token("a", "fixture-token".into(), &cancel)
+            .await
+            .unwrap();
+        backend
+            .login_token_with_selection("b", "second-token".into(), false, &cancel)
+            .await
+            .unwrap();
+        let status = backend.accounts(None, &cancel).await.unwrap();
+        assert!(status.enabled);
+        assert_eq!(status.selected.as_deref(), Some("a"));
+        let b = backend
+            .auth_store()
+            .unwrap()
+            .account_reference(backend.id(), "b")
+            .unwrap();
+        backend
+            .pool_store()
+            .unwrap()
+            .accept("thread-b", &b, &cancel)
+            .await
+            .unwrap();
+        let a_identity = backend.identity().unwrap();
+        let mut thread_backend = backend.clone();
+        thread_backend.discovery_thread = Arc::new(std::sync::Mutex::new(None));
+        thread_backend.bind_thread("thread-b");
+        assert_ne!(thread_backend.identity().unwrap(), a_identity);
+        assert_eq!(backend.identity().unwrap(), a_identity);
+        let a = backend
+            .auth_store()
+            .unwrap()
+            .account_reference(backend.id(), "a")
+            .unwrap();
+        let a_cancel = cancel.child_token();
+        let b_cancel = cancel.child_token();
+        AccountCredentials::credentials_for(&backend, Some(&a), a_cancel.clone())
+            .await
+            .unwrap();
+        AccountCredentials::credentials_for(&backend, Some(&b), b_cancel.clone())
+            .await
+            .unwrap();
+        backend.logout_account("a", &cancel).await.unwrap();
+        assert!(a_cancel.is_cancelled());
+        assert!(!b_cancel.is_cancelled());
+        assert!(!cancel.is_cancelled());
+        assert!(backend.accounts(None, &cancel).await.unwrap().enabled);
+        let status = backend.accounts(None, &cancel).await.unwrap();
+        backend
+            .update_pool(
+                status.settings.revision,
+                codex_provider_runtime::PoolUpdate::Disable,
+                &cancel,
+            )
+            .await
+            .unwrap();
+        backend
+            .login_token_with_selection("c", "third".into(), false, &cancel)
+            .await
+            .unwrap();
+        assert!(!backend.accounts(None, &cancel).await.unwrap().enabled);
+        let json = serde_json::to_string(&backend.accounts(None, &cancel).await.unwrap()).unwrap();
+        assert!(!json.contains("fixture-token"));
+        assert!(!json.contains("second-token"));
     }
 
     #[tokio::test]

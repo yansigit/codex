@@ -1468,6 +1468,7 @@ pub enum EventMsg {
     /// Warning issued while processing a submission. Unlike `Error`, this
     /// indicates the turn continued but the user should still be notified.
     Warning(WarningEvent),
+    ProviderAccountChanged(ProviderAccountChangedEvent),
 
     /// Provider-owned authentication recovery has started for the current turn.
     AuthRecoveryStarted(AuthRecoveryEvent),
@@ -2203,6 +2204,13 @@ impl ErrorEvent {
             .as_ref()
             .is_none_or(CodexErrorInfo::affects_turn_status)
     }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
+pub struct ProviderAccountChangedEvent {
+    pub provider: String,
+    pub previous_account: String,
+    pub account: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]

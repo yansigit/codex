@@ -6,6 +6,12 @@ fixtures do not prove behavior against a provider service. Pinned upstream
 evidence is catalogued in [references.md](references.md). Reproduction commands
 for the reusable app-server checks are in [usage.md](usage.md).
 
+## Automatic account pools
+
+The additive pool implementation and its new evidence are tracked separately in
+[account-pools.md](account-pools.md). Earlier live receipts below cover the
+published single-account baseline, not cross-account continuation.
+
 ## Compiled boundary refactor
 
 Fresh results and exact receipt paths are in

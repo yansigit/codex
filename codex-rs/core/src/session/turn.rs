@@ -2184,7 +2184,8 @@ pub(super) fn realtime_text_for_event(msg: &EventMsg) -> Option<RealtimeEventTex
         | EventMsg::CollabCloseEnd(_)
         | EventMsg::CollabResumeBegin(_)
         | EventMsg::CollabResumeEnd(_)
-        | EventMsg::SubAgentActivity(_) => None,
+        | EventMsg::SubAgentActivity(_)
+        | EventMsg::ProviderAccountChanged(_) => None,
     }
 }
 
@@ -2718,6 +2719,36 @@ async fn try_run_sampling_request(
         record_turn_ttft_metric(&turn_context, &event).await;
 
         match event {
+            ResponseEvent::HistoryPersistenceRequested { reply } => {
+                let result = if sess.live_thread().is_none() {
+                    Ok(None)
+                } else {
+                    match sess.flush_rollout().await {
+                        Ok(()) => Ok(Some(
+                            sess.clone_history().await.raw_items().cloned().collect(),
+                        )),
+                        Err(error) => Err(error.to_string()),
+                    }
+                };
+                let _ = reply.send(result);
+            }
+            ResponseEvent::ProviderAccountChanged {
+                provider,
+                previous,
+                account,
+            } => {
+                sess.send_event(
+                    &turn_context,
+                    EventMsg::ProviderAccountChanged(
+                        codex_protocol::protocol::ProviderAccountChangedEvent {
+                            provider,
+                            previous_account: previous,
+                            account,
+                        },
+                    ),
+                )
+                .await;
+            }
             ResponseEvent::Created { response_id } => {
                 if let Some(response_id) = response_id {
                     turn_context

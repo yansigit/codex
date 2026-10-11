@@ -39,6 +39,7 @@ pub enum SlashCommand {
     Init,
     Compact,
     Config,
+    Providers,
     Recap,
     Plan,
     Voice,
@@ -92,6 +93,7 @@ impl SlashCommand {
     pub fn description(self) -> &'static str {
         match self {
             SlashCommand::Config => "configure Codex preferences",
+            SlashCommand::Providers => "manage native provider accounts and pools",
             SlashCommand::Feedback => "send logs to maintainers",
             SlashCommand::New => "start a new chat during a conversation",
             SlashCommand::Init => "create an AGENTS.md file with instructions for Codex",
@@ -302,7 +304,10 @@ impl SlashCommand {
             SlashCommand::Rollout => true,
             SlashCommand::TestApproval => true,
             SlashCommand::Agents | SlashCommand::MultiAgents => true,
-            SlashCommand::Config | SlashCommand::Theme | SlashCommand::Pets => false,
+            SlashCommand::Providers
+            | SlashCommand::Config
+            | SlashCommand::Theme
+            | SlashCommand::Pets => false,
         }
     }
 

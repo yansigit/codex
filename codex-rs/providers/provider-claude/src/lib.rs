@@ -1,4 +1,5 @@
 //! Direct Claude Pro/Max OAuth Messages transport. OAuth lifecycle lives in shared auth.
+mod failure;
 use codex_provider_api::*;
 use codex_provider_codecs::*;
 use reqwest::Client;
@@ -112,6 +113,13 @@ impl Provider for ClaudeProvider {
     fn id(&self) -> &'static str {
         "claude"
     }
+    fn handoff_request(
+        &self,
+        request: &Request,
+        _boundary: ContinuationBoundary,
+    ) -> Result<Request> {
+        portable_history(request)
+    }
     fn models(&self, context: Context) -> ProviderFuture<'_, Vec<Model>> {
         Box::pin(async move {
             let mut models = Vec::new();
@@ -212,7 +220,14 @@ impl Provider for ClaudeProvider {
                 &request.tools,
             )?;
             Ok(Box::new(
-                HttpSession::start(self.client.clone(), Box::new(codec), request, context).await?,
+                HttpSession::start_with_policy(
+                    self.client.clone(),
+                    Box::new(codec),
+                    request,
+                    context,
+                    failure::classify,
+                )
+                .await?,
             ) as Box<dyn ProviderSession>)
         })
     }

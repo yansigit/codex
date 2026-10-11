@@ -1792,6 +1792,33 @@ impl MessageProcessor {
                     .await
                     .map(|response| Some(response.into()))
             }
+            ClientRequest::ProviderAccounts { params, .. } => self
+                .account_processor
+                .provider_accounts(params)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::ProviderPoolUpdate { params, .. } => self
+                .account_processor
+                .provider_pool_update(params)
+                .await
+                .map(|response| {
+                    Some(
+                        codex_app_server_protocol::ClientResponsePayload::ProviderPoolUpdate(
+                            response,
+                        ),
+                    )
+                }),
+            ClientRequest::ProviderAccountLogout { params, .. } => self
+                .account_processor
+                .provider_account_logout(params)
+                .await
+                .map(|response| {
+                    Some(
+                        codex_app_server_protocol::ClientResponsePayload::ProviderAccountLogout(
+                            response,
+                        ),
+                    )
+                }),
             ClientRequest::LogoutAccount { .. } => {
                 self.account_processor
                     .logout_account(request_id.clone())

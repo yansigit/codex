@@ -8,11 +8,16 @@ use serde::Serialize;
 use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
+mod pool;
+pub use pool::*;
+
 pub type ProviderFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>>;
 pub type Result<T> = std::result::Result<T, ProviderError>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ProviderError {
+    #[error("{0}")]
+    Classified(Failure),
     #[error("provider authentication required: {0}")]
     Authentication(String),
     #[error("provider protocol error: {0}")]
@@ -234,6 +239,14 @@ pub enum Event {
     /// Replay material associated with generated output (including signatures).
     Checkpoint(Checkpoint),
     Usage(Usage),
+    /// All results have been accepted locally; no next HTTP request was sent.
+    ContinuationReady,
+    AccountChanged {
+        previous: String,
+        account: String,
+        namespace: Namespace,
+        prior_journals: Vec<Namespace>,
+    },
     Completed {
         id: String,
     },
@@ -245,6 +258,29 @@ pub trait ProviderSession: Send {
     fn next_event(&mut self) -> ProviderFuture<'_, Option<Event>>;
     fn submit_tool_result(&mut self, result: ToolResult) -> ProviderFuture<'_, ()>;
     fn cancel(&mut self) -> ProviderFuture<'_, ()>;
+    /// HTTP rounds may only dispatch after the runtime authorizes continuation.
+    fn continue_round(&mut self) -> ProviderFuture<'_, ()> {
+        Box::pin(async { Err(ProviderError::Unsupported("explicit continuation".into())) })
+    }
+    /// Only a conclusively rejected request may install rotated credentials and retry.
+    fn retry_authentication(&mut self, _credentials: Credentials) -> ProviderFuture<'_, ()> {
+        Box::pin(async {
+            Err(ProviderError::Unsupported(
+                "authentication retry at this boundary".into(),
+            ))
+        })
+    }
+    fn continuation_request(&self) -> Result<Request> {
+        Err(ProviderError::Unsupported(
+            "provider has no portable continuation boundary".into(),
+        ))
+    }
+    fn authorize_continuation(
+        &mut self,
+        _history: Option<HistoryAcknowledgement>,
+    ) -> ProviderFuture<'_, ()> {
+        self.continue_round()
+    }
 }
 
 pub trait Provider: Send + Sync {
@@ -254,6 +290,16 @@ pub trait Provider: Send + Sync {
     }
     fn native_operations(&self) -> Option<Arc<dyn NativeOperations>> {
         None
+    }
+    /// Default deny: registration of a transport does not establish portability.
+    fn handoff_request(
+        &self,
+        _request: &Request,
+        _boundary: ContinuationBoundary,
+    ) -> Result<Request> {
+        Err(ProviderError::Unsupported(
+            "account handoff has no verified history boundary".into(),
+        ))
     }
     fn models(&self, context: Context) -> ProviderFuture<'_, Vec<Model>>;
     fn start(
@@ -276,4 +322,18 @@ pub trait Host: Send + Sync {
     ) -> ProviderFuture<'_, ToolResult>;
     /// Persist a checkpoint before acknowledging its receipt.
     fn checkpoint(&self, checkpoint: Checkpoint) -> ProviderFuture<'_, ()>;
+    fn persisted_history(&self) -> ProviderFuture<'_, Option<HistoryAcknowledgement>> {
+        Box::pin(async { Ok(None) })
+    }
+    fn account_changed(
+        &self,
+        _namespace: Namespace,
+        _prior_journals: Vec<Namespace>,
+    ) -> ProviderFuture<'_, ()> {
+        Box::pin(async {
+            Err(ProviderError::Unsupported(
+                "host cannot change account namespace".into(),
+            ))
+        })
+    }
 }

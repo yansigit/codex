@@ -8,6 +8,8 @@ license.workspace = true
 workspace = true
 
 [dependencies]
+sha2 = { workspace = true }
+httpdate = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

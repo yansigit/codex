@@ -11,9 +11,7 @@ use codex_protocol::protocol::TokenUsage;
 use codex_provider_api as api;
 use codex_provider_runtime::ChannelHost;
 use codex_provider_runtime::HostCall;
-use codex_provider_runtime::SessionStore;
 use codex_provider_runtime::TurnCheckpoint;
-use codex_provider_runtime::validate_lineage;
 use serde_json::Value;
 use serde_json::json;
 use std::collections::BTreeMap;
@@ -29,6 +27,7 @@ pub struct Prompt {
     pub parallel_tool_calls: bool,
     pub system: String,
     pub output_schema: Option<Value>,
+    pub persistence_acknowledgements: bool,
 }
 
 pub struct SessionStream {
@@ -343,6 +342,40 @@ async fn finish_item(
     Ok(())
 }
 
+async fn acknowledge_history(
+    tx: &mpsc::Sender<Result<ResponseEvent>>,
+    expected: &[api::Message],
+    system: &str,
+    scope: &str,
+    cancellation: &CancellationToken,
+) -> Result<Option<api::HistoryAcknowledgement>> {
+    let (reply, receive) = oneshot::channel();
+    emit(
+        tx,
+        ResponseEvent::HistoryPersistenceRequested { reply },
+        cancellation,
+    )
+    .await?;
+    let recorded = tokio::select! {
+        _ = cancellation.cancelled() => return Err(CodexErr::TurnAborted),
+        result = receive => result.map_err(error)?.map_err(error)?,
+    };
+    let Some(recorded) = recorded else {
+        return Ok(None);
+    };
+    let recorded = messages(&recorded)?;
+    if !recorded.ends_with(expected) {
+        return Err(error(
+            "recorded provider history differs from the acknowledged conversation; refusing account handoff",
+        ));
+    }
+    Ok(Some(api::HistoryAcknowledgement {
+        hash: codex_provider_runtime::lineage_hash(system, expected).map_err(error)?,
+        length: expected.len(),
+        checkpoint_scope: scope.into(),
+    }))
+}
+
 #[allow(clippy::too_many_arguments)]
 pub async fn stream(
     provider: Arc<NativeBackend>,
@@ -354,26 +387,15 @@ pub async fn stream(
     execution_purpose: &str,
 ) -> Result<SessionStream> {
     let cancellation = CancellationToken::new();
-    let credentials = provider
-        .credentials(cancellation.clone())
-        .await
-        .map_err(error)?;
     let namespace = api::Namespace {
         provider: provider.id().into(),
-        account: credentials.account_id.clone(),
+        account: String::new(),
         model: model.into(),
         thread,
     };
     let home = provider
         .state_home()
         .ok_or_else(|| error("native provider requires local state storage"))?;
-    let store = SessionStore::new(&home, namespace.clone()).with_checkpoint_scope(checkpoint_scope);
-    let execution = Arc::new(
-        store
-            .begin_execution(execution_purpose, &cancellation)
-            .await
-            .map_err(error)?,
-    );
     let backend = provider.provider().map_err(error)?;
     let operations = backend.native_operations();
     let (mut definitions, mut targets) = tools(prompt)?;
@@ -398,7 +420,7 @@ pub async fn stream(
             definitions.push(definition);
         }
     }
-    let mut request = api::Request {
+    let request = api::Request {
         namespace,
         system: prompt.system.clone(),
         messages: messages(&prompt.input)?,
@@ -407,10 +429,30 @@ pub async fn stream(
         max_output_tokens: None,
         reasoning_effort,
         output_schema: prompt.output_schema.clone(),
-        checkpoint: store.load().map_err(error)?,
+        checkpoint: None,
         metadata: json!({}),
     };
-    validate_lineage(&mut request, backend.recovery_policy()).map_err(error)?;
+    let started = codex_provider_runtime::start_turn(
+        &home,
+        provider.info().base_url.as_deref().unwrap_or(""),
+        execution_purpose,
+        &checkpoint_scope,
+        request,
+        backend,
+        provider.clone(),
+        cancellation.clone(),
+    )
+    .await
+    .map_err(error)?;
+    let request = started.request;
+    let store = started.store;
+    let execution = started.execution;
+    let session = started.session;
+    let handoff_journal = started.journal;
+    let initial_switch = started.switched;
+    let provider_id = request.namespace.provider.clone();
+    let persistence_acknowledgements =
+        prompt.persistence_acknowledgements && handoff_journal.is_some();
     let mut history = request.messages.clone();
     let system = request.system.clone();
     let final_store = store.clone();
@@ -419,24 +461,18 @@ pub async fn stream(
         latest: None,
         previous: request.checkpoint.clone(),
         tools_started: false,
+        prior_journals: store.prior_journals(),
     }));
-    let session = backend
-        .start(
-            request.clone(),
-            api::Context {
-                credentials,
-                cancellation: cancellation.child_token(),
-            },
-        )
-        .await
-        .map_err(error)?;
     let (calls, mut host_calls) = mpsc::channel::<HostCall>(128);
     let native_tools = targets
         .iter()
         .filter(|(_, target)| target.native)
         .map(|(name, _)| name.clone())
         .collect();
+    let (history_tx, mut history_requests) =
+        mpsc::channel::<codex_provider_runtime::HistoryRequest>(1);
     let host = Arc::new(ChannelHost {
+        history_requests: persistence_acknowledgements.then_some(history_tx),
         store,
         calls,
         cancellation: cancellation.clone(),
@@ -468,6 +504,7 @@ pub async fn stream(
             let response_id = uuid::Uuid::new_v4();
             let mut usage = None;
             emit(&tx, ResponseEvent::Created { response_id: None }, &cancellation).await?;
+            if let Some((previous, account)) = initial_switch { emit(&tx, ResponseEvent::ProviderAccountChanged { provider: provider_id, previous, account }, &cancellation).await?; }
             loop {
                 tokio::select! {
                     biased;
@@ -494,18 +531,30 @@ pub async fn stream(
                                 emit(&tx, if thinking { ResponseEvent::ReasoningSummaryDelta { delta: text, summary_index: 0 } } else { ResponseEvent::OutputTextDelta(text) }, &cancellation).await?;
                             }
                             api::Event::ToolCall(_) => { finish_item(&tx, &mut active, &mut history, &cancellation).await?; }
-                            api::Event::Checkpoint(_) => {}
+                            api::Event::Checkpoint(_) | api::Event::ContinuationReady => {}
+                            api::Event::AccountChanged { previous, account, namespace, .. } => {
+                                emit(&tx, ResponseEvent::ProviderAccountChanged { provider: namespace.provider, previous, account }, &cancellation).await?;
+                            }
                             api::Event::Usage(value) => { usage = Some(TokenUsage { input_tokens: value.input_tokens.min(i64::MAX as u64) as i64, cached_input_tokens: value.cached_input_tokens.min(i64::MAX as u64) as i64, output_tokens: value.output_tokens.min(i64::MAX as u64) as i64, reasoning_output_tokens: value.reasoning_tokens.min(i64::MAX as u64) as i64, total_tokens: value.input_tokens.saturating_add(value.output_tokens).min(i64::MAX as u64) as i64, ..TokenUsage::default() }); }
                             api::Event::Completed { id } => {
                                 finish_item(&tx, &mut active, &mut history, &cancellation).await?;
                                 // The driver has accepted terminal completion,
                                 // so no checkpoint writer remains. Release the
                                 // async lock before the durable final write.
+                                if persistence_acknowledgements { acknowledge_history(&tx, &history, &system, &checkpoint_scope, &cancellation).await?; }
                                 let checkpoint = checkpoint_state.lock().await.clone();
                                 checkpoint.complete(&final_store, &execution, &system, &history, &cancellation).await.map_err(error)?;
+                                if let Some(journal) = &handoff_journal { journal.complete(&cancellation).await.map_err(error)?; }
                                 emit(&tx, ResponseEvent::Completed { response_id: id, token_usage: usage, usage_metadata: None, end_turn: Some(true) }, &cancellation).await?;
                                 return Ok(());
                             }
+                        }
+                    }
+                    boundary = history_requests.recv(), if !history_requests.is_closed() => {
+                        if let Some(boundary) = boundary {
+                            finish_item(&tx, &mut active, &mut history, &cancellation).await?;
+                            let acknowledgement = acknowledge_history(&tx, &history, &system, &checkpoint_scope, &cancellation).await;
+                            let _ = boundary.reply.send(acknowledgement.map_err(|error| api::ProviderError::Checkpoint(error.to_string())));
                         }
                     }
                     call = host_calls.recv(), if !host_calls.is_closed() => {
@@ -562,6 +611,43 @@ mod tests {
 
     fn item(value: Value) -> ResponseItem {
         serde_json::from_value(value).expect("valid response item")
+    }
+
+    #[tokio::test]
+    async fn pool_history_acknowledgement_requires_actual_persisted_content() {
+        for (recorded, valid) in [
+            (Some("exact"), true),
+            (Some("changed"), false),
+            (None, true),
+        ] {
+            let history = vec![item(
+                json!({"type":"message", "role":"user", "content":[{"type":"input_text", "text":"exact"}]}),
+            )];
+            let expected = messages(&history).unwrap();
+            let (send, mut receive) = tokio::sync::mpsc::channel(1);
+            let host = tokio::spawn(async move {
+                let Some(Ok(ResponseEvent::HistoryPersistenceRequested { reply })) =
+                    receive.recv().await
+                else {
+                    panic!("history request");
+                };
+                let actual = recorded.map(|text| vec![item(json!({"type":"message", "role":"user", "content":[{"type":"input_text", "text":text}]}))]);
+                let _ = reply.send(Ok(actual));
+            });
+            let result = super::acknowledge_history(
+                &send,
+                &expected,
+                "system",
+                "scope",
+                &tokio_util::sync::CancellationToken::new(),
+            )
+            .await;
+            assert_eq!(result.is_ok(), valid);
+            if recorded.is_none() {
+                assert!(result.unwrap().is_none());
+            }
+            host.await.unwrap();
+        }
     }
 
     #[tokio::test]

@@ -3484,6 +3484,27 @@
       ],
       "type": "object"
     },
+    "ProviderPoolChangedNotification": {
+      "properties": {
+        "endpoint": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "revision": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "endpoint",
+        "provider",
+        "revision"
+      ],
+      "type": "object"
+    },
     "RateLimitReachedType": {
       "enum": [
         "rate_limit_reached",
@@ -5587,6 +5608,29 @@
       },
       "required": [
         "projectId",
+        "threadId"
+      ],
+      "type": "object"
+    },
+    "ThreadProviderAccountChangedNotification": {
+      "properties": {
+        "account": {
+          "type": "string"
+        },
+        "previousAccount": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "account",
+        "previousAccount",
+        "provider",
         "threadId"
       ],
       "type": "object"
@@ -8041,6 +8085,46 @@
         "params"
       ],
       "title": "McpServer/event/stream/notificationNotification",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "method": {
+          "enum": [
+            "provider/pool/changed"
+          ],
+          "title": "Provider/pool/changedNotificationMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/ProviderPoolChangedNotification"
+        }
+      },
+      "required": [
+        "method",
+        "params"
+      ],
+      "title": "Provider/pool/changedNotification",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "method": {
+          "enum": [
+            "thread/providerAccount/changed"
+          ],
+          "title": "Thread/providerAccount/changedNotificationMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/ThreadProviderAccountChangedNotification"
+        }
+      },
+      "required": [
+        "method",
+        "params"
+      ],
+      "title": "Thread/providerAccount/changedNotification",
       "type": "object"
     },
     {

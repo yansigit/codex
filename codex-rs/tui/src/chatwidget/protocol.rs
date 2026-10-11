@@ -353,8 +353,20 @@ impl ChatWidget {
                     self.on_realtime_conversation_closed(notification.reason);
                 }
             }
+            ServerNotification::ThreadProviderAccountChanged(notification) => {
+                if !from_replay {
+                    self.add_info_message(
+                        format!(
+                            "Switched to {}: {} is unavailable.",
+                            notification.account, notification.previous_account
+                        ),
+                        None,
+                    );
+                }
+            }
             ServerNotification::ServerRequestResolved(_)
             | ServerNotification::AccountUpdated(_)
+            | ServerNotification::ProviderPoolChanged(_)
             | ServerNotification::GatewayOAuthChanged(_)
             | ServerNotification::AccountRateLimitsUpdated(_)
             | ServerNotification::ThreadStarted(_)

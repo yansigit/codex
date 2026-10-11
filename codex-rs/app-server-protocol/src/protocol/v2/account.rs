@@ -81,6 +81,13 @@ pub enum LoginAccountParams {
         provider: String,
         account_id: String,
         api_key: Option<String>,
+        /// Defaults to selecting this account, preserving existing clients.
+        #[serde(default)]
+        #[ts(optional)]
+        select: Option<bool>,
+        #[serde(default)]
+        #[ts(optional)]
+        thread_id: Option<String>,
     },
     #[serde(rename = "apiKey", rename_all = "camelCase")]
     #[ts(rename = "apiKey", rename_all = "camelCase")]

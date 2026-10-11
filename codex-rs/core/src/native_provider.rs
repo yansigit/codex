@@ -11,6 +11,7 @@ use crate::client_common::ResponseStream;
 
 pub(crate) use codex_provider_adapter::session::tool_result;
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn stream(
     backend: Arc<NativeBackend>,
     prompt: &Prompt,
@@ -19,6 +20,7 @@ pub(crate) async fn stream(
     reasoning_effort: Option<String>,
     checkpoint_scope: String,
     execution_purpose: &str,
+    persistence_acknowledgements: bool,
 ) -> Result<ResponseStream> {
     let capabilities = backend.session_capabilities();
     let prompt = codex_provider_adapter::session::Prompt {
@@ -32,6 +34,7 @@ pub(crate) async fn stream(
         system: prompt.base_instructions.text.clone(),
         parallel_tool_calls: prompt.parallel_tool_calls,
         output_schema: prompt.output_schema.clone(),
+        persistence_acknowledgements,
     };
     let stream = codex_provider_adapter::session::stream(
         backend,

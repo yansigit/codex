@@ -585,6 +585,9 @@ impl ChatWidget {
             SlashCommand::Statusline => {
                 self.open_status_line_setup();
             }
+            SlashCommand::Providers => {
+                self.app_event_tx.send(AppEvent::OpenProviders);
+            }
             SlashCommand::Config => {
                 self.open_config_panel();
             }
@@ -1337,6 +1340,7 @@ impl ChatWidget {
             | SlashCommand::Title
             | SlashCommand::Statusline
             | SlashCommand::Config
+            | SlashCommand::Providers
             | SlashCommand::Theme
             | SlashCommand::Tui
             | SlashCommand::Pets => QueueDrain::Stop,
