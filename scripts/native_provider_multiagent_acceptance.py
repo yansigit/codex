@@ -2,7 +2,7 @@
 """Opt-in live parent/child acceptance with real providers and bounded fixture tools.
 
 Uses an existing private home; credentials and raw protocol payloads are never
-printed. Every shell operation is confined to a unique temporary workspace.
+printed. Fixture shell operations target a unique temporary workspace.
 No quota failures are injected by this product-level runner.
 """
 
@@ -68,6 +68,16 @@ class MultiagentServer(AppServer):
             and params.get("threadId") == self.expected_approval_thread
             and super()._is_expected_approval(params)
         )
+
+
+def fixture_terminal(terminals: list[dict[str, Any]], cmd: str, workspace: Path) -> str:
+    if (
+        len(terminals) != 1
+        or terminals[0].get("command") != cmd
+        or terminals[0].get("cwd") != str(workspace)
+    ):
+        raise AcceptanceError("unexpected background terminal; refusing termination")
+    return terminals[0]["processId"]
 
 
 def child_lifecycle(
@@ -158,10 +168,28 @@ def child_lifecycle(
     )["thread"]
     if not any(turn.get("status") == "interrupted" for turn in child.get("turns", [])):
         raise AcceptanceError("child interruption was not recorded")
+    # Resumable exec_command terminals deliberately outlive turn interruption.
+    # Stop this exact child-owned terminal through the existing host operation.
+    terminals = server.call(
+        "thread/backgroundTerminals/list", {"threadId": by_name["right"]}
+    )
+    if terminals.get("nextCursor"):
+        raise AcceptanceError("unexpected additional background terminals")
+    process_id = fixture_terminal(terminals["data"], cmd, workspace)
+    stopped = server.call(
+        "thread/backgroundTerminals/terminate",
+        {"threadId": by_name["right"], "processId": process_id},
+    )
+    if not stopped.get("terminated"):
+        raise AcceptanceError("child background terminal was not terminated")
+    if server.call("thread/backgroundTerminals/list", {"threadId": by_name["right"]})[
+        "data"
+    ]:
+        raise AcceptanceError("child background terminal is still running")
     while time.monotonic() < observed_start + 46:
         if (workspace / "child-finished").exists():
             raise AcceptanceError(
-                "interrupted child command completed its delayed write"
+                "terminated child command completed its delayed write"
             )
         time.sleep(0.1)
     parent_data = server.call(
@@ -172,7 +200,8 @@ def child_lifecycle(
     return [
         "child_approval_decline",
         "child_approval_accept",
-        "child_active_tool_cancellation",
+        "child_turn_interruption",
+        "child_background_terminal_termination",
     ]
 
 
@@ -447,7 +476,7 @@ def main() -> int:
     parser.add_argument(
         "--lifecycle",
         action="store_true",
-        help="also test child approval allow/deny and active-tool cancellation",
+        help="also test child approvals, turn interruption, and explicit terminal termination",
     )
     parser.add_argument("--receipt", type=Path, required=True)
     args = parser.parse_args()
