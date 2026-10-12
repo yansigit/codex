@@ -77,6 +77,14 @@ impl App {
         tui: &mut tui::Tui,
         screen_size: Size,
     ) -> Result<Rect> {
+        let surface_header = self.config.features.enabled(Feature::ChatgptChat).then(|| {
+            self.native_chat.header(
+                self.chat_widget.is_agent_turn_running(),
+                self.chat_widget.has_active_modal(),
+                &self.native_surface_hint(),
+            )
+        });
+        let header_height = u16::from(surface_header.is_some()).min(screen_size.height);
         self.chat_widget.sync_warnings(&self.transcript_cells);
         let motion = MotionMode::from_animations_enabled(
             self.local_settings.tui.animations && self.local_settings.tui.effects.shimmer,
@@ -138,7 +146,7 @@ impl App {
         // but allow at least 8 rows on small screens, without exceeding the screen itself.
         let max_composer_height = ((u32::from(screen_size.height) * 2 / 3) as u16)
             .max(8)
-            .min(screen_size.height);
+            .min(screen_size.height.saturating_sub(header_height));
         let bottom =
             chat_widget.bottom_pane_renderable(crate::bottom_pane::ComposerRenderOptions {
                 max_height: Some(max_composer_height),
@@ -155,13 +163,14 @@ impl App {
         let dashboard_visible = chat_widget
             .selected_index_for_present_view(AGENTS_OVERVIEW_VIEW_ID)
             .is_some();
-        let bottom_height = if dashboard_visible {
+        let bottom_height = (if dashboard_visible {
             screen_size.height
         } else {
             bottom
                 .desired_height(screen_size.width)
                 .min(screen_size.height)
-        };
+        })
+        .min(screen_size.height.saturating_sub(header_height));
         drop(bottom);
         let available = screen_size.height.saturating_sub(bottom_height);
         let mut bottom_area = Rect::new(
@@ -184,9 +193,9 @@ impl App {
             let mut completion_tip_area = view.render_with_turn_tip_space(
                 Rect::new(
                     /*x*/ 0,
-                    /*y*/ 0,
+                    /*y*/ header_height,
                     transcript_width,
-                    transcript_bottom,
+                    transcript_bottom.saturating_sub(header_height),
                 ),
                 frame.buffer,
                 &self.transcript_cells,
@@ -243,9 +252,9 @@ impl App {
                 completion_tip_area = view.render_with_turn_tip_space(
                     Rect::new(
                         /*x*/ 0,
-                        /*y*/ 0,
+                        /*y*/ header_height,
                         transcript_width,
-                        transcript_bottom,
+                        transcript_bottom.saturating_sub(header_height),
                     ),
                     frame.buffer,
                     &self.transcript_cells,
@@ -266,6 +275,12 @@ impl App {
                     MotionMode::from_animations_enabled(self.local_settings.tui.animations),
                 );
             bottom.render(bottom_area, frame.buffer);
+            if let Some(header) = &surface_header {
+                header.clone().render(
+                    Rect::new(0, 0, screen_size.width, header_height),
+                    frame.buffer,
+                );
+            }
             if let (Some(tip), Some(area)) = (completion_tip, completion_tip_area) {
                 tip.render(area, frame.buffer);
             }

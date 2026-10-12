@@ -31,6 +31,11 @@ MANIFEST_FEATURE_EXCEPTIONS = {
 }
 OPTIONAL_DEPENDENCY_EXCEPTIONS = set()
 INTERNAL_DEPENDENCY_FEATURE_EXCEPTIONS = {}
+# This standalone workspace reproducibly builds the bundled Wasm parser; it is
+# not a member of the host workspace and cannot inherit its metadata or lints.
+STANDALONE_MANIFESTS = {
+    CARGO_RS_ROOT / "chatgpt-chat/pdf-validator/Cargo.toml",
+}
 
 
 def main() -> int:
@@ -384,6 +389,7 @@ def cargo_manifests() -> list[Path]:
         path
         for path in CARGO_RS_ROOT.rglob("Cargo.toml")
         if path != CARGO_RS_ROOT / "Cargo.toml"
+        and path not in STANDALONE_MANIFESTS
     )
 
 

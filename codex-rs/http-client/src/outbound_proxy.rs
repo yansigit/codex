@@ -200,6 +200,21 @@ impl fmt::Debug for HttpClientFactory {
 }
 
 impl HttpClientFactory {
+    // Resolve transport-default environment routing through the application's
+    // resolver too; wreq must never perform its own system/proxy discovery.
+    pub(crate) async fn resolve_browser_chat_proxy_route(
+        &self,
+        url: &str,
+    ) -> io::Result<OutboundProxyRoute> {
+        match self.resolve_proxy_route_async(url.to_owned()).await? {
+            OutboundProxyRoute::TransportDefault => Ok(resolve_env_proxy_route(
+                &ProcessEnv,
+                EnvProxyKind::from_request_url(url),
+            )),
+            route => Ok(route),
+        }
+    }
+
     /// Creates a factory from the outbound proxy policy resolved by the application.
     pub const fn new(outbound_proxy_policy: OutboundProxyPolicy) -> Self {
         Self {

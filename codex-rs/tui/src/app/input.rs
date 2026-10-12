@@ -684,6 +684,12 @@ impl App {
         app_server: &mut AppServerSession,
         key_event: KeyEvent,
     ) -> bool {
+        if self.keymap.app.switch_surface.is_pressed(key_event)
+            && self.config.features.enabled(Feature::ChatgptChat)
+        {
+            self.switch_native_surface(!self.native_chat.active, tui, app_server);
+            return true;
+        }
         if self.keymap.app.open_warnings.is_pressed(key_event) {
             self.chat_widget.open_warnings(&self.transcript_cells);
             return true;

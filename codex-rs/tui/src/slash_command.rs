@@ -12,6 +12,8 @@ use strum_macros::IntoStaticStr;
 pub enum SlashCommand {
     // DO NOT ALPHA-SORT! Enum order is presentation order in the popup, so
     // more frequently used commands should be listed first.
+    Chat,
+    Codex,
     Model,
     Daybreak,
     Ide,
@@ -133,6 +135,8 @@ impl SlashCommand {
             SlashCommand::Stop => "stop all background terminals",
             SlashCommand::MemoryDrop => "DO NOT USE",
             SlashCommand::MemoryUpdate => "DO NOT USE",
+            SlashCommand::Chat => "open the independent ChatGPT surface",
+            SlashCommand::Codex => "return to the Codex surface",
             SlashCommand::Model => "choose what model and reasoning effort to use",
             SlashCommand::Daybreak => "turn Daybreak on or off",
             SlashCommand::Ide => {
@@ -200,6 +204,8 @@ impl SlashCommand {
         matches!(
             self,
             SlashCommand::Copy
+                | SlashCommand::Chat
+                | SlashCommand::Codex
                 | SlashCommand::Agents
                 | SlashCommand::Export
                 | SlashCommand::Raw
@@ -225,6 +231,8 @@ impl SlashCommand {
         matches!(
             self,
             SlashCommand::New
+                | SlashCommand::Chat
+                | SlashCommand::Codex
                 | SlashCommand::Clear
                 | SlashCommand::Resume
                 | SlashCommand::Agents
@@ -300,7 +308,9 @@ impl SlashCommand {
             | SlashCommand::Quit
             | SlashCommand::Exit
             | SlashCommand::Side
-            | SlashCommand::Btw => true,
+            | SlashCommand::Btw
+            | SlashCommand::Chat
+            | SlashCommand::Codex => true,
             SlashCommand::Rollout => true,
             SlashCommand::TestApproval => true,
             SlashCommand::Agents | SlashCommand::MultiAgents => true,

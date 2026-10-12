@@ -95,6 +95,9 @@ impl ReqwestTransport {
 
         match &self.client {
             TransportClient::Fixed(client) => match &client.backend {
+                HttpClientBackend::BrowserChat(client) => {
+                    client.send(request).await.map_err(Self::map_error)
+                }
                 HttpClientBackend::Routed(pool) => pool
                     .send(request)
                     .await

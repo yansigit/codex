@@ -198,6 +198,9 @@ pub enum TransportEvent {
 pub enum ConnectionOrigin {
     Stdio,
     InProcess,
+    /// Assigned only by the protected local control-socket acceptor. TCP
+    /// WebSockets, including loopback, retain the WebSocket origin.
+    LocalSocket,
     WebSocket,
     RemoteControl,
 }

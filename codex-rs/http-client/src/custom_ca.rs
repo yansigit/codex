@@ -182,6 +182,38 @@ pub fn build_reqwest_client_with_custom_ca(
     build_reqwest_client_with_env(&ProcessEnv, builder)
 }
 
+/// Uses the same environment selection and PEM normalization as ordinary HTTP.
+/// Every configured certificate must register; malformed bundles never fall
+/// back to another root store or TLS backend.
+pub(crate) fn browser_chat_cert_store() -> Result<wreq::tls::trust::CertStore, crate::HttpError> {
+    browser_chat_cert_store_with_env(&ProcessEnv)
+}
+
+fn browser_chat_cert_store_with_env(
+    env: &dyn EnvSource,
+) -> Result<wreq::tls::trust::CertStore, crate::HttpError> {
+    let mut store = wreq::tls::trust::CertStore::builder();
+    let native = rustls_native_certs::load_native_certs();
+    let custom = env
+        .configured_ca_bundle()
+        .map(|bundle| bundle.parse_certificates())
+        .transpose()
+        .map_err(|_| crate::HttpError::Build("invalid Chat custom CA configuration".into()))?
+        .unwrap_or_default();
+    if native.certs.is_empty() && custom.is_empty() {
+        return Err(crate::HttpError::Build(
+            "Chat TLS has no trusted root certificates".into(),
+        ));
+    }
+    // add_der_cert, unlike the plural API, does not silently filter invalid DER.
+    for cert in native.certs.iter().chain(&custom) {
+        store = store.add_der_cert(cert.as_ref());
+    }
+    store
+        .build()
+        .map_err(|_| crate::HttpError::Build("Chat TLS certificate registration failed".into()))
+}
+
 /// Builds a rustls client config when a Codex custom CA bundle is configured.
 ///
 /// This is the websocket-facing sibling of [`build_reqwest_client_with_custom_ca`]. When
@@ -727,6 +759,42 @@ mod tests {
     use super::maybe_build_rustls_client_config_with_env;
 
     const TEST_CERT: &str = include_str!("../tests/fixtures/test-ca.pem");
+
+    #[test]
+    fn browser_ca_selection_rejects_invalid_primary_instead_of_falling_back() {
+        let temp = TempDir::new().unwrap();
+        let valid = write_cert_file(&temp, "valid.pem", TEST_CERT);
+        let invalid = write_cert_file(&temp, "invalid.pem", "not a certificate");
+        let env = map_env(&[
+            (CODEX_CA_CERT_ENV, invalid.to_str().unwrap()),
+            (SSL_CERT_FILE_ENV, valid.to_str().unwrap()),
+        ]);
+        let error = super::browser_chat_cert_store_with_env(&env).err().unwrap();
+        assert!(error.to_string().contains("custom CA configuration"));
+        assert!(!error.to_string().contains(temp.path().to_str().unwrap()));
+        let env = map_env(&[
+            (CODEX_CA_CERT_ENV, ""),
+            (SSL_CERT_FILE_ENV, valid.to_str().unwrap()),
+        ]);
+        assert!(super::browser_chat_cert_store_with_env(&env).is_ok());
+    }
+
+    #[test]
+    fn browser_ca_supports_normalized_trusted_certificates() {
+        let temp = TempDir::new().unwrap();
+        let cert = write_cert_file(
+            &temp,
+            "trusted.pem",
+            include_str!("../tests/fixtures/test-ca-trusted.pem"),
+        );
+        assert!(
+            super::browser_chat_cert_store_with_env(&map_env(&[(
+                CODEX_CA_CERT_ENV,
+                cert.to_str().unwrap()
+            )]))
+            .is_ok()
+        );
+    }
 
     struct MapEnv {
         values: HashMap<String, String>,

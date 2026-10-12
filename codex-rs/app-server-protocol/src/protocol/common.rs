@@ -511,6 +511,90 @@ client_request_definitions! {
         response: v2::ServerDiagnosticsResponse,
     },
 
+    #[experimental("chat/status/read")]
+    ChatStatusRead => "chat/status/read" {
+        params: v2::ChatStatusReadParams,
+        serialization: None,
+        response: v2::ChatStatusReadResponse,
+    },
+
+    #[experimental("chat/model/list")]
+    ChatModelList => "chat/model/list" {
+        params: v2::ChatModelListParams,
+        serialization: None,
+        response: v2::ChatModelListResponse,
+    },
+
+    #[experimental("chat/conversation/list")]
+    ChatConversationList => "chat/conversation/list" {
+        params: v2::ChatConversationListParams,
+        serialization: None,
+        response: v2::ChatConversationListResponse,
+    },
+
+    #[experimental("chat/conversation/read")]
+    ChatConversationRead => "chat/conversation/read" {
+        params: v2::ChatConversationReadParams,
+        serialization: None,
+        response: v2::ChatConversationReadResponse,
+    },
+
+    #[experimental("chat/attachment/upload")]
+    ChatAttachmentUpload => "chat/attachment/upload" {
+        params: v2::ChatAttachmentUploadParams,
+        serialization: None,
+        response: v2::ChatAttachmentUploadResponse,
+    },
+
+    #[experimental("chat/attachment/cancel")]
+    ChatAttachmentCancel => "chat/attachment/cancel" {
+        params: v2::ChatAttachmentCancelParams,
+        serialization: None,
+        response: v2::ChatAttachmentCancelResponse,
+    },
+
+    #[experimental("chat/turn/start")]
+    ChatTurnStart => "chat/turn/start" {
+        params: v2::ChatTurnStartParams,
+        serialization: None,
+        response: v2::ChatTurnStartResponse,
+    },
+
+    #[experimental("chat/turn/cancel")]
+    ChatTurnCancel => "chat/turn/cancel" {
+        params: v2::ChatTurnCancelParams,
+        serialization: None,
+        response: v2::ChatTurnCancelResponse,
+    },
+
+    #[experimental("chat/draft/list")]
+    ChatDraftList => "chat/draft/list" {
+        params: v2::ChatDraftListParams,
+        serialization: None,
+        response: v2::ChatDraftListResponse,
+    },
+
+    #[experimental("chat/draft/read")]
+    ChatDraftRead => "chat/draft/read" {
+        params: v2::ChatDraftReadParams,
+        serialization: None,
+        response: v2::ChatDraftReadResponse,
+    },
+
+    #[experimental("chat/draft/write")]
+    ChatDraftWrite => "chat/draft/write" {
+        params: v2::ChatDraftWriteParams,
+        serialization: None,
+        response: v2::ChatDraftWriteResponse,
+    },
+
+    #[experimental("chat/draft/delete")]
+    ChatDraftDelete => "chat/draft/delete" {
+        params: v2::ChatDraftDeleteParams,
+        serialization: None,
+        response: v2::ChatDraftDeleteResponse,
+    },
+
     #[experimental("userVerification/status")]
     UserVerificationStatus => "userVerification/status" {
         params: v2::UserVerificationStatusParams,
@@ -1963,6 +2047,16 @@ pub struct FuzzyFileSearchSessionCompletedNotification {
 }
 
 server_notification_definitions! {
+    #[experimental("chat/availability/changed")]
+    ChatAvailability => "chat/availability/changed" (v2::ChatAvailabilityNotification),
+    #[experimental("chat/message/updated")]
+    ChatMessage => "chat/message/updated" (v2::ChatMessageNotification),
+    #[experimental("chat/attachment/progress")]
+    ChatAttachment => "chat/attachment/progress" (v2::ChatAttachmentNotification),
+    #[experimental("chat/conversation/updated")]
+    ChatConversation => "chat/conversation/updated" (v2::ChatConversationNotification),
+    #[experimental("chat/turn/completed")]
+    ChatTurnCompleted => "chat/turn/completed" (v2::ChatTurnCompletedNotification),
     /// NEW NOTIFICATIONS
     Error => "error" (v2::ErrorNotification),
     ThreadStarted => "thread/started" (v2::ThreadStartedNotification),

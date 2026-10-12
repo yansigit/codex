@@ -26,6 +26,14 @@ tokio = { workspace = true, features = ["macros", "rt", "time", "sync"] }
 tracing = { workspace = true }
 tracing-opentelemetry = { workspace = true }
 zstd = { workspace = true }
+wreq = { version = "=6.0.0-rc.29", features = ["stream", "gzip", "brotli", "zstd", "deflate", "socks", "prefix-symbols"] }
+wreq-util = "=3.0.0-rc.14"
+
+# btls prefixes its BoringSSL symbols but exports libssl/libcrypto search paths.
+# Bundle OpenSSL on Linux so native-tls cannot accidentally link those archives.
+# macOS and Windows native-tls use the platform TLS frameworks instead.
+[target.'cfg(target_os = "linux")'.dependencies]
+native-tls = { version = "0.2", features = ["vendored"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 system-configuration = { workspace = true }

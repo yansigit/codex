@@ -139,7 +139,12 @@ pub(crate) fn without_notification_media(notification: ServerNotification) -> Se
         | ServerNotification::AccountLoginCompleted(_)
         | ServerNotification::GatewayOAuthChanged(_)
         | ServerNotification::ProviderPoolChanged(_)
-        | ServerNotification::ThreadProviderAccountChanged(_) => notification,
+        | ServerNotification::ThreadProviderAccountChanged(_)
+        | ServerNotification::ChatAvailability(_)
+        | ServerNotification::ChatMessage(_)
+        | ServerNotification::ChatAttachment(_)
+        | ServerNotification::ChatConversation(_)
+        | ServerNotification::ChatTurnCompleted(_) => notification,
     }
 }
 

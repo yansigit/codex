@@ -68,6 +68,7 @@ const SUPPORTED_EXPERIMENTAL_FEATURE_ENABLEMENT: &[&str] = &[
     "api_key_model_discovery",
     "auth_elicitation",
     BACKGROUND_PAGINATED_ROLLOUT_MIGRATION_FEATURE,
+    "chatgpt_chat",
     "codex_apps_mcp_2026_07_28",
     "mcp_2026_07_28",
     "memories",
@@ -217,6 +218,7 @@ impl ConfigRequestProcessor {
     }
 
     pub(crate) async fn handle_config_mutation(&self) {
+        self.config_manager.refresh_chat_feature().await;
         self.thread_manager.plugins_manager().clear_cache();
         self.thread_manager.skills_service().clear_cache();
     }
@@ -365,6 +367,7 @@ pub(super) async fn reload_user_config(
 }
 
 async fn reload_user_config_inner(config_manager: &ConfigManager, thread_manager: &ThreadManager) {
+    config_manager.refresh_chat_feature().await;
     if let Err(err) = config_manager.load_config_layers(/*cwd*/ None).await {
         tracing::warn!("failed to rebuild user config for runtime refresh: {err}");
         for thread_id in thread_manager.list_thread_ids().await {

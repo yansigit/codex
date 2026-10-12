@@ -68,6 +68,7 @@ impl App {
     ) {
         match event {
             AppServerEvent::Lagged { skipped } => {
+                self.native_chat.disconnected();
                 tracing::warn!(
                     skipped,
                     "app-server event consumer lagged; dropping ignored events"
@@ -130,6 +131,23 @@ impl App {
         app_server_client: &AppServerSession,
         notification: ServerNotification,
     ) {
+        if self.native_chat.notification(
+            &notification,
+            app_server_client,
+            &self.chat_widget.frame_requester(),
+        ) {
+            return;
+        }
+        if self.native_chat.active
+            && matches!(
+                &notification,
+                ServerNotification::AgentMessageDelta(_)
+                    | ServerNotification::TurnCompleted(_)
+                    | ServerNotification::ItemCompleted(_)
+            )
+        {
+            self.native_chat.codex_unread = true;
+        }
         // A picker can leave an old runtime's close notification queued while the same thread
         // is resumed. Thread IDs survive reloads, so confirm that the displayed thread is still
         // unloaded before routing a close that would exit the TUI or switch away from it.
@@ -492,9 +510,7 @@ impl App {
                 return;
             }
             ServerNotificationThreadTarget::AppScoped => {
-                tracing::debug!(
-                    "ignoring app-scoped MCP startup notification without a TUI app-level target"
-                );
+                tracing::debug!("ignoring app-scoped notification without a TUI app-level target");
                 return;
             }
             ServerNotificationThreadTarget::Global => {}

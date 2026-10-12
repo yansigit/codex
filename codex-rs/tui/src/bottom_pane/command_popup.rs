@@ -50,6 +50,7 @@ pub(crate) struct CommandPopupFlags {
     pub(crate) daybreak_command_description: Option<&'static str>,
     pub(crate) goal_command_enabled: bool,
     pub(crate) voice_command_enabled: bool,
+    pub(crate) native_chat_enabled: bool,
     pub(crate) worktrees_enabled: bool,
     pub(crate) windows_degraded_sandbox_active: bool,
     pub(crate) side_conversation_active: bool,
@@ -66,6 +67,7 @@ impl From<CommandPopupFlags> for BuiltinCommandFlags {
             daybreak_command_description: value.daybreak_command_description,
             goal_command_enabled: value.goal_command_enabled,
             voice_command_enabled: value.voice_command_enabled,
+            native_chat_enabled: value.native_chat_enabled,
             worktrees_enabled: value.worktrees_enabled,
             allow_elevate_sandbox: value.windows_degraded_sandbox_active,
             side_conversation_active: value.side_conversation_active,
@@ -551,6 +553,7 @@ mod tests {
         let mut popup = CommandPopup::new(
             CommandPopupFlags {
                 voice_command_enabled: true,
+                native_chat_enabled: false,
                 ..CommandPopupFlags::default()
             },
             Vec::new(),
@@ -676,6 +679,7 @@ mod tests {
                 daybreak_command_description: None,
                 goal_command_enabled: false,
                 voice_command_enabled: false,
+                native_chat_enabled: false,
                 worktrees_enabled: true,
                 windows_degraded_sandbox_active: false,
                 side_conversation_active: false,

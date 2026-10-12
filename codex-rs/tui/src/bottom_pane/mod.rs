@@ -205,6 +205,7 @@ pub(crate) use title_setup::TerminalTitleSetupView;
 #[cfg(test)]
 pub(crate) use title_setup::preview_line_for_title_items;
 mod paste_burst;
+pub(crate) use paste_burst::PasteBurst;
 mod pending_input_preview;
 mod pending_thread_approvals;
 mod picker_option;
@@ -637,6 +638,10 @@ impl BottomPane {
     pub fn set_goal_command_enabled(&mut self, enabled: bool) {
         self.composer.set_goal_command_enabled(enabled);
         self.request_redraw();
+    }
+
+    pub fn set_native_chat_enabled(&mut self, enabled: bool) {
+        self.composer.set_native_chat_enabled(enabled);
     }
 
     pub fn set_voice_command_enabled(&mut self, enabled: bool) {

@@ -360,6 +360,8 @@ impl ChatWidget {
 
     pub(super) fn sync_goal_command_enabled(&mut self) {
         self.bottom_pane
+            .set_native_chat_enabled(self.config.features.enabled(Feature::ChatgptChat));
+        self.bottom_pane
             .set_goal_command_enabled(self.config.features.enabled(Feature::Goals));
     }
 

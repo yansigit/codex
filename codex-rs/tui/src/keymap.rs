@@ -95,6 +95,7 @@ pub(crate) struct RuntimeKeymap {
 
 #[derive(Clone, Debug)]
 pub(crate) struct AppKeymap {
+    pub(crate) switch_surface: Vec<KeyBinding>,
     /// Open the daemon-wide agent-session overview.
     pub(crate) open_agents: Vec<KeyBinding>,
     /// Open transcript overlay.
@@ -690,7 +691,24 @@ impl RuntimeKeymap {
             })
             .collect();
 
+        let switch_surface_defaults: Vec<_> = defaults
+            .app
+            .switch_surface
+            .iter()
+            .copied()
+            .filter(|binding| {
+                !configured_context_binding_is_used(keymap, *binding)
+                    && !chords.bindings.iter().any(|chord| {
+                        chord.chord.prefix.normalized_parts() == binding.normalized_parts()
+                    })
+            })
+            .collect();
         let app = AppKeymap {
+            switch_surface: resolve_bindings(
+                keymap.global.switch_surface.as_ref(),
+                &switch_surface_defaults,
+                "tui.keymap.global.switch_surface",
+            )?,
             open_agents: resolve_bindings(
                 keymap.global.open_agents.as_ref(),
                 &defaults.app.open_agents,
@@ -1467,6 +1485,10 @@ impl RuntimeKeymap {
                 keymap.global.toggle_side_conversation.as_ref(),
                 app.toggle_side_conversation.as_slice(),
             ),
+            (
+                keymap.global.switch_surface.as_ref(),
+                app.switch_surface.as_slice(),
+            ),
             (keymap.list.move_up.as_ref(), list_move_up.as_slice()),
             (keymap.list.move_down.as_ref(), list_move_down.as_slice()),
             (keymap.list.accept.as_ref(), list_accept.as_slice()),
@@ -1654,6 +1676,7 @@ impl RuntimeKeymap {
     fn built_in_defaults() -> Self {
         Self {
             app: AppKeymap {
+                switch_surface: default_bindings![plain(KeyCode::F(6))],
                 open_agents: default_bindings![],
                 open_transcript: default_bindings![ctrl(KeyCode::Char('t'))],
                 find_transcript: default_bindings![plain(KeyCode::F(3))],
@@ -2031,6 +2054,7 @@ impl RuntimeKeymap {
             ("toggle_fast_mode", self.app.toggle_fast_mode.as_slice()),
             ("toggle_raw_output", self.app.toggle_raw_output.as_slice()),
             ("toggle_side_conversation", side_toggle_bindings.as_slice()),
+            ("switch_surface", self.app.switch_surface.as_slice()),
             ("chat.toggle_voice", self.chat.toggle_voice.as_slice()),
             (
                 "chat.toggle_voice_mute",
@@ -2137,6 +2161,7 @@ impl RuntimeKeymap {
                 ("toggle_fast_mode", self.app.toggle_fast_mode.as_slice()),
                 ("toggle_raw_output", self.app.toggle_raw_output.as_slice()),
                 ("toggle_side_conversation", side_toggle_bindings.as_slice()),
+                ("switch_surface", self.app.switch_surface.as_slice()),
             ],
             approval_overlay_bindings,
             [(
@@ -2224,6 +2249,7 @@ impl RuntimeKeymap {
                 ("toggle_fast_mode", self.app.toggle_fast_mode.as_slice()),
                 ("toggle_raw_output", self.app.toggle_raw_output.as_slice()),
                 ("toggle_side_conversation", side_toggle_bindings.as_slice()),
+                ("switch_surface", self.app.switch_surface.as_slice()),
                 (
                     "composer.history_search_previous",
                     self.composer.history_search_previous.as_slice(),
@@ -4096,5 +4122,53 @@ mod tests {
         RuntimeKeymap::defaults()
             .validate_conflicts()
             .expect("default keymap should be conflict free");
+    }
+}
+
+#[cfg(test)]
+mod native_surface_tests {
+    use super::*;
+
+    #[test]
+    fn surface_switch_defaults_to_f6_and_yields_to_existing_remaps() {
+        let mut config = TuiKeymap::default();
+        assert_eq!(
+            RuntimeKeymap::from_config(&config)
+                .unwrap()
+                .app
+                .switch_surface,
+            vec![key_hint::plain(KeyCode::F(6))]
+        );
+        config.global.open_transcript = Some(KeybindingsSpec::One(
+            codex_config::types::KeybindingSpec("f6".into()),
+        ));
+        assert!(
+            RuntimeKeymap::from_config(&config)
+                .unwrap()
+                .app
+                .switch_surface
+                .is_empty()
+        );
+        config.global.switch_surface = Some(KeybindingsSpec::One(
+            codex_config::types::KeybindingSpec("f12".into()),
+        ));
+        assert_eq!(
+            RuntimeKeymap::from_config(&config)
+                .unwrap()
+                .app
+                .switch_surface,
+            vec![key_hint::plain(KeyCode::F(12))]
+        );
+    }
+
+    #[test]
+    fn explicit_surface_switch_conflicts_are_rejected() {
+        let mut config = TuiKeymap::default();
+        config.global.switch_surface = Some(KeybindingsSpec::One(
+            codex_config::types::KeybindingSpec("ctrl-l".into()),
+        ));
+        let error = RuntimeKeymap::from_config(&config).unwrap_err();
+        assert!(error.contains("switch_surface"));
+        assert!(error.contains("clear_terminal"));
     }
 }

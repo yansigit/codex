@@ -801,6 +801,27 @@ impl OutgoingMessageSender {
         }
     }
 
+    /// Content-bearing Chat events are targeted to trusted local subscribers
+    /// and rechecked after queue backpressure, never broadcast to network peers.
+    pub(crate) async fn send_chat_notification_checked(
+        &self,
+        connection_id: ConnectionId,
+        notification: ServerNotification,
+        check: impl FnOnce() -> bool,
+    ) {
+        let Ok(permit) = self.sender.reserve().await else {
+            return;
+        };
+        if !check() {
+            return;
+        }
+        permit.send(OutgoingEnvelope::ToConnection {
+            connection_id,
+            message: timestamped_server_notification(notification),
+            write_complete_tx: None,
+        });
+    }
+
     pub(crate) async fn send_server_notification_to_connection_and_wait(
         &self,
         connection_id: ConnectionId,
