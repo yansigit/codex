@@ -2597,7 +2597,6 @@ dependencies = [
  "rcgen",
  "regex",
  "regex-automata",
- "reqwest 0.12.28",
  "rustls",
  "serde",
  "serde_json",

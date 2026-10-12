@@ -41,7 +41,6 @@ libc = { workspace = true }
 [dev-dependencies]
 codex-utils-rustls-provider = { workspace = true }
 rcgen = { workspace = true }
-reqwest = { workspace = true }
 rustls = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
 pretty_assertions = { workspace = true }

@@ -2,6 +2,7 @@ use super::*;
 use crate::attachment::AttachmentStager;
 use crate::upload::UploadStage;
 use base64::Engine;
+use codex_http_client::HttpClientTlsConfig;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 use std::io::Read;
@@ -17,7 +18,7 @@ async fn native_upload_uses_isolated_tls_storage_and_requires_processing_complet
     for (status, completed) in [(201, true), (307, true), (201, false)] {
         codex_utils_rustls_provider::ensure_rustls_crypto_provider();
         let certified = rcgen::generate_simple_self_signed(vec!["localhost".into()]).unwrap();
-        let roots = certified.cert.der().to_vec();
+        let roots = certified.cert.pem();
         let tls = Arc::new(
             rustls::ServerConfig::builder()
                 .with_no_client_auth()
@@ -81,15 +82,16 @@ async fn native_upload_uses_isolated_tls_storage_and_requires_processing_complet
             .request(Method::GET, "models", "models")
             .await
             .unwrap();
-        probe.session.lock().unwrap().as_mut().unwrap().storage =
-            HttpClient::new_without_request_logging(
-                reqwest::Client::builder()
-                    .no_proxy()
-                    .redirect(reqwest::redirect::Policy::none())
-                    .add_root_certificate(reqwest::Certificate::from_der(&roots).unwrap())
-                    .build()
+        probe.session.lock().unwrap().as_mut().unwrap().storage = HttpClientBuilder::new()
+            .without_request_logging()
+            .without_redirects()
+            .without_automatic_retries()
+            .build_direct_with_tls(
+                HttpClientTlsConfig::default()
+                    .with_root_certificate_pem(roots.as_bytes())
                     .unwrap(),
-            );
+            )
+            .unwrap();
         Mock::given(method("POST"))
             .and(path("/backend-api/files"))
             .respond_with(move |request: &wiremock::Request| {

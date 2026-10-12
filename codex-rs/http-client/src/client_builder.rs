@@ -19,6 +19,7 @@ use crate::ClientRouteClass;
 use crate::HttpClient;
 use crate::HttpClientFactory;
 use crate::HttpClientTlsConfig;
+use crate::OutboundProxyPolicy;
 use crate::OutboundProxyRoute;
 use crate::chatgpt_cloudflare_cookies::ChatGptCookieStore;
 use crate::client::HttpClientBackend;
@@ -258,6 +259,24 @@ impl HttpClientBuilder {
     /// [`HttpClientFactory::build_client`].
     pub fn build_direct(self) -> Result<HttpClient, BuildCustomCaTransportError> {
         self.build_with_proxy_routing(ProxyRouting::Direct)
+    }
+
+    /// Builds a direct client with explicit TLS settings, for exceptional uses
+    /// such as a hermetic local TLS fixture. The proxy-bypass restrictions in
+    /// [`Self::build_direct`] apply; product traffic should use [`Self::build_with_tls`].
+    pub fn build_direct_with_tls(
+        mut self,
+        tls: HttpClientTlsConfig,
+    ) -> Result<HttpClient, BuildRouteAwareHttpClientError> {
+        self.tls = tls;
+        let inner = self.build_for_resolved_route(
+            &HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault),
+            ClientRouteClass::Other,
+            &OutboundProxyRoute::Direct,
+        )?;
+        Ok(HttpClient {
+            backend: HttpClientBackend::Direct(inner),
+        })
     }
 
     /// Builds a transport-default client while preserving the legacy custom-CA fallback.

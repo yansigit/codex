@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 6,
   "recorded_at_utc": "2026-10-12T10:55:14.516434+00:00",
   "transport_gate_passed": true,
   "integrated_release_gate_passed": true,
@@ -120,7 +120,8 @@
     "native-msvc-toolchain-adoption-2026-10-12.json": "39d87ad51211881f1f6256a44075e159b74a8c3fff61f5d530bd6ee9587a4662",
     "native-msvc-sdk-path-research-2026-10-12.json": "9542ac3250845eeb76d88554c58140b15657139ef04c08c38e277e0b1353e60a",
     "native-tui-lifecycle-validation-2026-10-12.json": "e6583c51786dd498fa0005ac1f7dc1ce68775cd3ed03aa259365903aa331318c",
-    "native-release-validation-2026-10-12.json": "c45952025b3ed92f6e60e89a62f09278acf5084ddcc15af29ad49d54d75f3156"
+    "native-release-validation-2026-10-12.json": "c45952025b3ed92f6e60e89a62f09278acf5084ddcc15af29ad49d54d75f3156",
+    "native-publish-validation-2026-10-12.json": "d3a96a54f78ab591d62db17e1f50c72b45042eaa8605a8061c70dc54409a69b2"
   },
   "interpretation": [
     "Scenario assessments combine versioned incremental runs, not a single all-green final invocation. Original failures remain in their reports.",
@@ -132,7 +133,7 @@
   "remaining": [],
   "candidate_manifest": "../research/msvc-toolchain-candidate/manifest.json",
   "deterministic_validation": "native-tui-lifecycle-validation-2026-10-12.json",
-  "updated_at_utc": "2026-10-12T23:03:43.050004+00:00",
+  "updated_at_utc": "2026-10-12T23:21:29.349532+00:00",
   "platform_validation": {
     "candidate_production_toolchain_changed": true,
     "final_regressions": "native-msvc-final-platform-regressions-2026-10-12.json",
@@ -140,5 +141,6 @@
     "adoption": "native-msvc-toolchain-adoption-2026-10-12.json",
     "status": "All nine transport targets, Linux GNU/musl tests, MSVC static CRT import audits, and full Linux CLI checks passed. The tested toolchain was adopted and final application checks passed."
   },
-  "final_validation": "native-release-validation-2026-10-12.json"
+  "final_validation": "native-release-validation-2026-10-12.json",
+  "publication_validation": "native-publish-validation-2026-10-12.json"
 }
