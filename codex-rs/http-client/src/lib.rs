@@ -17,6 +17,8 @@ mod route_aware_redirect;
 mod tls_backend_fallback;
 mod transport;
 
+pub use crate::browser_chat::CHAT_BROWSER_PROFILE;
+pub use crate::browser_chat::CHAT_BROWSER_TRANSPORT;
 pub use crate::chatgpt_cloudflare_cookies::with_chatgpt_cloudflare_cookie_store;
 pub use crate::chatgpt_hosts::is_allowed_chatgpt_host;
 pub use crate::client::HttpClient;
@@ -76,3 +78,4 @@ mod windows_tls;
 
 #[cfg(windows)]
 pub use crate::windows_tls::build_windows_platform_tls_config;
+mod browser_chat;

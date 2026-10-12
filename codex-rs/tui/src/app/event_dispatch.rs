@@ -154,6 +154,7 @@ impl App {
             event => (event, None),
         };
         match event {
+            AppEvent::SwitchSurface { chat } => self.switch_native_surface(chat, tui, app_server),
             AppEvent::OpenDaemonMenu => self.open_daemon_menu(),
             AppEvent::ConfirmDaemonUpdate(source) => self.confirm_daemon_update(source),
             AppEvent::RunDaemonUpdate(source) => {

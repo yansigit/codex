@@ -134,6 +134,8 @@ impl KeybindingsSpec {
 #[serde(deny_unknown_fields)]
 #[schemars(deny_unknown_fields)]
 pub struct TuiGlobalKeymap {
+    /// Switch between the independent Codex and Chat surfaces (default F6).
+    pub switch_surface: Option<KeybindingsSpec>,
     /// Prefix for persistent, context-aware shortcut menus.
     pub leader: Option<KeybindingsSpec>,
     /// Open the shared agent-session overview.

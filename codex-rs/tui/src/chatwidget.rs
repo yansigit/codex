@@ -1723,6 +1723,10 @@ impl ChatWidget {
     }
 
     /// Whether an agent message stream is active (not a plan stream).
+    pub(crate) fn frame_requester(&self) -> crate::tui::FrameRequester {
+        self.frame_requester.clone()
+    }
+
     pub(crate) fn has_active_agent_stream(&self) -> bool {
         self.stream_controller.is_some()
     }

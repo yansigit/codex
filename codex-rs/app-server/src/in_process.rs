@@ -115,6 +115,17 @@ fn server_notification_requires_delivery(notification: &ServerNotification) -> b
     matches!(
         notification,
         ServerNotification::TurnCompleted(_)
+            | ServerNotification::ChatTurnCompleted(_)
+            | ServerNotification::ChatConversation(_)
+            | ServerNotification::ChatAvailability(_)
+            | ServerNotification::ChatAttachment(
+                codex_app_server_protocol::ChatAttachmentNotification {
+                    upload: codex_app_server_protocol::ChatAttachmentSnapshot {
+                        finished: true,
+                        ..
+                    },
+                }
+            )
             | ServerNotification::ThreadQueueChanged(_)
             | ServerNotification::ThreadSettingsUpdated(_)
             | ServerNotification::ThreadAttachmentUpdated(_)

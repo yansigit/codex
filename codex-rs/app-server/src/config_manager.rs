@@ -45,6 +45,7 @@ pub(crate) struct ConfigManager {
     codex_home: PathBuf,
     cli_overrides: Arc<RwLock<Vec<(String, TomlValue)>>>,
     runtime_feature_enablement: Arc<RwLock<BTreeMap<String, bool>>>,
+    chat_service: Arc<RwLock<std::sync::Weak<crate::chat::Service>>>,
     loader_overrides: LoaderOverrides,
     strict_config: bool,
     cloud_config_bundle: Arc<RwLock<CloudConfigBundleLoader>>,
@@ -84,6 +85,7 @@ impl ConfigManager {
             codex_home,
             cli_overrides: Arc::new(RwLock::new(cli_overrides)),
             runtime_feature_enablement: Arc::new(RwLock::new(BTreeMap::new())),
+            chat_service: Arc::default(),
             loader_overrides,
             strict_config,
             cloud_config_bundle: Arc::new(RwLock::new(cloud_config_bundle)),
@@ -98,6 +100,40 @@ impl ConfigManager {
 
     pub(crate) fn codex_home(&self) -> &Path {
         self.codex_home.as_path()
+    }
+
+    pub(crate) fn bind_chat_service(&self, service: &Arc<crate::chat::Service>) {
+        *self
+            .chat_service
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Arc::downgrade(service);
+    }
+
+    fn sync_chat_feature(&self, enabled: bool) {
+        if let Some(service) = self
+            .chat_service
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .upgrade()
+        {
+            service.set_enabled(enabled);
+        }
+    }
+
+    /// Global Chat ownership does not follow project/thread feature overrides.
+    pub(crate) async fn refresh_chat_feature(&self) {
+        if self
+            .chat_service
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .strong_count()
+            == 0
+        {
+            return;
+        }
+        if self.load_non_project_config().await.is_err() {
+            self.sync_chat_feature(false);
+        }
     }
 
     pub(crate) fn with_embedded_network_policy(
@@ -223,6 +259,11 @@ impl ConfigManager {
         self.apply_network_policy(&mut config);
         self.apply_runtime_feature_enablement(&mut config);
         self.apply_arg0_paths(&mut config);
+        self.sync_chat_feature(
+            config
+                .features
+                .enabled(codex_features::Feature::ChatgptChat),
+        );
         Ok(config)
     }
 

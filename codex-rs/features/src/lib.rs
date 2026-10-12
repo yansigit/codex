@@ -92,6 +92,8 @@ impl Stage {
 /// Unique features toggled via configuration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Feature {
+    /// Native ChatGPT conversations on trusted local connections.
+    ChatgptChat,
     /// Preview consumer five-hour and weekly allowance history.
     AnalyticsPlanHistory,
     /// Discover model catalogs for OpenAI API-key authentication.
@@ -1003,6 +1005,16 @@ pub struct FeatureSpec {
 }
 
 pub const FEATURES: &[FeatureSpec] = &[
+    FeatureSpec {
+        id: Feature::ChatgptChat,
+        key: "chatgpt_chat",
+        stage: Stage::Experimental {
+            name: "ChatGPT tab",
+            menu_description: "Chat with ChatGPT in a separate full-screen tab, with history and attachments. Restart after enabling.",
+            announcement: "",
+        },
+        default_enabled: false,
+    },
     FeatureSpec {
         id: Feature::AnalyticsPlanHistory,
         key: "analytics_plan_history",

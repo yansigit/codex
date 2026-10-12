@@ -241,6 +241,7 @@ mod turn_tips;
 pub(crate) use new_session::has_launch_setting;
 mod clipboard;
 mod footer_selection;
+mod native_chat;
 mod native_history;
 mod owned_transcript;
 mod pending_interactive_replay;
@@ -538,6 +539,7 @@ pub(crate) struct App {
     pub(crate) session_telemetry: SessionTelemetry,
     pub(crate) app_event_tx: AppEventSender,
     pub(crate) chat_widget: ChatWidget,
+    native_chat: native_chat::NativeChat,
     workspace_command_runner: Option<WorkspaceCommandRunner>,
     /// Legacy bootstrap and server-setting inputs; local preferences live in `local_settings`.
     pub(crate) config: Config,
@@ -857,6 +859,9 @@ impl App {
         app_server: &mut AppServerSession,
         event: TuiEvent,
     ) -> Result<AppRunControl> {
+        if let Some(control) = self.handle_native_chat_event(tui, app_server, &event)? {
+            return Ok(control);
+        }
         tui.link_hover.observe(&event);
         self.refresh_link_hover(tui)?;
         self.invalidate_right_click_paste(&event);
@@ -1216,6 +1221,9 @@ impl App {
     }
 
     fn render_chat_widget_frame(&mut self, tui: &mut tui::Tui, screen_size: Size) -> Result<Rect> {
+        if self.native_chat.active {
+            return self.render_native_chat(tui, screen_size);
+        }
         self.sync_thread_title_progress();
         self.chat_widget
             .set_sparkle_terminal_focus(tui.is_terminal_focused());

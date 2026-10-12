@@ -788,6 +788,9 @@
             "browser_use_full_cdp_access": {
               "type": "boolean"
             },
+            "chatgpt_chat": {
+              "type": "boolean"
+            },
             "chronicle": {
               "type": "boolean"
             },
@@ -4762,6 +4765,7 @@
               "open_transcript": null,
               "queue": null,
               "submit": null,
+              "switch_surface": null,
               "toggle_fast_mode": null,
               "toggle_raw_output": null,
               "toggle_shortcuts": null,
@@ -5608,6 +5612,14 @@
           ],
           "description": "Submit the current composer draft."
         },
+        "switch_surface": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Switch between the independent Codex and Chat surfaces (default F6)."
+        },
         "toggle_fast_mode": {
           "allOf": [
             {
@@ -5769,6 +5781,7 @@
             "open_transcript": null,
             "queue": null,
             "submit": null,
+            "switch_surface": null,
             "toggle_fast_mode": null,
             "toggle_raw_output": null,
             "toggle_shortcuts": null,
@@ -7117,6 +7130,9 @@
           "type": "boolean"
         },
         "browser_use_full_cdp_access": {
+          "type": "boolean"
+        },
+        "chatgpt_chat": {
           "type": "boolean"
         },
         "chronicle": {

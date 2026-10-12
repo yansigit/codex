@@ -120,8 +120,13 @@ async fn websocket_upgrade_handler(
     websocket
         .on_upgrade(move |stream| async move {
             let (websocket_writer, websocket_reader) = stream.split();
-            run_websocket_connection(websocket_writer, websocket_reader, state.transport_event_tx)
-                .await;
+            run_websocket_connection(
+                websocket_writer,
+                websocket_reader,
+                state.transport_event_tx,
+                ConnectionOrigin::WebSocket,
+            )
+            .await;
         })
         .into_response()
 }
@@ -173,6 +178,7 @@ pub(crate) async fn run_websocket_connection<M, SinkError, StreamError>(
     websocket_writer: impl futures::sink::Sink<M, Error = SinkError> + Send + 'static,
     websocket_reader: impl futures::stream::Stream<Item = Result<M, StreamError>> + Send + 'static,
     transport_event_tx: mpsc::Sender<TransportEvent>,
+    origin: ConnectionOrigin,
 ) where
     M: AppServerWebSocketMessage + Send + 'static,
     SinkError: Send + 'static,
@@ -186,7 +192,7 @@ pub(crate) async fn run_websocket_connection<M, SinkError, StreamError>(
     if transport_event_tx
         .send(TransportEvent::ConnectionOpened {
             connection_id,
-            origin: ConnectionOrigin::WebSocket,
+            origin,
             auth: None,
             writer: writer_tx,
             disconnect_sender: Some(disconnect_token.clone()),
@@ -385,5 +391,48 @@ async fn run_websocket_inbound_loop<M, StreamError>(
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod origin_tests {
+    use super::*;
+    use pretty_assertions::assert_eq;
+    use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+
+    #[tokio::test]
+    async fn loopback_tcp_and_client_origin_headers_never_establish_local_socket_trust() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let (events, mut received) = mpsc::channel(8);
+        let router = Router::new()
+            .fallback(any(websocket_upgrade_handler))
+            .with_state(WebSocketListenerState {
+                transport_event_tx: events,
+                auth_policy: Arc::new(WebsocketAuthPolicy::default()),
+            });
+        let server = tokio::spawn(async move {
+            axum::serve(
+                listener,
+                router.into_make_service_with_connect_info::<SocketAddr>(),
+            )
+            .await
+            .unwrap();
+        });
+        let mut request = format!("ws://{address}/rpc").into_client_request().unwrap();
+        request
+            .headers_mut()
+            .insert("x-codex-connection-origin", "LocalSocket".parse().unwrap());
+        let (mut client, _) = tokio_tungstenite::connect_async(request).await.unwrap();
+        let event = tokio::time::timeout(std::time::Duration::from_secs(2), received.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        let TransportEvent::ConnectionOpened { origin, .. } = event else {
+            panic!("expected connection opened");
+        };
+        assert_eq!(origin, ConnectionOrigin::WebSocket);
+        client.close(None).await.unwrap();
+        server.abort();
     }
 }

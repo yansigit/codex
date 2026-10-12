@@ -51,9 +51,23 @@ const VOICE_TOGGLE: u32 = 1 << 17;
 const RAW_KEY_CAPTURE: u32 = 1 << 18;
 const VOICE_TOGGLE_BLOCKED: u32 = 1 << 19;
 
+const NATIVE_CHAT_SURFACE: u32 = 1 << 20;
+
 const TRANSCRIPT_BROWSING: u32 = 1 << 14;
 
 impl KeymapContextSet {
+    pub(crate) const fn native_chat(picker: bool) -> Self {
+        Self(
+            NATIVE_CHAT_SURFACE
+                | context_bit(KeymapContext::Global)
+                | if picker {
+                    context_bit(KeymapContext::List)
+                } else {
+                    context_bit(KeymapContext::Editor) | context_bit(KeymapContext::Composer)
+                },
+        )
+    }
+
     pub(crate) const fn new(context: KeymapContext) -> Self {
         Self(context_bit(context))
     }
@@ -140,6 +154,15 @@ impl KeymapContextSet {
 
     /// Whether this input path can dispatch the action, including focus-specific exclusions.
     pub(crate) fn contains_action(self, action: KeymapActionId) -> bool {
+        if self.0 & NATIVE_CHAT_SURFACE != 0 {
+            return self.contains(action.context)
+                && match action.context {
+                    KeymapContext::Global => action.action == "switch_surface",
+                    KeymapContext::Composer => action.action == "submit",
+                    KeymapContext::Editor | KeymapContext::List => true,
+                    _ => false,
+                };
+        }
         if action.context == KeymapContext::Chat && action.action == "toggle_voice" {
             return self.0 & VOICE_TOGGLE_BLOCKED == 0
                 && (self.0 & VOICE_TOGGLE != 0 || self.contains(KeymapContext::Chat));

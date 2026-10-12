@@ -99,6 +99,10 @@ mod app_server_tracing;
 mod attestation;
 mod auth_mode;
 mod bespoke_event_handling;
+/// Unstable native Chat service; RPC and terminal integration remain gated.
+#[doc(hidden)]
+pub mod chat;
+mod chat_rpc;
 mod code_mode_host;
 mod codex_home_metrics;
 mod command_exec;

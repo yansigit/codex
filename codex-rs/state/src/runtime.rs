@@ -40,6 +40,7 @@ use std::time::Instant;
 use tracing::warn;
 
 mod backfill;
+pub mod chat;
 mod external_agent_config_imports;
 mod goals;
 mod guardian_feedback;

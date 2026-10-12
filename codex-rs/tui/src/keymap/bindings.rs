@@ -282,6 +282,7 @@ define_runtime_action_bindings! {
         toggle_fast_mode,
         toggle_raw_output,
         toggle_side_conversation,
+        switch_surface,
     ],
     "chat" => Chat, chat, chat [
         toggle_voice,

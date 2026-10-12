@@ -440,6 +440,35 @@ async fn experimental_feature_enablement_set_allows_remote_control() -> Result<(
 }
 
 #[tokio::test]
+async fn experimental_feature_enablement_set_toggles_chat_without_persisting() -> Result<()> {
+    use codex_app_server_protocol::ChatAvailability;
+    use codex_app_server_protocol::ChatStatusReadResponse;
+
+    let codex_home = TempDir::new()?;
+    let mut mcp = TestAppServer::builder()
+        .with_codex_home(codex_home.path())
+        .without_auto_env()
+        .build_initialized_with_timeout(DEFAULT_TIMEOUT)
+        .await?;
+    for (enabled, expected) in [
+        (false, ChatAvailability::Disabled),
+        (true, ChatAvailability::LoginRequired),
+        (false, ChatAvailability::Disabled),
+    ] {
+        let enablement = BTreeMap::from([("chatgpt_chat".to_string(), enabled)]);
+        let actual = set_experimental_feature_enablement(&mut mcp, enablement.clone()).await?;
+        assert_eq!(actual.enablement, enablement);
+        let request = mcp
+            .send_request("chat/status/read", Some(json!({})))
+            .await?;
+        let status: ChatStatusReadResponse = read_response(&mut mcp, request).await?;
+        assert_eq!(status.availability, expected);
+    }
+    assert!(!codex_home.path().join("config.toml").exists());
+    Ok(())
+}
+
+#[tokio::test]
 async fn experimental_feature_enablement_set_empty_map_is_no_op() -> Result<()> {
     let codex_home = TempDir::new()?;
     let mut mcp = TestAppServer::builder()

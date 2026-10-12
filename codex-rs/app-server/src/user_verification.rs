@@ -64,7 +64,9 @@ impl Service {
         // parent process; in-process calls belong to the embedded application.
         if matches!(
             origin,
-            ConnectionOrigin::WebSocket | ConnectionOrigin::RemoteControl
+            ConnectionOrigin::WebSocket
+                | ConnectionOrigin::RemoteControl
+                | ConnectionOrigin::LocalSocket
         ) && !matches!(operation, Operation::Status)
         {
             return Err(unavailable());
@@ -270,3 +272,7 @@ mod activation_tests;
 #[cfg(test)]
 #[path = "user_verification_connection_tests.rs"]
 mod connection_tests;
+
+#[cfg(test)]
+#[path = "chat_rpc/dispatcher_tests.rs"]
+mod chat_rpc_dispatcher_tests;

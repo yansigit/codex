@@ -154,6 +154,10 @@ impl ChatWidget {
     fn keymap_action_filter(&self) -> keymap_setup::KeymapActionFilter {
         keymap_setup::KeymapActionFilter {
             fast_mode_enabled: self.fast_mode_enabled(),
+            native_chat_enabled: self
+                .config
+                .features
+                .enabled(codex_features::Feature::ChatgptChat),
         }
     }
 

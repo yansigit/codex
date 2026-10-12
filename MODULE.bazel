@@ -2,12 +2,12 @@ module(name = "codex")
 
 bazel_dep(name = "bazel_lib", version = "3.2.2")
 bazel_dep(name = "bazel_skylib", version = "1.9.0")
-bazel_dep(name = "platforms", version = "1.0.0")
+bazel_dep(name = "platforms", version = "1.1.0")
 
 # Expose the public protobuf rules already used transitively by rules_rs.
 bazel_dep(name = "protobuf", version = "34.0.bcr.1", repo_name = "com_google_protobuf")
-bazel_dep(name = "llvm", version = "0.8.11")
-bazel_dep(name = "windows_support", version = "0.2.0")
+bazel_dep(name = "llvm", version = "0.8.24")
+bazel_dep(name = "windows_support", version = "0.4.1")
 
 # Patch hermetic LLVM for Codex's custom libc++ and Windows gnullvm runtime
 # needs that have not landed upstream.
@@ -15,9 +15,8 @@ single_version_override(
     module_name = "llvm",
     patch_strip = 1,
     patches = [
-        "//patches:llvm_rusty_v8_custom_libcxx.patch",
-        "//patches:llvm_windows_arm64_powl.patch",
-        "//patches:llvm_windows_mingw_compat.patch",
+        "//patches:llvm-0.8.24.patch",
+        "//patches:llvm-0.8.24-relocatable-msvc-vfs.patch",
     ],
 )
 
@@ -27,10 +26,9 @@ single_version_override(
     module_name = "windows_support",
     patch_strip = 1,
     patches = [
-        "//patches:windows-support-remote-case-aliases.patch",
-        "//patches:windows-support-native-tools.patch",
+        "//patches:windows-support-0.4.1.patch",
     ],
-    version = "0.2.0",
+    version = "0.4.1",
 )
 
 # MSVC repository materialization fails closed until a user who has accepted
@@ -144,8 +142,8 @@ osx.libraries(names = [
 use_repo(osx, "macos_sdk")
 
 # Needed to disable xcode...
-bazel_dep(name = "apple_support", version = "2.1.0")
-bazel_dep(name = "rules_cc", version = "0.2.18")
+bazel_dep(name = "apple_support", version = "2.8.0")
+bazel_dep(name = "rules_cc", version = "0.2.25")
 
 # Windows voice jobs explicitly select the installed MSVC C toolchains.
 cc_configure = use_extension("@rules_cc//cc:extensions.bzl", "cc_configure_extension")
@@ -156,12 +154,21 @@ single_version_override(
     patch_strip = 1,
     patches = [
         "//patches:rules_cc_rusty_v8_custom_libcxx.patch",
+        "//patches:rules_cc-0.2.25-grep-includes.patch",
     ],
 )
 
 bazel_dep(name = "rules_platform", version = "0.1.0")
 bazel_dep(name = "rules_pkg", version = "1.0.1")
 bazel_dep(name = "aws-lc", version = "5.1.0.bcr.1")
+
+# clang-cl must select the same MSVC-style options as cl.exe.
+single_version_override(
+    module_name = "aws-lc",
+    patch_strip = 1,
+    patches = ["//patches:aws-lc-5.1.0-msvc-driver.patch"],
+)
+
 bazel_dep(name = "rules_rs", version = "0.0.96")
 bazel_dep(name = "rules_foreign_cc", version = "0.15.1")
 single_version_override(
@@ -175,7 +182,7 @@ single_version_override(
     version = "0.15.1",
 )
 
-bazel_dep(name = "rules_python", version = "1.7.0")
+bazel_dep(name = "rules_python", version = "1.8.0")
 
 voice_python = use_extension("@rules_python//python/extensions:python.bzl", "python")
 voice_python.defaults(python_version = "3.11")
@@ -220,6 +227,8 @@ rules_rust.patch(
         "//patches:rules_rust_process_wrapper_param_file.patch",
         "//patches:rules_rust_windows_execroot_separators.patch",
         "//patches:rules_rust_compiler_thp.patch",
+        "//patches:rules_rust_msvc_build_script_paths.patch",
+        "//patches:rules_rust_msvc_linker_paths.patch",
     ],
     strip = 1,
 )
@@ -366,7 +375,7 @@ crate.from_cargo(
     ],
 )
 
-bazel_dep(name = "zstd", version = "1.5.7")
+bazel_dep(name = "zstd", version = "1.5.7.bcr.1")
 
 crate.annotation(
     # Daemon tests repeatedly hash large CLI binaries, even in fastbuild mode.
@@ -392,6 +401,7 @@ crate.annotation(
     patch_args = ["-p1"],
     patches = [
         "//patches:ring_windows_msvc_include_dirs.patch",
+        "//patches:ring_msvc_declared_clang.patch",
     ],
 )
 crate.annotation(
@@ -469,11 +479,8 @@ crate.annotation(
     build_script_data = [
         "@openssl//:gen_dir",
     ],
-    # Build scripts compile in Bazel's exec configuration, so target-specific
-    # optional build deps are otherwise dropped for the musl release platforms.
-    build_script_deps = [
-        "@crates//:openssl-src-300.6.1+3.6.3",
-    ],
+    # Linux now enables vendored native-tls in Cargo too, so openssl-src is
+    # present in generated exec dependencies. Bazel uses its hermetic archive.
     build_script_env = {
         "OPENSSL_DIR": "$(execpath @openssl//:gen_dir)",
         "OPENSSL_NO_VENDOR": "1",
@@ -486,6 +493,49 @@ crate.annotation(
 
 inject_repo(crate, "openssl")
 
+crate.annotation(
+    build_script_data = ["//bazel/toolchains/browser_chat:toolchain.cmake"],
+    build_script_deps = ["@crates//:cc"],
+    build_script_env = {
+        "BINDGEN_EXTRA_CLANG_ARGS": "-Xclang -internal-isystem -Xclang $(location @llvm//:builtin_resource_dir)/include",
+        "CMAKE": "$${pwd}/$(CMAKE)",
+        "CMAKE_GENERATOR": "Ninja",
+        "CMAKE_TOOLCHAIN_FILE": "$(execpath @@//bazel/toolchains/browser_chat:toolchain.cmake)",
+        "CODEX_CHAT_BINDGEN_USE_CC": "1",
+        "CODEX_CHAT_CXX_RUNTIME_PROVIDED": "1",
+        "CODEX_CHAT_INSTALL_NAME_TOOL": "$(execpath @llvm//tools:llvm-install-name-tool)",
+        "CODEX_CHAT_MSVC_LIB": "$(execpath @llvm//tools:llvm-lib)",
+        "CODEX_CHAT_NINJA": "$${pwd}/$(NINJA)",
+        "LIBCLANG_PATH": "$(location @llvm-project//clang:libclang_interface_output)",
+        "NM": "$(execpath @llvm//tools:llvm-nm)",
+        "OBJCOPY": "$(execpath @llvm//tools:llvm-objcopy)",
+        "RANLIB": "$(execpath @llvm//tools:llvm-ranlib)",
+    },
+    build_script_toolchains = [
+        "@rules_foreign_cc//toolchains:current_cmake_toolchain",
+        "@rules_foreign_cc//toolchains:current_ninja_toolchain",
+    ],
+    build_script_tools = [
+        "@llvm-project//clang:libclang_interface_output",
+        "@llvm//:builtin_resource_dir",
+        "@llvm//tools:llvm-install-name-tool",
+        "@llvm//tools:llvm-lib",
+        "@llvm//tools:llvm-nm",
+        "@llvm//tools:llvm-objcopy",
+        "@llvm//tools:llvm-ranlib",
+        "@rules_foreign_cc//toolchains:current_cmake_toolchain",
+        "@rules_foreign_cc//toolchains:current_ninja_toolchain",
+    ],
+    crate = "btls-sys",
+    gen_build_script = "on",
+    patch_args = ["-p1"],
+    patches = [
+        "//patches:btls-sys_native_tools.patch",
+        "//patches:btls-sys_msvc_bindgen_driver.patch",
+        "//patches:btls-sys_msvc_compatibility_version.patch",
+    ],
+    deps = ["//bazel/toolchains/browser_chat:cxx_runtime"],
+)
 crate.annotation(
     crate = "runfiles",
     workspace_cargo_toml = "rust/runfiles/Cargo.toml",

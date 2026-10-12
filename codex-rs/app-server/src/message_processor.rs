@@ -112,8 +112,14 @@ const CONNECTION_RPC_DRAIN_TIMEOUT: Duration = Duration::from_secs(/*secs*/ 30);
 fn deserialize_client_request(request: JSONRPCRequest) -> Result<ClientRequest, JSONRPCErrorError> {
     reject_obsolete_request_fields(&request)?;
 
-    ClientRequest::try_from(request)
-        .map_err(|err| invalid_request(format!("Invalid request: {err}")))
+    let chat = request.method.starts_with("chat/");
+    ClientRequest::try_from(request).map_err(|err| {
+        if chat {
+            invalid_request("Invalid Chat request".to_owned())
+        } else {
+            invalid_request(format!("Invalid request: {err}"))
+        }
+    })
 }
 
 fn reject_obsolete_request_fields(request: &JSONRPCRequest) -> Result<(), JSONRPCErrorError> {
@@ -142,6 +148,8 @@ fn reject_removed_permission_profile(request: &JSONRPCRequest) -> Result<(), JSO
 
 pub(crate) struct MessageProcessor {
     pub(crate) turn_admission: TurnAdmission,
+    chat: Arc<crate::chat::Service>,
+    chat_rpc: Arc<crate::chat_rpc::ChatRpc>,
     user_verification: Arc<crate::user_verification::Service>,
     outgoing: Arc<OutgoingMessageSender>,
     models_refresh_worker: ModelsRefreshWorker,
@@ -299,6 +307,15 @@ impl MessageProcessor {
         gateway_login_control.require_explicit_login();
         let thread_state_manager = ThreadStateManager::new();
         outgoing.watch_user_verification_auth(Arc::clone(&auth_manager));
+        let chat = crate::chat::Service::new(
+            Arc::clone(&auth_manager),
+            state_db.clone(),
+            config
+                .features
+                .enabled(codex_features::Feature::ChatgptChat),
+        );
+        config_manager.bind_chat_service(&chat);
+        let chat_rpc = crate::chat_rpc::ChatRpc::new(Arc::clone(&chat), Arc::clone(&outgoing));
         // The thread store is intentionally process-scoped. Config reloads can
         // affect per-thread behavior, but they must not move newly started,
         // resumed, or forked threads to a different persistence backend/root.
@@ -584,6 +601,8 @@ impl MessageProcessor {
 
         Self {
             turn_admission,
+            chat,
+            chat_rpc,
             user_verification,
             outgoing,
             models_refresh_worker,
@@ -617,6 +636,8 @@ impl MessageProcessor {
     }
 
     pub(crate) fn clear_runtime_references(&self) {
+        self.chat_rpc.shutdown();
+        self.chat.shutdown();
         self.account_processor.clear_external_auth();
         self.apps_processor.shutdown();
         self.models_refresh_worker.shutdown();
@@ -656,7 +677,13 @@ impl MessageProcessor {
             Arc::clone(&self.outgoing),
             request_context.clone(),
             async {
-                let codex_request = deserialize_client_request(request);
+                let codex_request = if request.method.starts_with("chat/") {
+                    crate::chat_rpc::check_origin(session.origin)
+                        .map_err(crate::chat_rpc::rpc_error)
+                        .and_then(|()| deserialize_client_request(request))
+                } else {
+                    deserialize_client_request(request)
+                };
                 let result = match codex_request {
                     Ok(codex_request) => {
                         // Websocket callers finalize outbound readiness in lib.rs after mirroring
@@ -867,6 +894,7 @@ impl MessageProcessor {
         connection_id: ConnectionId,
         session_state: &ConnectionSessionState,
     ) {
+        self.chat_rpc.disconnect(connection_id);
         session_state.rpc_gate.close().await;
         self.account_processor
             .gateway_connection_closed(connection_id);
@@ -1037,7 +1065,7 @@ impl MessageProcessor {
                 // Keep queued requests small to avoid large stack temporaries during construction.
                 let result = originator
                     .scope(Box::pin(
-                        processor_for_request.handle_initialized_client_request(
+                        processor_for_request.route_initialized_client_request(
                             connection_request_id,
                             codex_request,
                             request_context,
@@ -1066,6 +1094,50 @@ impl MessageProcessor {
         Ok(())
     }
 
+    // Poll Chat outside the Codex handler: its debug stack frame includes
+    // temporaries for every agent RPC, even when the selected request is Chat.
+    async fn route_initialized_client_request(
+        self: Arc<Self>,
+        connection_request_id: ConnectionRequestId,
+        codex_request: ClientRequest,
+        request_context: RequestContext,
+        session: Arc<ConnectionSessionState>,
+        event_stream_ready: Option<McpEventStreamReady>,
+    ) -> Result<(), JSONRPCErrorError> {
+        match codex_request {
+            request @ (ClientRequest::ChatStatusRead { .. }
+            | ClientRequest::ChatModelList { .. }
+            | ClientRequest::ChatConversationList { .. }
+            | ClientRequest::ChatConversationRead { .. }
+            | ClientRequest::ChatAttachmentUpload { .. }
+            | ClientRequest::ChatAttachmentCancel { .. }
+            | ClientRequest::ChatTurnStart { .. }
+            | ClientRequest::ChatTurnCancel { .. }
+            | ClientRequest::ChatDraftList { .. }
+            | ClientRequest::ChatDraftRead { .. }
+            | ClientRequest::ChatDraftWrite { .. }
+            | ClientRequest::ChatDraftDelete { .. }) => {
+                Box::pin(self.chat_rpc.handle(
+                    request,
+                    connection_request_id,
+                    session,
+                    request_context,
+                ))
+                .await
+            }
+            request => {
+                Box::pin(self.handle_initialized_client_request(
+                    connection_request_id,
+                    request,
+                    request_context,
+                    session,
+                    event_stream_ready,
+                ))
+                .await
+            }
+        }
+    }
+
     async fn handle_initialized_client_request(
         self: Arc<Self>,
         connection_request_id: ConnectionRequestId,
@@ -1085,6 +1157,20 @@ impl MessageProcessor {
         let result: Result<Option<ClientResponsePayload>, JSONRPCErrorError> = match codex_request {
             ClientRequest::Initialize { .. } => {
                 panic!("Initialize should be handled before initialized request dispatch");
+            }
+            ClientRequest::ChatStatusRead { .. }
+            | ClientRequest::ChatModelList { .. }
+            | ClientRequest::ChatConversationList { .. }
+            | ClientRequest::ChatConversationRead { .. }
+            | ClientRequest::ChatAttachmentUpload { .. }
+            | ClientRequest::ChatAttachmentCancel { .. }
+            | ClientRequest::ChatTurnStart { .. }
+            | ClientRequest::ChatTurnCancel { .. }
+            | ClientRequest::ChatDraftList { .. }
+            | ClientRequest::ChatDraftRead { .. }
+            | ClientRequest::ChatDraftWrite { .. }
+            | ClientRequest::ChatDraftDelete { .. } => {
+                unreachable!("Chat requests use the separate dispatcher");
             }
             ClientRequest::UserVerificationCancel { params, .. } => {
                 self.outgoing

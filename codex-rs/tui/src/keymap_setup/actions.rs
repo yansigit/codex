@@ -66,11 +66,13 @@ const fn gated_action(
 #[derive(Clone, Copy, Debug)]
 enum KeymapActionFeature {
     FastMode,
+    NativeChat,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct KeymapActionFilter {
     pub(crate) fast_mode_enabled: bool,
+    pub(crate) native_chat_enabled: bool,
 }
 
 impl KeymapActionDescriptor {
@@ -78,6 +80,7 @@ impl KeymapActionDescriptor {
         match self.required_feature {
             None => true,
             Some(KeymapActionFeature::FastMode) => filter.fast_mode_enabled,
+            Some(KeymapActionFeature::NativeChat) => filter.native_chat_enabled,
         }
     }
 }
@@ -96,6 +99,7 @@ pub(super) const KEYMAP_ACTIONS: &[KeymapActionDescriptor] = &[
     action("global", "Global", "toggle_vim_mode", "Turn Vim composer mode on or off."),
     gated_action("global", "Global", "toggle_fast_mode", "Turn Fast mode on or off.", KeymapActionFeature::FastMode),
     action("global", "Global", "toggle_raw_output", "Toggle raw scrollback mode."),
+    gated_action("global", "Global", "switch_surface", "Switch between the independent Codex and Chat surfaces.", KeymapActionFeature::NativeChat),
     action("global", "Global", "toggle_side_conversation", "Switch between a side conversation and its parent."),
     action("global", "Global", "leader", "Set the prefix used by shared leader shortcuts."),
     action("chat", "Chat", "interrupt_turn", "Interrupt the active turn."),
@@ -284,6 +288,7 @@ pub(super) fn binding_slot<'a>(
         ("global", "toggle_vim_mode") => Some(&mut keymap.global.toggle_vim_mode),
         ("global", "toggle_fast_mode") => Some(&mut keymap.global.toggle_fast_mode),
         ("global", "toggle_raw_output") => Some(&mut keymap.global.toggle_raw_output),
+        ("global", "switch_surface") => Some(&mut keymap.global.switch_surface),
         ("global", "toggle_side_conversation") => Some(&mut keymap.global.toggle_side_conversation),
         ("chat", "interrupt_turn") => Some(&mut keymap.chat.interrupt_turn),
         ("chat", "decrease_reasoning_effort") => Some(&mut keymap.chat.decrease_reasoning_effort),
@@ -560,5 +565,23 @@ fn global_fallback_slot<'a>(
         "queue" => Some(&mut keymap.global.queue),
         "toggle_shortcuts" => Some(&mut keymap.global.toggle_shortcuts),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod native_chat_tests {
+    use super::*;
+
+    #[test]
+    fn surface_switch_help_requires_the_chat_development_flag() {
+        let action = KEYMAP_ACTIONS
+            .iter()
+            .find(|action| action.action == "switch_surface")
+            .unwrap();
+        assert!(!action.is_visible(KeymapActionFilter::default()));
+        assert!(action.is_visible(KeymapActionFilter {
+            native_chat_enabled: true,
+            ..Default::default()
+        }));
     }
 }

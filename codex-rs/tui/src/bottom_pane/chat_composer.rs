@@ -21,6 +21,10 @@
 //! The plain-text preset keeps command prefixes literal, including `!`, so Enter and Tab
 //! submit ordinary text without enabling shell mode.
 //!
+//! Native Chat uses its own `app::native_chat` controller and a separate `TextArea`.
+//! This Codex composer only offers `/chat` and `/codex` when the development flag
+//! is enabled; it never receives Chat drafts, temporary messages, or attachments.
+//!
 //! # Mention Menus
 //!
 //! By default, `@` lists plugins, filesystem entries, and skills. Skills are hidden when their
@@ -636,6 +640,7 @@ pub(crate) struct ChatComposer {
     mentions_v2_enabled: bool,
     goal_command_enabled: bool,
     voice_command_enabled: bool,
+    native_chat_enabled: bool,
     worktrees_enabled: bool,
     windows_degraded_sandbox_active: bool,
     side_conversation_active: bool,
@@ -809,6 +814,7 @@ impl ChatComposer {
             mentions_v2_enabled: false,
             goal_command_enabled: false,
             voice_command_enabled: false,
+            native_chat_enabled: false,
             worktrees_enabled: false,
             windows_degraded_sandbox_active: false,
             side_conversation_active: false,
@@ -1013,6 +1019,10 @@ impl ChatComposer {
 
     pub fn set_goal_command_enabled(&mut self, enabled: bool) {
         self.goal_command_enabled = enabled;
+    }
+
+    pub fn set_native_chat_enabled(&mut self, enabled: bool) {
+        self.native_chat_enabled = enabled;
     }
 
     pub fn set_voice_command_enabled(&mut self, enabled: bool) {

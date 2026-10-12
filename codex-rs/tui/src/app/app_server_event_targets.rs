@@ -46,6 +46,13 @@ pub(super) fn server_notification_thread_target(
     notification: &ServerNotification,
 ) -> ServerNotificationThreadTarget {
     let thread_id = match notification {
+        ServerNotification::ChatAvailability(_)
+        | ServerNotification::ChatMessage(_)
+        | ServerNotification::ChatAttachment(_)
+        | ServerNotification::ChatConversation(_)
+        | ServerNotification::ChatTurnCompleted(_) => {
+            return ServerNotificationThreadTarget::AppScoped;
+        }
         ServerNotification::Error(notification) => Some(notification.thread_id.as_str()),
         ServerNotification::ThreadStarted(notification) => Some(notification.thread.id.as_str()),
         ServerNotification::ThreadStatusChanged(notification) => {
@@ -286,6 +293,24 @@ mod tests {
             multi_agent_mode: Default::default(),
             personality: None,
         }
+    }
+
+    #[test]
+    fn chat_notifications_never_enter_codex_thread_or_global_history() {
+        let notification = ServerNotification::ChatConversation(
+            codex_app_server_protocol::ChatConversationNotification {
+                scope_id: "chat-scope".into(),
+                operation_id: "chat-operation".into(),
+                draft_id: "chat-draft".into(),
+                conversation_id: ThreadId::new().to_string(),
+                persistence: codex_app_server_protocol::ChatPersistence::Saved,
+                sequence: 1,
+            },
+        );
+        assert_eq!(
+            server_notification_thread_target(&notification),
+            ServerNotificationThreadTarget::AppScoped
+        );
     }
 
     #[test]
