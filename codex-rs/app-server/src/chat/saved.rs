@@ -304,7 +304,7 @@ impl SavedSession {
                 .await?;
             if let Some(outcome) = terminal_outcome(reconciled.outcome, None) {
                 store
-                    .finish_submission(
+                    .finish_submission_and_advance(
                         &lease,
                         outcome,
                         reconciled
@@ -312,6 +312,7 @@ impl SavedSession {
                             .iter()
                             .rev()
                             .find_map(|m| m.model.as_deref()),
+                        reconciled.snapshot.branch.current_node.as_deref(),
                     )
                     .await?;
             }
@@ -420,9 +421,20 @@ impl<'a> JournalSink<'a> {
         if persisted.is_ok() {
             let outcome = terminal_outcome(result.outcome, result.error)
                 .unwrap_or(ChatSubmissionOutcome::Failed);
+            let accepted_parent = result.client_message_id.to_string();
             if let Err(store_error) = self
                 .store
-                .finish_submission(&self.lease, outcome, result.resolved_model.as_deref())
+                .finish_submission_and_advance(
+                    &self.lease,
+                    outcome,
+                    result.resolved_model.as_deref(),
+                    Some(
+                        result
+                            .messages
+                            .last()
+                            .map_or(accepted_parent.as_str(), |message| message.id.as_str()),
+                    ),
+                )
                 .await
             {
                 error = Some(store_error.into());
