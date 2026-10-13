@@ -947,3 +947,174 @@ async fn crash_worker() {
     }
     std::process::exit(73);
 }
+
+#[tokio::test]
+async fn terminal_acceptance_advances_the_exact_saved_draft_and_retains_the_journal() {
+    for outcome in [
+        ChatSubmissionOutcome::Completed,
+        ChatSubmissionOutcome::Failed,
+    ] {
+        let db = TestDb::new().await;
+        let store = db.store();
+        let mut body = content("submitted saved input", None);
+        body.requested_model = Some("fixture-model".into());
+        let original = store.write_draft(Uuid::new_v4(), None, body).await.unwrap();
+        let (submission, lease) = store
+            .begin_submission(request(&original), Uuid::new_v4())
+            .await
+            .unwrap();
+        store.mark_transmitting(&lease).await.unwrap();
+        store
+            .record_acceptance(&lease, proof(&submission))
+            .await
+            .unwrap();
+        store
+            .finish_submission_and_advance(
+                &lease,
+                outcome,
+                Some("reported-model"),
+                Some("response-parent"),
+            )
+            .await
+            .unwrap();
+        let advanced = db
+            .other_process()
+            .await
+            .read_draft(original.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_ne!(advanced.revision, original.revision);
+        assert!(advanced.content.text.is_empty());
+        assert!(advanced.content.selections.is_empty());
+        assert_eq!(
+            advanced.content.conversation_id.as_deref(),
+            Some("created-conversation")
+        );
+        assert_eq!(
+            advanced.content.expected_parent_id.as_deref(),
+            Some("response-parent")
+        );
+        assert_eq!(
+            advanced.content.requested_model.as_deref(),
+            Some("fixture-model")
+        );
+        let recorded = store
+            .read_submission(submission.submission_id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(recorded.accepted && !recorded.active);
+        assert!(recorded.snapshot.draft == original.content);
+        assert_eq!(recorded.outcome, outcome);
+        db.close().await;
+    }
+}
+
+#[tokio::test]
+async fn draft_advancement_preserves_a_concurrent_revision_even_with_identical_text() {
+    let db = TestDb::new().await;
+    let store = db.store();
+    let original = draft(&store, None).await;
+    let (submission, lease) = store
+        .begin_submission(request(&original), Uuid::new_v4())
+        .await
+        .unwrap();
+    store.mark_transmitting(&lease).await.unwrap();
+    store
+        .record_acceptance(&lease, proof(&submission))
+        .await
+        .unwrap();
+    let mut edited = original.content.clone();
+    edited.requested_model = Some("next-model".into());
+    let newer = store
+        .write_draft(original.id, Some(original.revision), edited)
+        .await
+        .unwrap();
+    store
+        .finish_submission_and_advance(
+            &lease,
+            ChatSubmissionOutcome::Completed,
+            None,
+            Some("response-parent"),
+        )
+        .await
+        .unwrap();
+    let retained = store.read_draft(original.id).await.unwrap().unwrap();
+    assert_eq!(retained.revision, newer.revision);
+    assert!(retained.content == newer.content);
+    db.close().await;
+}
+
+#[tokio::test]
+async fn unknown_acceptance_keeps_the_draft_and_reservation_for_reconciliation() {
+    let db = TestDb::new().await;
+    let store = db.store();
+    let original = draft(&store, None).await;
+    let (submission, lease) = store
+        .begin_submission(request(&original), Uuid::new_v4())
+        .await
+        .unwrap();
+    store.mark_transmitting(&lease).await.unwrap();
+    store
+        .finish_submission_and_advance(
+            &lease,
+            ChatSubmissionOutcome::Failed,
+            None,
+            Some("unproven-parent"),
+        )
+        .await
+        .unwrap();
+    let retained = store.read_draft(original.id).await.unwrap().unwrap();
+    assert_eq!(retained.revision, original.revision);
+    assert!(retained.content == original.content);
+    assert!(
+        store
+            .read_submission(submission.submission_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .active
+    );
+    db.close().await;
+}
+
+#[tokio::test]
+async fn failed_draft_advancement_rolls_back_the_terminal_journal_checkpoint() {
+    let db = TestDb::new().await;
+    let store = db.store();
+    let original = draft(&store, None).await;
+    let (submission, lease) = store
+        .begin_submission(request(&original), Uuid::new_v4())
+        .await
+        .unwrap();
+    store.mark_transmitting(&lease).await.unwrap();
+    store
+        .record_acceptance(&lease, proof(&submission))
+        .await
+        .unwrap();
+    sqlx::query("CREATE TRIGGER reject_draft_advance BEFORE UPDATE ON chat_drafts BEGIN SELECT RAISE(ABORT, 'fixture rollback'); END")
+        .execute(db.pool.as_ref()).await.unwrap();
+    assert!(
+        store
+            .finish_submission_and_advance(
+                &lease,
+                ChatSubmissionOutcome::Completed,
+                None,
+                Some("response-parent")
+            )
+            .await
+            .is_err()
+    );
+    let retained = store.read_draft(original.id).await.unwrap().unwrap();
+    assert_eq!(retained.revision, original.revision);
+    assert!(retained.content == original.content);
+    let recorded = store
+        .read_submission(submission.submission_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(recorded.accepted && recorded.active);
+    assert_eq!(recorded.outcome, ChatSubmissionOutcome::InProgress);
+    db.close().await;
+}
