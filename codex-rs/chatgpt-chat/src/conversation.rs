@@ -116,13 +116,7 @@ impl ConversationSnapshot {
                 if !message_ids.insert(message_id) {
                     return Err(ChatError::ProtocolChanged);
                 }
-                let role = raw
-                    .pointer("/author/role")
-                    .and_then(Value::as_str)
-                    .ok_or(ChatError::ProtocolChanged)?;
-                let hidden =
-                    optional_bool(raw.pointer("/metadata/is_visually_hidden_from_conversation"))?;
-                if hidden || matches!(role, "system" | "developer") {
+                if !Message::is_visible(raw).map_err(|_| ChatError::ProtocolChanged)? {
                     None
                 } else {
                     let message = Message::parse(raw).map_err(|_| ChatError::ProtocolChanged)?;
