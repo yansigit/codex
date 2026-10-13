@@ -5,6 +5,7 @@ import io
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -287,6 +288,86 @@ class PublicationTest(unittest.TestCase):
                 with self.assertRaises(subprocess.CalledProcessError):
                     publisher.publish(dist, VERSION, COMMIT)
         self.assertEqual(api.call_count, 2)
+
+    def test_new_release_and_fresh_runner_retry_preserve_verified_assets(self):
+        dist = build_fixtures(self.root)
+        retry_dist = self.root / "retry-dist"
+        # Each GitHub job downloads the original unsealed platform artifacts.
+        shutil.copytree(dist, retry_dist)
+        remote = None
+        events = []
+
+        def api(endpoint, body=None, method=None):
+            nonlocal remote
+            if endpoint == f"commits/rust-v{VERSION}":
+                return {"sha": COMMIT}
+            if endpoint == f"releases/tags/rust-v{VERSION}":
+                return remote
+            if endpoint == "releases/generate-notes":
+                return {"body": "Generated notes"}
+            if endpoint == "releases" and body is not None:
+                self.assertTrue(body["draft"])
+                remote = {"id": 1, "assets": [], **body}
+                events.append("draft-created")
+                return remote
+            if endpoint == "releases/1" and method == "PATCH":
+                events.append("published")
+                remote.update(body)
+                return remote
+            if endpoint == "releases/1":
+                return remote
+            if endpoint == "releases/latest":
+                return None
+            self.fail(f"Unexpected GitHub request: {endpoint}")
+
+        def upload(command, **kwargs):
+            self.assertEqual(
+                command[:6],
+                [
+                    "gh",
+                    "release",
+                    "upload",
+                    f"rust-v{VERSION}",
+                    "--repo",
+                    publisher.REPOSITORY,
+                ],
+            )
+            self.assertTrue(remote["draft"])
+            for filename in command[6:]:
+                path = Path(filename)
+                remote["assets"].append(
+                    {
+                        "name": path.name,
+                        "digest": f"sha256:{release.sha256(path)}",
+                        "state": "uploaded",
+                    }
+                )
+            events.append("uploaded")
+            return subprocess.CompletedProcess(command, 0)
+
+        with (
+            patch.object(publisher, "api", side_effect=api),
+            patch.object(publisher.subprocess, "run", side_effect=upload) as uploads,
+        ):
+            publisher.publish(dist, VERSION, COMMIT)
+            expected_assets = {
+                f"codex-package-{target}.tar.gz" for target in release.RELEASE_TARGETS
+            } | {release.CHECKSUMS, release.PROVENANCE}
+            self.assertEqual(
+                {asset["name"] for asset in remote["assets"]}, expected_assets
+            )
+            self.assertEqual(events, ["draft-created", "uploaded", "published"])
+            self.assertFalse(remote["draft"])
+            self.assertEqual(remote["make_latest"], "true")
+            self.assertEqual(remote["target_commitish"], COMMIT)
+            original_assets = json.dumps(remote["assets"], sort_keys=True)
+
+            publisher.publish(retry_dist, VERSION, COMMIT)
+            uploads.assert_called_once()
+            self.assertEqual(events, ["draft-created", "uploaded", "published"])
+            self.assertEqual(
+                json.dumps(remote["assets"], sort_keys=True), original_assets
+            )
 
     def test_prerelease_and_older_stable_never_move_latest(self):
         for version, current, prerelease in (

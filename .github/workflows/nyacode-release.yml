@@ -149,11 +149,13 @@ jobs:
           build-mode: release
       - name: Test Windows terminal process handling
         if: runner.os == 'Windows'
-        shell: bash
+        # MSYS bash makes native descendants inherit disabled Ctrl-C handling.
+        # Use a native parent shell to exercise ordinary ConPTY signal behavior.
+        shell: pwsh
         working-directory: codex-rs
         env:
           TARGET: ${{ matrix.target }}
-        run: cargo test --locked --release --target "$TARGET" -p codex-utils-pty --lib
+        run: cargo test --locked --release --target "$env:TARGET" -p codex-utils-pty --lib
       - name: Assemble archive and smoke-test its extracted bytes
         shell: bash
         env:

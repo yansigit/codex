@@ -145,6 +145,25 @@ def run_checks(root: Path, artifact_dir: Path) -> list[dict[str, Any]]:
     clippy_command.extend(["--all-targets", "--", "-D", "warnings"])
     run_stage("provider-clippy", clippy_command)
 
+    # Core integration tests launch the CLI as an exec-server helper.
+    # Build both names before any test can discover them on a fresh runner.
+    run_stage(
+        "cli-build",
+        [
+            "cargo",
+            "build",
+            "--locked",
+            "--manifest-path",
+            "codex-rs/Cargo.toml",
+            "-p",
+            "codex-cli",
+            "--bin",
+            "nyacode",
+            "--bin",
+            "codex",
+        ],
+    )
+
     for group in manifest["focused_test_groups"]:
         command = ["cargo", "test", "--manifest-path", "codex-rs/Cargo.toml"]
         for package in group["packages"]:
@@ -185,21 +204,6 @@ def run_checks(root: Path, artifact_dir: Path) -> list[dict[str, Any]]:
             minimum_tests=1,
         )
 
-    run_stage(
-        "cli-build",
-        [
-            "cargo",
-            "build",
-            "--manifest-path",
-            "codex-rs/Cargo.toml",
-            "-p",
-            "codex-cli",
-            "--bin",
-            "nyacode",
-            "--bin",
-            "codex",
-        ],
-    )
     run_stage(
         "nyacode-branding",
         [
