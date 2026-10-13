@@ -138,6 +138,10 @@ impl App {
             return Ok(AppRunControl::Continue);
         }
 
+        if matches!(event, AppEvent::OpenDaemonMenu | AppEvent::OpenWarnings) {
+            self.verify_managed_daemon().await;
+        }
+
         // Keep the picker check and model update in one event without recursively polling this
         // large dispatcher on the TUI thread's stack.
         let (event, sparkle_model) = match event {
@@ -156,6 +160,16 @@ impl App {
         match event {
             AppEvent::SwitchSurface { chat } => self.switch_native_surface(chat, tui, app_server),
             AppEvent::OpenDaemonMenu => self.open_daemon_menu(),
+            AppEvent::ConfirmDaemonRestart => self.confirm_daemon_restart(),
+            AppEvent::RunDaemonRestart => {
+                if self.chat_widget.remote_connection.as_ref().is_some_and(|connection| connection.is_managed_daemon)
+                    && self.daemon_restart.is_none()
+                {
+                    self.daemon_restart = Some(tokio::spawn(codex_app_server_daemon::run(
+                        codex_app_server_daemon::LifecycleCommand::Restart,
+                    )));
+                }
+            }
             AppEvent::ConfirmDaemonUpdate(source) => self.confirm_daemon_update(source),
             AppEvent::RunDaemonUpdate(source) => {
                 self.pending_update_action = Some(UpdateAction::Daemon(source));
@@ -3236,7 +3250,7 @@ impl App {
                         self.local_settings.tui.status_line = Some(ids.clone());
                         self.local_settings.tui.status_line_use_colors = use_theme_colors;
                         self.chat_widget.setup_status_line(items, use_theme_colors);
-                        self.chat_widget.refresh_config_panel(Some("Saved".into()));
+                        self.chat_widget.refresh_config_panel(/*notice*/ None);
                     }
                     Err(err) => {
                         let error = format_config_error(&err);
@@ -3278,7 +3292,7 @@ impl App {
                     Ok(()) => {
                         self.local_settings.tui.terminal_title = Some(ids.clone());
                         self.chat_widget.setup_terminal_title(items);
-                        self.chat_widget.refresh_config_panel(Some("Saved".into()));
+                        self.chat_widget.refresh_config_panel(/*notice*/ None);
                     }
                     Err(err) => {
                         tracing::error!(error = %err, "failed to persist terminal title items; keeping previous selection");
@@ -3347,7 +3361,7 @@ impl App {
                             crate::render::highlight::set_syntax_theme(theme);
                         }
                         self.sync_tui_theme_selection(name);
-                        self.chat_widget.refresh_config_panel(Some("Saved".into()));
+                        self.chat_widget.refresh_config_panel(/*notice*/ None);
                         self.refresh_status_line();
                         tui.frame_requester().schedule_frame();
                     }

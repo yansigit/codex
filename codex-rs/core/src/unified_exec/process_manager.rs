@@ -724,6 +724,8 @@ impl UnifiedExecProcessManager {
                     ..
                 } => (Some(process_id), exit_code),
                 ProcessStatus::Exited { exit_code, entry } => {
+                    // Collection is finished even if the remote output stream remains open.
+                    entry.process.cancellation_token().cancel();
                     if let Err(message) =
                         finish_deferred_network_approval_after_process_exit_for_session(
                             Some(&context.session),
@@ -1073,6 +1075,8 @@ impl UnifiedExecProcessManager {
                 process_id,
             } => (Some(process_id), exit_code, call_id),
             ProcessStatus::Exited { exit_code, entry } => {
+                // Release the exit watcher after the final poll, not on remote process exit.
+                entry.process.cancellation_token().cancel();
                 let call_id = entry.call_id.clone();
                 if let Err(message) =
                     finish_network_approval_after_process_exit_for_entry(&entry).await
@@ -1847,6 +1851,7 @@ impl UnifiedExecProcessManager {
         if !already_exited && process.terminate_confirmed().await.is_err() {
             return false;
         }
+        process.cancellation_token().cancel();
 
         let entry = {
             let mut store = self.process_store.lock().await;

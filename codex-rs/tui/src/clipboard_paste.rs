@@ -133,9 +133,13 @@ fn read_image_as_png(bounded: bool) -> Result<(Vec<u8>, PastedImageInfo), PasteI
         img
     } else {
         let _span = tracing::debug_span!("get_image").entered();
-        let img = cb
-            .get_image()
-            .map_err(|e| PasteImageError::NoImage(e.to_string()))?;
+        let img = cb.get_image().map_err(|e| {
+            if cfg!(windows) && !matches!(e, arboard::Error::ContentNotAvailable) {
+                PasteImageError::ClipboardUnavailable(e.to_string())
+            } else {
+                PasteImageError::NoImage(e.to_string())
+            }
+        })?;
         if bounded
             && (img.width > 16384
                 || img.height > 16384
