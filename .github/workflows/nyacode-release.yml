@@ -147,6 +147,13 @@ jobs:
           target: ${{ matrix.target }}
           binaries: nyacode codex-code-mode-host ${{ runner.os == 'Windows' && 'codex-command-runner codex-windows-sandbox-setup' || '' }}
           build-mode: release
+      - name: Test Windows terminal process handling
+        if: runner.os == 'Windows'
+        shell: bash
+        working-directory: codex-rs
+        env:
+          TARGET: ${{ matrix.target }}
+        run: cargo test --locked --release --target "$TARGET" -p codex-utils-pty --lib
       - name: Assemble archive and smoke-test its extracted bytes
         shell: bash
         env:

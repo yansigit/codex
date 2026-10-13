@@ -4834,7 +4834,6 @@ async fn inbound_handoff_request_starts_turn_and_promotes_its_artifact() -> Resu
     let promotions = timeline
         .items
         .into_iter()
-        .filter_map(Result::ok)
         .filter_map(|entry| match entry {
             ThreadTimelineEntry::Realtime { item, .. }
                 if matches!(

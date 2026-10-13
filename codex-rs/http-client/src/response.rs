@@ -177,6 +177,12 @@ fn response_error(error: reqwest::Error, redact_url: bool) -> HttpError {
     }
 }
 
+impl<T: Into<reqwest::Body>> From<http::Response<T>> for HttpResponse {
+    fn from(response: http::Response<T>) -> Self {
+        reqwest::Response::from(response).into()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -248,11 +254,5 @@ mod tests {
         let error = response.error_for_status().expect_err("forbidden");
         assert_eq!(error.status(), Some(reqwest::StatusCode::FORBIDDEN));
         assert!(!format!("{error:?}").contains("private"));
-    }
-}
-
-impl<T: Into<reqwest::Body>> From<http::Response<T>> for HttpResponse {
-    fn from(response: http::Response<T>) -> Self {
-        reqwest::Response::from(response).into()
     }
 }

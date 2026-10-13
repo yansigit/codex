@@ -318,6 +318,27 @@ jobs:
           submodules: recursive
           persist-credentials: false
 
+      - name: Download pinned Windows debugger visualizers
+        shell: bash
+        working-directory: upstream-rusty-v8
+        run: |
+          # Upstream marks tools/win as update=none: its standalone Git mirror
+          # can advertise commits before their objects are available.
+          archive="$RUNNER_TEMP/rusty-v8-tools-win.tar.gz"
+          curl -fsSL --retry 3 \
+            https://chromium.googlesource.com/chromium/src/tools/win/+archive/faefd1b6fa9eeb033ad6fe60368ccb9bf908cbd0.tar.gz \
+            -o "$archive"
+          # Gitiles archives use request-time tar timestamps. Verify the four
+          # required file contents instead of the nondeterministic archive bytes.
+          mkdir -p tools/win
+          tar -xzf "$archive" -C tools/win \
+            DebugVisualizers/BUILD.gn DebugVisualizers/absl.natvis \
+            DebugVisualizers/blink.natvis DebugVisualizers/chrome.natvis
+          echo "55ebb8be249935e5ae9a1dc9a3d8c488cbb8f2d7007259f1190ca964fb2e5ebf  tools/win/DebugVisualizers/BUILD.gn" | sha256sum --check
+          echo "af13198b912ed22a3abe0c41e77af032cff56ee72b1f6f4a37535257c87be5c1  tools/win/DebugVisualizers/absl.natvis" | sha256sum --check
+          echo "fbe28d541ecc20d2e5d67f3ad859b1b35b60e4b069b0795a3d4766aa0828da2c  tools/win/DebugVisualizers/blink.natvis" | sha256sum --check
+          echo "56fe0993b70365e1d2d848ad67739aed5fd70284910665b559fc3c9369b24593  tools/win/DebugVisualizers/chrome.natvis" | sha256sum --check
+
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -357,7 +378,7 @@ jobs:
       - name: Install sccache
         uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
         with:
-          tool: sccache@0.8.2
+          tool: sccache@0.18.0
 
       - name: Start sccache
         shell: pwsh

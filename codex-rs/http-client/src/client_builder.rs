@@ -358,10 +358,17 @@ impl HttpClientBuilder {
                             error = %fallback_error,
                             "failed to build fallback HTTP client"
                         );
-                        reqwest::Client::builder()
+                        // Match this legacy infallible API's previous Client::new()
+                        // behavior if even platform TLS initialization fails.
+                        #[expect(
+                            clippy::expect_used,
+                            reason = "legacy infallible client constructor"
+                        )]
+                        let client = reqwest::Client::builder()
                             .tls_backend_native()
                             .build()
-                            .expect("build platform TLS client")
+                            .expect("build platform TLS client");
+                        client
                     })
             }
         };
