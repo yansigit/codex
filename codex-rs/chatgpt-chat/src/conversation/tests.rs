@@ -252,3 +252,19 @@ fn malformed_optional_metadata_is_not_coerced_into_safe_defaults() {
         ));
     }
 }
+
+#[test]
+fn internal_context_is_hidden_even_without_the_metadata_flag() {
+    for kind in ["model_editable_context", "user_editable_context"] {
+        let mut value = fixture();
+        value["mapping"]["assistant"]["message"]["content"] =
+            json!({"content_type":kind,"parts":["internal context fixture"]});
+        let snapshot = ConversationSnapshot::parse("fixture-conversation", &value).unwrap();
+        assert!(snapshot.branch.nodes.last().unwrap().message.is_none());
+        assert!(
+            !serde_json::to_string(&snapshot)
+                .unwrap()
+                .contains("internal context fixture")
+        );
+    }
+}
