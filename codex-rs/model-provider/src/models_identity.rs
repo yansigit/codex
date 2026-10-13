@@ -86,7 +86,7 @@ pub(crate) fn identity(
     if let Some(gateway_oauth) = &provider_info.gateway_oauth {
         field(&serde_json::to_vec(gateway_oauth)?);
     }
-    Ok(format!("{:x}", digest.finalize()))
+    Ok(hex::encode(digest.finalize()))
 }
 
 #[cfg(test)]

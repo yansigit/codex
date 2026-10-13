@@ -5,4 +5,4 @@
 /**
  * Successful deletion does not return additional attachment data.
  */
-export type ThreadAttachmentRemoveResponse = Record<string, never>;
+export type ThreadAttachmentRemoveResponse = Record<symbol, never>;

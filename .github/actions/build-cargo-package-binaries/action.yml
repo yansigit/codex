@@ -39,7 +39,7 @@ runs:
           *) echo "Unsupported build mode: $BUILD_MODE" >&2; exit 1 ;;
         esac
 
-    - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+    - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master, 2026-10-12
       with:
         toolchain: 1.95.0
         targets: ${{ inputs.target }}
@@ -96,6 +96,13 @@ runs:
       uses: ./.github/actions/setup-msvc-env
       with:
         target: ${{ inputs.target }}
+
+    - name: Configure native ARM64 CMake builds
+      if: ${{ inputs.target == 'aarch64-pc-windows-msvc' }}
+      shell: pwsh
+      run: |
+        $toolchain = Join-Path $env:GITHUB_WORKSPACE '.github/scripts/windows-arm64-cmake.cmake'
+        "CMAKE_TOOLCHAIN_FILE_aarch64_pc_windows_msvc=$toolchain" >> $env:GITHUB_ENV
 
     - name: Build bwrap and export digest
       if: ${{ runner.os == 'Linux' }}

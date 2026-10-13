@@ -1,15 +1,15 @@
 //! Keep transcript mouse-scroll speed validation and its configuration schema in sync.
 
 use schemars::JsonSchema;
-use schemars::r#gen::SchemaGenerator;
-use schemars::schema::Schema;
+use schemars::Schema;
+use schemars::generate::SchemaGenerator;
 use serde::Deserialize;
 use serde::Deserializer;
 
 pub(crate) fn schema(generator: &mut SchemaGenerator) -> Schema {
-    let mut schema = Option::<f64>::json_schema(generator).into_object();
-    schema.number().exclusive_minimum = Some(0.0);
-    schema.into()
+    let mut schema = Option::<f64>::json_schema(generator);
+    schema.insert("exclusiveMinimum".into(), 0.0.into());
+    schema
 }
 
 pub(crate) fn deserialize<'de, D>(deserializer: D) -> Result<Option<f64>, D::Error>

@@ -196,8 +196,9 @@ class ReleaseSetTest(unittest.TestCase):
                 member.type = kind
                 member.linkname = "/etc/passwd" if kind == tarfile.SYMTYPE else ""
                 stream.addfile(member, io.BytesIO(b""))
-            with self.subTest(name=name), self.assertRaises(
-                (ValueError, tarfile.FilterError)
+            with (
+                self.subTest(name=name),
+                self.assertRaises((ValueError, tarfile.FilterError)),
             ):
                 release.extract_package(archive, self.root / "extracted")
         self.assertFalse((self.root / "escape").exists())
@@ -322,9 +323,10 @@ class PublicationTest(unittest.TestCase):
                 if not prerelease:
                     calls.append(current)
                 calls.append({})
-                with patch.object(publisher, "seal"), patch.object(
-                    publisher, "api", side_effect=calls
-                ) as api:
+                with (
+                    patch.object(publisher, "seal"),
+                    patch.object(publisher, "api", side_effect=calls) as api,
+                ):
                     publisher.publish(root, version, COMMIT)
                 self.assertEqual(
                     api.call_args.args[1], {"draft": False, "make_latest": "false"}

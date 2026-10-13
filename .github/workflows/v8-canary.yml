@@ -25,13 +25,13 @@ jobs:
       windows_source_required: ${{ steps.changes.outputs.windows_source_required }}
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
 
@@ -113,28 +113,28 @@ jobs:
             target: aarch64-unknown-linux-gnu
             v8_cpu: arm64
             variant: ptrcomp-sandbox
-          - runner: macos-15-xlarge
+          - runner: macos-15-intel
             bazel_config: ci-macos
             platform: macos_amd64
             sandbox: false
             target: x86_64-apple-darwin
             v8_cpu: x64
             variant: release
-          - runner: macos-15-xlarge
+          - runner: macos-15-intel
             bazel_config: ci-macos
             platform: macos_amd64
             sandbox: true
             target: x86_64-apple-darwin
             v8_cpu: x64
             variant: ptrcomp-sandbox
-          - runner: macos-15-xlarge
+          - runner: macos-15
             bazel_config: ci-macos
             platform: macos_arm64
             sandbox: false
             target: aarch64-apple-darwin
             v8_cpu: arm64
             variant: release
-          - runner: macos-15-xlarge
+          - runner: macos-15
             bazel_config: ci-macos
             platform: macos_arm64
             sandbox: true
@@ -170,7 +170,7 @@ jobs:
             v8_cpu: arm64
             variant: ptrcomp-sandbox
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -180,12 +180,12 @@ jobs:
           target: ${{ matrix.target }}
 
       - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
 
       - name: Set up Rust toolchain for Cargo smoke
-        uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+        uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master, 2026-10-12
         with:
           toolchain: "1.95.0"
 
@@ -213,7 +213,7 @@ jobs:
             --config=rusty-v8-upstream-libcxx
             "--config=v8-target-${V8_CPU}"
             "${pair_target}"
-            --build_metadata=COMMIT_SHA=$(git rev-parse HEAD)
+            "--build_metadata=COMMIT_SHA=$(git rev-parse HEAD)"
           )
           if [[ "${SANDBOX}" != "true" ]]; then
             bazel_args+=(--config=v8-release-compat)
@@ -290,7 +290,7 @@ jobs:
           )
 
       - name: Upload staged artifacts
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: v8-canary-${{ needs.metadata.outputs.v8_version }}-${{ matrix.variant }}-${{ matrix.target }}
           path: dist/${{ matrix.target }}/*
@@ -316,7 +316,7 @@ jobs:
             target: aarch64-pc-windows-msvc
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -328,7 +328,7 @@ jobs:
         run: git config --global core.symlinks true
 
       - name: Check out upstream rusty_v8
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: denoland/rusty_v8
           ref: v${{ needs.metadata.outputs.v8_version }}
@@ -337,13 +337,13 @@ jobs:
           persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.11"
           architecture: x64
 
       - name: Set up Codex Rust toolchain for Cargo smoke
-        uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+        uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master, 2026-10-12
         with:
           toolchain: "1.95.0"
           targets: ${{ matrix.target }}
@@ -363,7 +363,7 @@ jobs:
         run: git submodule status --recursive > git_submodule_status.txt
 
       - name: Restore upstream source-build cache
-        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ${{ steps.setup_ci.outputs.cargo-target-dir }}/sccache
@@ -373,7 +373,7 @@ jobs:
             rusty-v8-source-${{ matrix.target }}-${{ matrix.runner }}-sandbox-
 
       - name: Install sccache
-        uses: taiki-e/install-action@44c6d64aa62cd779e873306675c7a58e86d6d532 # v2.62.49
+        uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
         with:
           tool: sccache@0.8.2
 
@@ -434,7 +434,7 @@ jobs:
           )
 
       - name: Upload staged artifacts
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: v8-canary-${{ needs.metadata.outputs.v8_version }}-ptrcomp-sandbox-${{ matrix.target }}
           path: dist/${{ matrix.target }}/*

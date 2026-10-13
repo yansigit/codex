@@ -16,7 +16,7 @@
       "type": "string"
     },
     "stderrCapReached": {
-      "description": "Whether stderr reached `outputBytesCap`.\n\nIn streaming mode, stderr is empty and cap state is also reported on the final stderr `process/outputDelta` notification.",
+      "description": "Whether stderr reached `outputBytesCap`.\n\nIn streaming mode, stderr is empty and cap state is also reported on the\nfinal stderr `process/outputDelta` notification.",
       "type": "boolean"
     },
     "stdout": {
@@ -24,7 +24,7 @@
       "type": "string"
     },
     "stdoutCapReached": {
-      "description": "Whether stdout reached `outputBytesCap`.\n\nIn streaming mode, stdout is empty and cap state is also reported on the final stdout `process/outputDelta` notification.",
+      "description": "Whether stdout reached `outputBytesCap`.\n\nIn streaming mode, stdout is empty and cap state is also reported on the\nfinal stdout `process/outputDelta` notification.",
       "type": "boolean"
     }
   },

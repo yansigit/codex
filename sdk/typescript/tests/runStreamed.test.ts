@@ -202,7 +202,7 @@ describe("Codex", () => {
 });
 
 async function drainEvents(events: AsyncGenerator<ThreadEvent>): Promise<void> {
-  let done = false;
+  let done: boolean;
   do {
     done = (await events.next()).done ?? false;
   } while (!done);

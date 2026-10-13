@@ -141,7 +141,7 @@ impl BrowserChatClient {
             .await??;
         // The adapter retains the existing HttpResponse body/stream APIs. The
         // outer permit also revokes reads after response headers have arrived.
-        Ok(HttpResponse::new(response, permit))
+        Ok(HttpResponse::new(response, permit).without_error_urls())
     }
 
     async fn send_authorized(&self, draft: RequestDraft) -> Result<reqwest::Response, HttpError> {

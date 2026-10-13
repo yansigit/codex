@@ -11,7 +11,7 @@ use pulldown_cmark::Options;
 use pulldown_cmark::Parser;
 use pulldown_cmark::Tag;
 use pulldown_cmark::TagEnd;
-use rand::RngCore as _;
+use rand::Rng as _;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fs;

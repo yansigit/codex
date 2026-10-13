@@ -385,7 +385,7 @@ impl TurnDiffTracker {
 }
 
 fn git_blob_oid(data: &[u8]) -> String {
-    format!("{:x}", git_blob_sha1_hex_bytes(data))
+    hex::encode(git_blob_sha1_hex_bytes(data))
 }
 
 /// Compute the Git SHA-1 blob object ID for the given content (bytes).

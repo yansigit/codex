@@ -24,7 +24,7 @@
   "description": "Base64-encoded output chunk emitted for a streaming `process/spawn` request.",
   "properties": {
     "capReached": {
-      "description": "True on the final streamed chunk for this stream when output was truncated by `outputBytesCap`.",
+      "description": "True on the final streamed chunk for this stream when output was\ntruncated by `outputBytesCap`.",
       "type": "boolean"
     },
     "deltaBase64": {

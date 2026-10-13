@@ -4,14 +4,9 @@ use codex_features::FEATURES;
 use codex_features::legacy_feature_keys;
 use codex_protocol::protocol::GranularApprovalConfig;
 use schemars::JsonSchema;
-use schemars::r#gen::SchemaGenerator;
-use schemars::r#gen::SchemaSettings;
-use schemars::schema::InstanceType;
-use schemars::schema::ObjectValidation;
-use schemars::schema::RootSchema;
-use schemars::schema::Schema;
-use schemars::schema::SchemaObject;
-use schemars::schema::SubschemaValidation;
+use schemars::Schema;
+use schemars::generate::SchemaGenerator;
+use schemars::generate::SchemaSettings;
 use serde_json::Map;
 use serde_json::Value;
 use std::path::Path;
@@ -40,18 +35,13 @@ pub(crate) enum ConfigAskForApproval {
 
 /// Schema for the `[features]` map with known + legacy keys only.
 pub fn features_schema(schema_gen: &mut SchemaGenerator) -> Schema {
-    let mut object = SchemaObject {
-        instance_type: Some(InstanceType::Object.into()),
-        ..Default::default()
-    };
-
-    let mut validation = ObjectValidation::default();
+    let mut properties = std::collections::BTreeMap::<String, Schema>::new();
     for feature in FEATURES {
         if feature.id == codex_features::Feature::Artifact {
             continue;
         }
         if feature.id == codex_features::Feature::CodeMode {
-            validation.properties.insert(
+            properties.insert(
                 feature.key.to_string(),
                 schema_gen.subschema_for::<codex_features::FeatureToml<
                     codex_features::CodeModeConfigToml,
@@ -60,7 +50,7 @@ pub fn features_schema(schema_gen: &mut SchemaGenerator) -> Schema {
             continue;
         }
         if feature.id == codex_features::Feature::CodeModeHost {
-            validation.properties.insert(
+            properties.insert(
                 feature.key.to_string(),
                 schema_gen.subschema_for::<codex_features::FeatureToml<
                     codex_features::CodeModeHostConfigToml,
@@ -69,7 +59,7 @@ pub fn features_schema(schema_gen: &mut SchemaGenerator) -> Schema {
             continue;
         }
         if feature.id == codex_features::Feature::NonPrefixedMcpToolNames {
-            validation.properties.insert(
+            properties.insert(
                 feature.key.to_string(),
                 schema_gen.subschema_for::<codex_features::FeatureToml<
                     codex_features::NonPrefixedMcpToolNamesConfigToml,
@@ -82,7 +72,7 @@ pub fn features_schema(schema_gen: &mut SchemaGenerator) -> Schema {
             continue;
         }
         if feature.id == codex_features::Feature::GuardianV2 {
-            validation.properties.insert(
+            properties.insert(
                 feature.key.to_string(),
                 schema_gen.subschema_for::<codex_features::FeatureToml<
                     codex_features::GuardianV2ConfigToml,
@@ -91,7 +81,7 @@ pub fn features_schema(schema_gen: &mut SchemaGenerator) -> Schema {
             continue;
         }
         if feature.id == codex_features::Feature::MultiAgentV2 {
-            validation.properties.insert(
+            properties.insert(
                 feature.key.to_string(),
                 schema_gen.subschema_for::<codex_features::FeatureToml<
                     codex_features::MultiAgentV2ConfigToml,
@@ -100,7 +90,7 @@ pub fn features_schema(schema_gen: &mut SchemaGenerator) -> Schema {
             continue;
         }
         if feature.id == codex_features::Feature::TokenBudget {
-            validation.properties.insert(
+            properties.insert(
                 feature.key.to_string(),
                 schema_gen.subschema_for::<codex_features::FeatureToml<
                     codex_features::TokenBudgetConfigToml,
@@ -109,7 +99,7 @@ pub fn features_schema(schema_gen: &mut SchemaGenerator) -> Schema {
             continue;
         }
         if feature.id == codex_features::Feature::ContextManagement {
-            validation.properties.insert(
+            properties.insert(
                 feature.key.to_string(),
                 schema_gen.subschema_for::<codex_features::FeatureToml<
                     codex_features::ContextManagementConfigToml,
@@ -118,7 +108,7 @@ pub fn features_schema(schema_gen: &mut SchemaGenerator) -> Schema {
             continue;
         }
         if feature.id == codex_features::Feature::RolloutBudget {
-            validation.properties.insert(
+            properties.insert(
                 feature.key.to_string(),
                 schema_gen.subschema_for::<codex_features::FeatureToml<
                     codex_features::RolloutBudgetConfigToml,
@@ -127,7 +117,7 @@ pub fn features_schema(schema_gen: &mut SchemaGenerator) -> Schema {
             continue;
         }
         if feature.id == codex_features::Feature::CurrentTimeReminder {
-            validation.properties.insert(
+            properties.insert(
                 feature.key.to_string(),
                 schema_gen.subschema_for::<codex_features::FeatureToml<
                     codex_features::CurrentTimeReminderConfigToml,
@@ -136,7 +126,7 @@ pub fn features_schema(schema_gen: &mut SchemaGenerator) -> Schema {
             continue;
         }
         if feature.id == codex_features::Feature::SleepTool {
-            validation.properties.insert(
+            properties.insert(
                 feature.key.to_string(),
                 schema_gen.subschema_for::<codex_features::FeatureToml<
                     codex_features::SleepToolConfigToml,
@@ -145,14 +135,14 @@ pub fn features_schema(schema_gen: &mut SchemaGenerator) -> Schema {
             continue;
         }
         if feature.id == codex_features::Feature::AppsMcpPathOverride {
-            validation.properties.insert(
+            properties.insert(
                 feature.key.to_string(),
                 removed_apps_mcp_path_override_schema(schema_gen),
             );
             continue;
         }
         if feature.id == codex_features::Feature::NetworkProxy {
-            validation.properties.insert(
+            properties.insert(
                 feature.key.to_string(),
                 schema_gen.subschema_for::<codex_features::FeatureToml<
                     codex_features::NetworkProxyConfigToml,
@@ -160,70 +150,56 @@ pub fn features_schema(schema_gen: &mut SchemaGenerator) -> Schema {
             );
             continue;
         }
-        validation
-            .properties
-            .insert(feature.key.to_string(), schema_gen.subschema_for::<bool>());
+        properties.insert(feature.key.to_string(), schema_gen.subschema_for::<bool>());
     }
     for legacy_key in legacy_feature_keys() {
-        validation
-            .properties
-            .insert(legacy_key.to_string(), schema_gen.subschema_for::<bool>());
+        properties.insert(legacy_key.to_string(), schema_gen.subschema_for::<bool>());
     }
-    validation.properties.insert(
+    properties.insert(
         "tool_registry".to_string(),
         schema_gen.subschema_for::<codex_features::ToolRegistryConfigToml>(),
     );
-    validation.additional_properties = Some(Box::new(Schema::Bool(false)));
-    object.object = Some(Box::new(validation));
-
-    Schema::Object(object)
+    schemars::json_schema!({
+        "type": "object",
+        "properties": properties,
+        "additionalProperties": false,
+    })
 }
 
 fn removed_apps_mcp_path_override_schema(schema_gen: &mut SchemaGenerator) -> Schema {
-    let mut config_validation = ObjectValidation::default();
-    config_validation
-        .properties
-        .insert("enabled".to_string(), schema_gen.subschema_for::<bool>());
-    config_validation
-        .properties
-        .insert("path".to_string(), schema_gen.subschema_for::<String>());
-    config_validation.additional_properties = Some(Box::new(Schema::Bool(false)));
-
-    let config = Schema::Object(SchemaObject {
-        instance_type: Some(InstanceType::Object.into()),
-        object: Some(Box::new(config_validation)),
-        ..Default::default()
-    });
-    Schema::Object(SchemaObject {
-        subschemas: Some(Box::new(SubschemaValidation {
-            any_of: Some(vec![schema_gen.subschema_for::<bool>(), config]),
-            ..Default::default()
-        })),
-        ..Default::default()
+    schemars::json_schema!({
+        "anyOf": [schema_gen.subschema_for::<bool>(), {
+            "type": "object",
+            "properties": {
+                "enabled": schema_gen.subschema_for::<bool>(),
+                "path": schema_gen.subschema_for::<String>(),
+            },
+            "additionalProperties": false,
+        }],
     })
 }
 
 /// Schema for the `[mcp_servers]` map using the raw input shape.
 pub fn mcp_servers_schema(schema_gen: &mut SchemaGenerator) -> Schema {
-    let mut object = SchemaObject {
-        instance_type: Some(InstanceType::Object.into()),
-        ..Default::default()
-    };
-
-    let validation = ObjectValidation {
-        additional_properties: Some(Box::new(schema_gen.subschema_for::<RawMcpServerConfig>())),
-        ..Default::default()
-    };
-    object.object = Some(Box::new(validation));
-
-    Schema::Object(object)
+    schemars::json_schema!({
+        "type": "object",
+        "additionalProperties": schema_gen.subschema_for::<RawMcpServerConfig>(),
+    })
 }
 
 /// Build the config schema for `config.toml`.
-pub fn config_schema() -> RootSchema {
+pub fn config_schema() -> Schema {
     let mut schema = SchemaSettings::draft07()
         .with(|settings| {
-            settings.option_add_null_type = false;
+            settings
+                .transforms
+                .push(Box::new(codex_protocol::json_schema::sort_required_fields));
+            settings
+                .transforms
+                .push(Box::new(codex_protocol::json_schema::omit_optional_null));
+            settings
+                .transforms
+                .push(Box::new(schemars::transform::RemoveRefSiblings::default()));
         })
         .into_generator()
         .into_root_schema_for::<ConfigToml>();
@@ -231,30 +207,21 @@ pub fn config_schema() -> RootSchema {
     schema
 }
 
-fn add_shell_environment_policy_constraints(schema: &mut RootSchema) {
-    let Some(Schema::Object(policy)) = schema.definitions.get_mut("ShellEnvironmentPolicyToml")
+fn add_shell_environment_policy_constraints(schema: &mut Schema) {
+    let Some(policy) = schema
+        .get_mut("definitions")
+        .and_then(|definitions| definitions.get_mut("ShellEnvironmentPolicyToml"))
+        .and_then(Value::as_object_mut)
     else {
         return;
     };
     let all_of = policy
-        .subschemas
-        .get_or_insert_default()
-        .all_of
-        .get_or_insert_default();
-    for fields in [["exclude", "filters"], ["filters", "include_only"]] {
-        all_of.push(Schema::Object(SchemaObject {
-            subschemas: Some(Box::new(SubschemaValidation {
-                not: Some(Box::new(Schema::Object(SchemaObject {
-                    object: Some(Box::new(ObjectValidation {
-                        required: fields.into_iter().map(str::to_string).collect(),
-                        ..Default::default()
-                    })),
-                    ..Default::default()
-                }))),
-                ..Default::default()
-            })),
-            ..Default::default()
-        }));
+        .entry("allOf")
+        .or_insert_with(|| Value::Array(Vec::new()));
+    if let Some(all_of) = all_of.as_array_mut() {
+        for fields in [["exclude", "filters"], ["filters", "include_only"]] {
+            all_of.push(serde_json::json!({"not": {"required": fields}}));
+        }
     }
 }
 
@@ -289,4 +256,31 @@ pub fn write_config_schema(out_path: &Path) -> anyhow::Result<()> {
     let json = config_schema_json()?;
     std::fs::write(out_path, json)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn dynamic_config_keys_retain_their_value_schemas() {
+        let schema = super::config_schema();
+        let definitions = &schema.as_value()["definitions"];
+        for (map, value) in [
+            ("AgentsToml", "AgentRoleToml"),
+            ("AppToolsConfig", "AppToolConfig"),
+            ("AppLinksConfig", "AppLinkConfig"),
+            ("PluginsConfigToml", "PluginConfig"),
+            ("AppsConfigToml", "AppConfig"),
+        ] {
+            assert_eq!(
+                definitions[map]["additionalProperties"]["$ref"],
+                format!("#/definitions/{value}"),
+                "{map} must accept dynamically named entries"
+            );
+        }
+        assert_eq!(
+            definitions["ModelAvailabilityNuxConfig"]["additionalProperties"]["type"],
+            "integer"
+        );
+        assert_eq!(definitions["AgentRoleToml"]["additionalProperties"], false);
+    }
 }

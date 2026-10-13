@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "definitions": {
     "AbsolutePathBuf": {
-      "description": "A path that is guaranteed to be absolute and normalized (though it is not guaranteed to be canonicalized or exist on the filesystem).\n\nIMPORTANT: When deserializing an `AbsolutePathBuf`, a base path must be set using [AbsolutePathBufGuard::new]. If no base path is set, the deserialization will fail unless the path being deserialized is already absolute.",
+      "description": "A path that is guaranteed to be absolute and normalized (though it is not\nguaranteed to be canonicalized or exist on the filesystem).\n\nIMPORTANT: When deserializing an `AbsolutePathBuf`, a base path must be set\nusing [AbsolutePathBufGuard::new]. If no base path is set, the\ndeserialization will fail unless the path being deserialized is already\nabsolute.",
       "type": "string"
     },
     "PluginAuthPolicy": {
@@ -21,7 +21,7 @@
           "type": "string"
         },
         {
-          "description": "Plugin-service currently sends `\"ENABLED\"` for available remote plugins. Codex app-server exposes `\"AVAILABLE\"` in its API; the alias keeps decoding compatible with that upstream response.",
+          "description": "Plugin-service currently sends `\"ENABLED\"` for available remote plugins.\nCodex app-server exposes `\"AVAILABLE\"` in its API; the alias keeps\ndecoding compatible with that upstream response.",
           "enum": [
             "AVAILABLE"
           ],
@@ -92,7 +92,7 @@
           ]
         },
         "defaultPrompt": {
-          "description": "Starter prompts for the plugin. Capped at 3 entries with a maximum of 128 characters per entry.",
+          "description": "Starter prompts for the plugin. Capped at 3 entries with a maximum of\n128 characters per entry.",
           "items": {
             "type": "string"
           },
@@ -427,7 +427,7 @@
           "type": "object"
         },
         {
-          "description": "The plugin is available in the remote catalog. Download metadata is kept server-side and is not exposed through the app-server API.",
+          "description": "The plugin is available in the remote catalog. Download metadata is\nkept server-side and is not exposed through the app-server API.",
           "properties": {
             "type": {
               "enum": [

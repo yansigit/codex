@@ -18,6 +18,7 @@ on:
       - "docs/native-providers/**"
       - ".github/workflows/native-providers.yml"
   push:
+    branches: [main]
     paths:
       - "codex-rs/**"
       - "scripts/native_provider_*.py"
@@ -57,7 +58,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master, 2026-10-12
         with:
           toolchain: 1.95.0
           components: clippy, rustfmt
@@ -82,6 +83,16 @@ jobs:
       - name: Test native Chat transport and lifecycle without credentials
         working-directory: codex-rs
         run: cargo test --locked -p codex-http-client -p codex-chatgpt-chat --lib
+      - name: Check dependency migrations and public schemas
+        working-directory: codex-rs
+        run: >-
+          cargo test --locked --lib
+          -p codex-protocol -p codex-config -p codex-hooks -p codex-app-server-protocol
+          -p codex-keyring-store -p codex-agent-identity -p codex-cloud-config
+          -p codex-websocket-auth -p codex-core-plugins -p codex-shell-command
+      - name: Check terminal rendering and state snapshots
+        working-directory: codex-rs
+        run: cargo test --locked -p codex-tui --lib
       - name: Verify checks did not rewrite tracked source or dependency pins
         run: git diff --exit-code
       - name: Upload stage logs and summary
@@ -110,7 +121,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master, 2026-10-12
         with:
           toolchain: 1.95.0
           components: clippy, rustfmt

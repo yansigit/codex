@@ -10,7 +10,7 @@ fn hash(request: &Request, messages: &[Message]) -> Result<String> {
     history.sort_all_objects();
     let bytes = serde_json::to_vec(&history)
         .map_err(|_| ProviderError::Checkpoint("invalid history".into()))?;
-    Ok(format!("{:x}", Sha256::digest(bytes)))
+    Ok(hex::encode(Sha256::digest(bytes)))
 }
 pub(crate) fn checkpoint(request: &Request, assistant: &Message) -> Result<Checkpoint> {
     let replay = request

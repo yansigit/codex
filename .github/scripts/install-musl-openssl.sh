@@ -11,10 +11,10 @@ case "${TARGET}" in
   *) echo "Unexpected musl target: ${TARGET}" >&2; exit 1 ;;
 esac
 
-# openssl-src's latest 300.x crate still contains 3.6.3. Build the upstream
-# security release until that crate catches up, keeping the existing 3.x ABI.
-openssl_version="3.6.4"
-openssl_sha256="9bffaa1ad1e07b354c21bd3324ec02fa15579f45a7d0494b3e74bc449b7333ef"
+# Build the verified upstream release with the target musl compiler.
+# openssl-sys 0.9.116 supports the OpenSSL 4 API.
+openssl_version="4.0.3"
+openssl_sha256="325b5c806167c13b40b1ffeadfe0248197c00eccc4cf123ec1e28d2d2fd216d9"
 openssl_root="${RUNNER_TEMP:-/tmp}/codex-musl-tools-${TARGET}/openssl-${openssl_version}"
 openssl_prefix="${openssl_root}/prefix"
 
@@ -27,13 +27,13 @@ if [[ ! -f "${openssl_prefix}/.complete" ]]; then
 
   (
     cd "${openssl_root}/openssl-${openssl_version}"
-    # Match openssl-src's default/legacy configuration for musl, including
-    # disabling shared libraries, zlib, engines, and unsupported async APIs.
+    # Build static libraries without zlib or unsupported musl async APIs.
+    # OpenSSL 4 has removed engines and SSLv3, so their old flags are unnecessary.
     CC="${OPENSSL_CC}" perl ./Configure "${openssl_target}" \
       "--prefix=${openssl_prefix}" --openssldir=/usr/local/ssl --libdir=lib \
       no-shared no-module no-tests no-comp no-zlib no-zlib-dynamic \
-      no-ssl3 no-md2 no-rc5 no-weak-ssl-ciphers no-camellia no-idea no-seed \
-      no-engine no-async -DOPENSSL_NO_SECURE_MEMORY
+      no-md2 no-rc5 no-weak-ssl-ciphers no-camellia no-idea no-seed \
+      no-async -DOPENSSL_NO_SECURE_MEMORY
     make -j"${OPENSSL_BUILD_JOBS:-$(nproc)}" build_libs
     make install_dev
   )

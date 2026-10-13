@@ -6,7 +6,7 @@
     },
     "loginId": {
       "default": null,
-      "description": "Identifies this login attempt across the response and completion notification. Older servers omit this field; current servers always return it.",
+      "description": "Identifies this login attempt across the response and completion notification.\nOlder servers omit this field; current servers always return it.",
       "type": [
         "string",
         "null"

@@ -975,6 +975,7 @@ impl From<BTreeMap<String, bool>> for FeaturesToml {
 // require a custom config struct under `[features]`.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema)]
 #[serde(untagged)]
+#[schemars(rename = "FeatureToml_for_{T}")]
 pub enum FeatureToml<T> {
     Enabled(bool),
     Config(T),

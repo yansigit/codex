@@ -17,7 +17,7 @@
         "indices": {
           "items": {
             "format": "uint32",
-            "minimum": 0.0,
+            "minimum": 0,
             "type": "integer"
           },
           "type": [
@@ -36,7 +36,7 @@
         },
         "score": {
           "format": "uint32",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         }
       },

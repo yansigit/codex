@@ -370,7 +370,7 @@ text({ names: result.skills.map(skill => skill.name), warnings: result.warnings,
     assert_eq!(events[1]["skill_name"], "demo:explicit-only");
     assert_eq!(
         events[1]["skill_id"],
-        format!("{:x}", sha1::Sha1::digest(MAIN_RESOURCE.as_bytes()))
+        hex::encode(sha1::Sha1::digest(MAIN_RESOURCE.as_bytes()))
     );
     assert_eq!(events[1]["event_params"]["invoke_type"], "implicit");
 

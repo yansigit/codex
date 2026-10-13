@@ -48,7 +48,7 @@
   },
   "properties": {
     "archived": {
-      "description": "Optional archived filter; when set to true, only archived threads are returned. If false or null, only non-archived threads are returned.",
+      "description": "Optional archived filter; when set to true, only archived threads are returned.\nIf false or null, only non-archived threads are returned.",
       "type": [
         "boolean",
         "null"
@@ -70,10 +70,10 @@
           "type": "null"
         }
       ],
-      "description": "Optional cwd filter or filters; when set, only threads whose session cwd exactly matches one of these paths are returned."
+      "description": "Optional cwd filter or filters; when set, only threads whose session cwd\nexactly matches one of these paths are returned."
     },
     "excludedThreadIds": {
-      "description": "Thread IDs to exclude before applying the result limit. Up to 100 entries; invalid IDs or a larger list are rejected, never truncated. Send the same exclusions on each page. Omitted, null, or empty means no exclusions.",
+      "description": "Thread IDs to exclude before applying the result limit. Up to 100\nentries; invalid IDs or a larger list are rejected, never truncated.\nSend the same exclusions on each page. Omitted, null, or empty means no exclusions.",
       "items": {
         "type": "string"
       },
@@ -85,14 +85,14 @@
     "limit": {
       "description": "Optional page size; defaults to a reasonable server-side value.",
       "format": "uint32",
-      "minimum": 0.0,
+      "minimum": 0,
       "type": [
         "integer",
         "null"
       ]
     },
     "modelProviders": {
-      "description": "Optional provider filter; when set, only sessions recorded under these providers are returned. When present but empty, includes all providers.",
+      "description": "Optional provider filter; when set, only sessions recorded under these\nproviders are returned. When present but empty, includes all providers.",
       "items": {
         "type": "string"
       },
@@ -102,7 +102,7 @@
       ]
     },
     "originators": {
-      "description": "Optional originator allowlist, matching any supplied value exactly. Supported by hosted backends only; the local app-server rejects a nonempty list. Omitted or empty lists leave originators unrestricted.",
+      "description": "Optional originator allowlist, matching any supplied value exactly.\nSupported by hosted backends only; the local app-server rejects a nonempty list.\nOmitted or empty lists leave originators unrestricted.",
       "items": {
         "type": "string"
       },
@@ -119,7 +119,7 @@
       ]
     },
     "sectionId": {
-      "description": "Omit to include every section, set to `null` for unsectioned threads, or provide a section ID to return only threads in that section.",
+      "description": "Omit to include every section, set to `null` for unsectioned threads,\nor provide a section ID to return only threads in that section.",
       "type": [
         "string",
         "null"
@@ -148,7 +148,7 @@
       "description": "Optional sort key; defaults to created_at."
     },
     "sourceKinds": {
-      "description": "Optional source filter; when set, only sessions from these source kinds are returned. When omitted or empty, defaults to interactive sources.",
+      "description": "Optional source filter; when set, only sessions from these source kinds\nare returned. When omitted or empty, defaults to interactive sources.",
       "items": {
         "$ref": "#/definitions/ThreadSourceKind"
       },
@@ -158,7 +158,7 @@
       ]
     },
     "useStateDbOnly": {
-      "description": "If true, return from the state DB without scanning JSONL rollouts to repair thread metadata. Omitted or false preserves scan-and-repair behavior.",
+      "description": "If true, return from the state DB without scanning JSONL rollouts to\nrepair thread metadata. Omitted or false preserves scan-and-repair\nbehavior.",
       "type": "boolean"
     }
   },

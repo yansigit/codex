@@ -28,6 +28,7 @@ doctest = false
 workspace = true
 
 [dependencies]
+hex = { workspace = true }
 codex-provider-adapter = { workspace = true }
 codex-model-provider-info = { workspace = true }
 tokio-util = { workspace = true }

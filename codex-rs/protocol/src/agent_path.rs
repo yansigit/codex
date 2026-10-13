@@ -6,13 +6,20 @@ use std::ops::Deref;
 use std::str::FromStr;
 use ts_rs::TS;
 
-#[derive(
-    Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema, TS,
-)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, TS)]
 #[serde(try_from = "String", into = "String")]
-#[schemars(with = "String")]
 #[ts(type = "string")]
 pub struct AgentPath(String);
+
+impl JsonSchema for AgentPath {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "AgentPath".into()
+    }
+
+    fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        String::json_schema(generator)
+    }
+}
 
 impl AgentPath {
     pub const ROOT: &str = "/root";

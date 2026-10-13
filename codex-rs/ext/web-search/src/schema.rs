@@ -1,5 +1,5 @@
 use codex_api::SearchCommands;
-use schemars::r#gen::SchemaSettings;
+use schemars::generate::SchemaSettings;
 use serde_json::Map;
 use serde_json::Value;
 
@@ -7,7 +7,9 @@ pub(crate) fn commands_schema() -> Value {
     let schema = SchemaSettings::draft2019_09()
         .with(|settings| {
             settings.inline_subschemas = true;
-            settings.option_add_null_type = false;
+            settings
+                .transforms
+                .push(Box::new(codex_protocol::json_schema::omit_optional_null));
         })
         .into_generator()
         .into_root_schema_for::<SearchCommands>();

@@ -3,7 +3,7 @@
 
 use anyhow::Context;
 use anyhow::Result;
-use rand::RngCore;
+use rand::TryRng;
 use std::ffi::OsStr;
 use std::ffi::c_void;
 use std::fs::File;
@@ -127,7 +127,7 @@ pub(crate) fn create_temporary_file(parent: &Path, suffix: &str) -> Result<(File
         DirectoryOpenDisposition::OpenExisting,
     )?;
     let mut random = [0_u8; 8];
-    rand::rngs::OsRng
+    rand::rngs::SysRng
         .try_fill_bytes(&mut random)
         .context("generate sandbox output name")?;
     let id = u64::from_le_bytes(random);

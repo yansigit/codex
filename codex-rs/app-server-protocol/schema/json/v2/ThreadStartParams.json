@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "definitions": {
     "AbsolutePathBuf": {
-      "description": "A path that is guaranteed to be absolute and normalized (though it is not guaranteed to be canonicalized or exist on the filesystem).\n\nIMPORTANT: When deserializing an `AbsolutePathBuf`, a base path must be set using [AbsolutePathBufGuard::new]. If no base path is set, the deserialization will fail unless the path being deserialized is already absolute.",
+      "description": "A path that is guaranteed to be absolute and normalized (though it is not\nguaranteed to be canonicalized or exist on the filesystem).\n\nIMPORTANT: When deserializing an `AbsolutePathBuf`, a base path must be set\nusing [AbsolutePathBufGuard::new]. If no base path is set, the\ndeserialization will fail unless the path being deserialized is already\nabsolute.",
       "type": "string"
     },
     "ApprovalsReviewer": {
@@ -94,20 +94,57 @@
         }
       ]
     },
+    "DynamicToolFunctionSpec": {
+      "properties": {
+        "deferLoading": {
+          "type": "boolean"
+        },
+        "description": {
+          "type": "string"
+        },
+        "inputSchema": true,
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "description",
+        "inputSchema",
+        "name"
+      ],
+      "type": "object"
+    },
+    "DynamicToolNamespaceSpec": {
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "tools": {
+          "items": {
+            "$ref": "#/definitions/DynamicToolNamespaceTool"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "description",
+        "name",
+        "tools"
+      ],
+      "type": "object"
+    },
     "DynamicToolNamespaceTool": {
       "oneOf": [
         {
+          "allOf": [
+            {
+              "$ref": "#/definitions/DynamicToolFunctionSpec"
+            }
+          ],
           "properties": {
-            "deferLoading": {
-              "type": "boolean"
-            },
-            "description": {
-              "type": "string"
-            },
-            "inputSchema": true,
-            "name": {
-              "type": "string"
-            },
             "type": {
               "enum": [
                 "function"
@@ -117,9 +154,6 @@
             }
           },
           "required": [
-            "description",
-            "inputSchema",
-            "name",
             "type"
           ],
           "title": "FunctionDynamicToolNamespaceTool",
@@ -130,17 +164,12 @@
     "DynamicToolSpec": {
       "oneOf": [
         {
+          "allOf": [
+            {
+              "$ref": "#/definitions/DynamicToolFunctionSpec"
+            }
+          ],
           "properties": {
-            "deferLoading": {
-              "type": "boolean"
-            },
-            "description": {
-              "type": "string"
-            },
-            "inputSchema": true,
-            "name": {
-              "type": "string"
-            },
             "type": {
               "enum": [
                 "function"
@@ -150,28 +179,18 @@
             }
           },
           "required": [
-            "description",
-            "inputSchema",
-            "name",
             "type"
           ],
           "title": "FunctionDynamicToolSpec",
           "type": "object"
         },
         {
+          "allOf": [
+            {
+              "$ref": "#/definitions/DynamicToolNamespaceSpec"
+            }
+          ],
           "properties": {
-            "description": {
-              "type": "string"
-            },
-            "name": {
-              "type": "string"
-            },
-            "tools": {
-              "items": {
-                "$ref": "#/definitions/DynamicToolNamespaceTool"
-              },
-              "type": "array"
-            },
             "type": {
               "enum": [
                 "namespace"
@@ -181,9 +200,6 @@
             }
           },
           "required": [
-            "description",
-            "name",
-            "tools",
             "type"
           ],
           "title": "NamespaceDynamicToolSpec",
@@ -195,7 +211,7 @@
       "type": "string"
     },
     "MultiAgentMode": {
-      "description": "Controls the effective multi-agent delegation instructions for a turn. `custom` means the configured mode hint defines the policy instead of a built-in policy.",
+      "description": "Controls the effective multi-agent delegation instructions for a turn. `custom` means the\nconfigured mode hint defines the policy instead of a built-in policy.",
       "oneOf": [
         {
           "enum": [
@@ -321,7 +337,7 @@
           "type": "null"
         }
       ],
-      "description": "Override where approval requests are routed for review on this thread and subsequent turns."
+      "description": "Override where approval requests are routed for review on this thread\nand subsequent turns."
     },
     "baseInstructions": {
       "type": [

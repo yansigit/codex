@@ -14,7 +14,7 @@ use std::time::Instant;
 use tempfile::tempdir;
 
 fn git_blob_sha1_hex(data: &str) -> String {
-    format!("{:x}", git_blob_sha1_hex_bytes(data.as_bytes()))
+    hex::encode(git_blob_sha1_hex_bytes(data.as_bytes()))
 }
 
 async fn apply_verified_patch(root: &Path, patch: &str) -> AppliedPatchDelta {

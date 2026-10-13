@@ -23,6 +23,9 @@ workspace's release optimization settings. Debug information is disabled to
 reduce disk and memory requirements. No `target-cpu=native` tuning is applied.
 Packages are platform specific; there is no single binary that runs on every OS.
 
+See the [dependency baseline](dependency-upgrades.md) for the major-version
+migrations and remaining compatibility constraints.
+
 Linux packages use musl and the existing verified OpenSSL/libcap build setup.
 All builds verify the pinned V8 archive and bindings. The Linux sandbox helper
 is stripped and hashed before its digest is embedded in the CLI. Packaging
@@ -64,7 +67,9 @@ versions use `X.Y.Z`; installer-compatible prereleases use `X.Y.Z-alpha.N` or
 `X.Y.Z-beta.N`. No version is incremented automatically.
 
 The workflow builds all six targets, runs package/installer tests and native
-provider/Chat checks, then tests each extracted package on its native runner.
+provider/Chat checks, schema contracts, and terminal snapshots, then tests each
+extracted package on its native runner. Both SDKs also run against the packaged
+Linux CLI before the release set is accepted.
 Smoke tests exercise both CLI names, public help, feature discovery, Code Mode
 host startup/help, bundled ripgrep, Linux bubblewrap, and app-server schema
 generation without account credentials. They do not run live provider inference.

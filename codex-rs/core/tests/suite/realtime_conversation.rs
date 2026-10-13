@@ -172,6 +172,7 @@ fn expected_realtime_backend_prompt() -> String {
 fn test_user_first_name() -> String {
     [whoami::realname(), whoami::username()]
         .into_iter()
+        .filter_map(Result::ok)
         .filter_map(|name| name.split_whitespace().next().map(str::to_string))
         .find(|name| !name.is_empty())
         .unwrap_or_else(|| "there".to_string())
@@ -4833,6 +4834,7 @@ async fn inbound_handoff_request_starts_turn_and_promotes_its_artifact() -> Resu
     let promotions = timeline
         .items
         .into_iter()
+        .filter_map(Result::ok)
         .filter_map(|entry| match entry {
             ThreadTimelineEntry::Realtime { item, .. }
                 if matches!(

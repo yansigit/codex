@@ -40,7 +40,7 @@
           "properties": {
             "index": {
               "format": "uint32",
-              "minimum": 0.0,
+              "minimum": 0,
               "type": "integer"
             },
             "type": {
@@ -105,13 +105,13 @@
         },
         {
           "properties": {
-            "item_id": {
+            "itemId": {
               "type": "string"
             },
             "presentation": {
               "$ref": "#/definitions/ThreadRealtimeBemItemPresentation"
             },
-            "turn_id": {
+            "turnId": {
               "type": "string"
             },
             "type": {
@@ -123,9 +123,9 @@
             }
           },
           "required": [
-            "item_id",
+            "itemId",
             "presentation",
-            "turn_id",
+            "turnId",
             "type"
           ],
           "title": "BemItemPromotedThreadRealtimeItem",

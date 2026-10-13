@@ -8,6 +8,7 @@ license.workspace = true
 workspace = true
 
 [dependencies]
+hex = { workspace = true }
 anyhow = "1"
 axum = { workspace = true, default-features = false, features = [
     "http1",
@@ -48,7 +49,8 @@ rmcp = { workspace = true, default-features = false, features = [
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
-sse-stream = "0.2.5"
+# rmcp exposes the 0.2 SSE types in its public transport API.
+sse-stream = "0.2.6"
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tiny_http = { workspace = true }

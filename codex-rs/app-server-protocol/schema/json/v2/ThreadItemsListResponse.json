@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "definitions": {
     "AbsolutePathBuf": {
-      "description": "A path that is guaranteed to be absolute and normalized (though it is not guaranteed to be canonicalized or exist on the filesystem).\n\nIMPORTANT: When deserializing an `AbsolutePathBuf`, a base path must be set using [AbsolutePathBufGuard::new]. If no base path is set, the deserialization will fail unless the path being deserialized is already absolute.",
+      "description": "A path that is guaranteed to be absolute and normalized (though it is not\nguaranteed to be canonicalized or exist on the filesystem).\n\nIMPORTANT: When deserializing an `AbsolutePathBuf`, a base path must be set\nusing [AbsolutePathBufGuard::new]. If no base path is set, the\ndeserialization will fail unless the path being deserialized is already\nabsolute.",
       "type": "string"
     },
     "AgentMessageDelivery": {
@@ -36,12 +36,12 @@
       "properties": {
         "end": {
           "format": "uint",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         },
         "start": {
           "format": "uint",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         }
       },
@@ -336,7 +336,7 @@
       ]
     },
     "FunctionCallOutputContentItem": {
-      "description": "Responses API compatible content items that can be returned by a tool call. This is a subset of ContentItem with the types we support as function call outputs.",
+      "description": "Responses API compatible content items that can be returned by a tool call.\nThis is a subset of ContentItem with the types we support as function call outputs.",
       "oneOf": [
         {
           "properties": {
@@ -507,6 +507,59 @@
         }
       ]
     },
+    "ImageGenerationItem": {
+      "properties": {
+        "failure": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ImageGenerationFailure"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "id": {
+          "type": "string"
+        },
+        "result": {
+          "type": "string"
+        },
+        "revisedPrompt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "savedPath": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/AbsolutePathBuf"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status": {
+          "type": "string"
+        },
+        "transparentBackground": {
+          "default": null,
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "result",
+        "status"
+      ],
+      "type": "object"
+    },
     "LegacyAppPathString": {
       "type": "string"
     },
@@ -626,12 +679,12 @@
       "properties": {
         "lineEnd": {
           "format": "uint32",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         },
         "lineStart": {
           "format": "uint32",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         },
         "note": {
@@ -650,10 +703,10 @@
       "type": "object"
     },
     "MessagePhase": {
-      "description": "Classifies assistant text as commentary, a partial answer, or a terminal answer.\n\nProviders do not emit this consistently, so callers must treat `None` as \"phase unknown\" and keep compatibility behavior for legacy models.",
+      "description": "Classifies assistant text as commentary, a partial answer, or a terminal answer.\n\nProviders do not emit this consistently, so callers must treat `None` as\n\"phase unknown\" and keep compatibility behavior for legacy models.",
       "oneOf": [
         {
-          "description": "Mid-turn assistant text (for example preamble/progress narration).\n\nAdditional tool calls or assistant output may follow before turn completion.",
+          "description": "Mid-turn assistant text (for example preamble/progress narration).\n\nAdditional tool calls or assistant output may follow before turn\ncompletion.",
           "enum": [
             "commentary"
           ],
@@ -746,6 +799,24 @@
       "description": "A non-empty reasoning effort value advertised by the model.",
       "minLength": 1,
       "type": "string"
+    },
+    "SleepItem": {
+      "description": "Display item emitted by the interruptible `clock.sleep` tool.",
+      "properties": {
+        "durationMs": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "durationMs",
+        "id"
+      ],
+      "type": "object"
     },
     "SubAgentActivityKind": {
       "enum": [
@@ -943,7 +1014,7 @@
           "type": "object"
         },
         {
-          "description": "EXPERIMENTAL - proposed plan item content. The completed plan item is authoritative and may not match the concatenation of `PlanDelta` text.",
+          "description": "EXPERIMENTAL - proposed plan item content. The completed plan item is\nauthoritative and may not match the concatenation of `PlanDelta` text.",
           "properties": {
             "id": {
               "type": "string"
@@ -1015,7 +1086,7 @@
               "type": "string"
             },
             "commandActions": {
-              "description": "A best-effort parsing of the command to understand the action(s) it will perform. This returns a list of CommandAction objects because a single shell command may be composed of many commands piped together.",
+              "description": "A best-effort parsing of the command to understand the action(s) it will perform.\nThis returns a list of CommandAction objects because a single shell command may\nbe composed of many commands piped together.",
               "items": {
                 "$ref": "#/definitions/CommandAction"
               },
@@ -1332,7 +1403,7 @@
               "description": "Reasoning effort requested for the spawned agent, when applicable."
             },
             "receiverThreadIds": {
-              "description": "Thread ID of the receiving agent, when applicable. In case of spawn operation, this corresponds to the newly spawned agent.",
+              "description": "Thread ID of the receiving agent, when applicable. In case of spawn operation,\nthis corresponds to the newly spawned agent.",
               "items": {
                 "type": "string"
               },
@@ -1429,32 +1500,12 @@
           "type": "object"
         },
         {
+          "allOf": [
+            {
+              "$ref": "#/definitions/WebSearchItem"
+            }
+          ],
           "properties": {
-            "action": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/WebSearchAction"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "id": {
-              "type": "string"
-            },
-            "query": {
-              "type": "string"
-            },
-            "results": {
-              "default": null,
-              "description": "Structured search results returned out-of-band by standalone web search.\n\nThese stay as opaque JSON at the extension/app-server boundary so new result fields and result types can pass through without a Codex release.",
-              "items": true,
-              "type": [
-                "array",
-                "null"
-              ]
-            },
             "type": {
               "enum": [
                 "webSearch"
@@ -1464,8 +1515,6 @@
             }
           },
           "required": [
-            "id",
-            "query",
             "type"
           ],
           "title": "WebSearchThreadItem",
@@ -1496,16 +1545,12 @@
           "type": "object"
         },
         {
-          "description": "Display item emitted by the interruptible `clock.sleep` tool.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/SleepItem"
+            }
+          ],
           "properties": {
-            "durationMs": {
-              "format": "uint64",
-              "minimum": 0.0,
-              "type": "integer"
-            },
-            "id": {
-              "type": "string"
-            },
             "type": {
               "enum": [
                 "sleep"
@@ -1515,58 +1560,18 @@
             }
           },
           "required": [
-            "durationMs",
-            "id",
             "type"
           ],
           "title": "SleepThreadItem",
           "type": "object"
         },
         {
+          "allOf": [
+            {
+              "$ref": "#/definitions/ImageGenerationItem"
+            }
+          ],
           "properties": {
-            "failure": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/ImageGenerationFailure"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null
-            },
-            "id": {
-              "type": "string"
-            },
-            "result": {
-              "type": "string"
-            },
-            "revisedPrompt": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "savedPath": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/AbsolutePathBuf"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "status": {
-              "type": "string"
-            },
-            "transparentBackground": {
-              "default": null,
-              "type": [
-                "boolean",
-                "null"
-              ]
-            },
             "type": {
               "enum": [
                 "imageGeneration"
@@ -1576,9 +1581,6 @@
             }
           },
           "required": [
-            "id",
-            "result",
-            "status",
             "type"
           ],
           "title": "ImageGenerationThreadItem",
@@ -1990,11 +1992,45 @@
           "type": "object"
         }
       ]
+    },
+    "WebSearchItem": {
+      "properties": {
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/WebSearchAction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "query": {
+          "type": "string"
+        },
+        "results": {
+          "default": null,
+          "description": "Structured search results returned out-of-band by standalone web search.\n\nThese stay as opaque JSON at the extension/app-server boundary so new\nresult fields and result types can pass through without a Codex release.",
+          "items": true,
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "query"
+      ],
+      "type": "object"
     }
   },
   "properties": {
     "backwardsCursor": {
-      "description": "Opaque cursor to pass as `cursor` when reversing `sortDirection`. This is only populated when the page contains at least one item.",
+      "description": "Opaque cursor to pass as `cursor` when reversing `sortDirection`.\nThis is only populated when the page contains at least one item.",
       "type": [
         "string",
         "null"
@@ -2007,7 +2043,7 @@
       "type": "array"
     },
     "nextCursor": {
-      "description": "Opaque cursor to pass to the next call to continue after the last item. if None, there are no more items to return.",
+      "description": "Opaque cursor to pass to the next call to continue after the last item.\nif None, there are no more items to return.",
       "type": [
         "string",
         "null"

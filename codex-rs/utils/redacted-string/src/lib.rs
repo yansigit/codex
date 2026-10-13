@@ -8,6 +8,7 @@ use std::ops::DerefMut;
 /// A string whose `Debug` output is redacted.
 #[derive(Clone, Default, Deserialize, Serialize, PartialEq, Eq, JsonSchema)]
 #[serde(transparent)]
+#[schemars(inline)]
 pub struct RedactedString(String);
 
 impl RedactedString {

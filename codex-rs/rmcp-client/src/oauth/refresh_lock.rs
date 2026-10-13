@@ -51,7 +51,7 @@ impl RefreshCredentialLock {
         hasher.update(store_key.as_bytes());
         let path = codex_home
             .join(REFRESH_LOCK_DIR)
-            .join(format!("{:x}.lock", hasher.finalize()));
+            .join(format!("{}.lock", hex::encode(hasher.finalize())));
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }

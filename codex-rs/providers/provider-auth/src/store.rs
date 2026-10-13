@@ -21,7 +21,7 @@ fn io_error(_: impl std::fmt::Display) -> ProviderError {
 }
 
 pub fn digest(value: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(value))
+    hex::encode(Sha256::digest(value))
 }
 
 /// Files are addressed by hashes of structured keys, never by remote path input.

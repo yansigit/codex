@@ -2022,7 +2022,7 @@ async fn executor_skill_invocation_is_environment_scoped_and_deduplicated() -> R
     assert_eq!(events[0]["skill_name"], "selected-environment-skill");
     assert_eq!(
         events[0]["skill_id"],
-        format!("{:x}", sha1::Sha1::digest(SELECTED_RESOURCE.as_bytes()))
+        hex::encode(sha1::Sha1::digest(SELECTED_RESOURCE.as_bytes()))
     );
     assert_eq!(events[0]["event_params"]["invoke_type"], "implicit");
 
