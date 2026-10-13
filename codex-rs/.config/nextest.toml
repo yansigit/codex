@@ -4,6 +4,8 @@
 # stuck. Keep this aligned with the broader timeout budget we give sharded CI.
 slow-timeout = { period = "30s", terminate-after = 2 }
 retries = 1
+# Thread stack for the debug suite is 64 MiB. cargo-nextest 0.9.103 does not
+# read a profile env table, so `just test` and the CI job export RUST_MIN_STACK.
 
 [[profile.default.overrides]]
 # These cases cold-start a daemon before confirming a second launch with new settings.

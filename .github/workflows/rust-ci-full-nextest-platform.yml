@@ -395,7 +395,7 @@ jobs:
           "${test_command[@]}"
         env:
           RUST_BACKTRACE: 1
-          RUST_MIN_STACK: "8388608" # 8 MiB
+          RUST_MIN_STACK: "67108864" # 64 MiB; 8 MiB overflows debug app-server and tui tests
           NEXTEST_STATUS_LEVEL: leak
 
       - name: Upload nextest JUnit report

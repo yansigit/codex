@@ -169,6 +169,51 @@ members = [
 ]
 resolver = "2"
 
+# Crates the Ubuntu 24.04 verification container cannot build. scripts/verify-container.sh
+# reads this list and passes the corresponding --exclude flags. Keeping it here avoids a
+# second copy in the shell script.
+[workspace.metadata.nyacode.container-verify]
+exclude = [
+    # rusty_v8 150.4.0 publishes no Linux prebuilt for the v8_enable_sandbox feature.
+    "codex-code-mode-runtime",
+    # Depends on codex-code-mode-runtime.
+    "codex-code-mode-host",
+    # gstreamer/gstreamer-app/gstreamer-audio feature v1_28 requires GStreamer >= 1.28.
+    # Ubuntu 24.04 ships 1.24.
+    "codex-voice-host",
+]
+# Tests that spawn the excluded binaries. Nextest `test()` matches substrings, so
+# parameterized cases are covered by the base name.
+test-filter = """
+not (
+    test(explicit_only_cloud_skill_is_hidden_but_can_be_invoked) |
+    test(yielded_skill_read_keeps_originating_turn_metadata) |
+    test(cancelling_tool_aborts_its_guardian_review) |
+    test(review_respects_complete_context_budget) |
+    test(guardian_revalidates_owning_session_before_allow) |
+    test(code_mode_late_result_metadata_with_large_arguments_survives_waits) |
+    test(code_mode_can_store_and_load_values_across_turns_after_rejection) |
+    test(strict_ignores_app_omissions_but_preserves_app_access) |
+    test(connector_omissions_preserve_direct_only_namespace) |
+    test(code_mode_model_output_uses_structured_host_timing) |
+    test(app_server_shares_flag_selected_grpc_code_mode_host_across_threads) |
+    test(model_guardian_policy_scores_code_mode_cells) |
+    test(standalone_image_generation_is_callable_from_code_mode_only) |
+    test(background_cell_uses_permissions_requested_after_next_turn_starts) |
+    test(code_mode_uses_permissions_approved_in_the_same_cell) |
+    test(steps_capture_permission_grants_and_preserve_their_scope) |
+    test(code_mode_exec_emits_correlated_production_analytics) |
+    test(grpc_stdio_sessions_share_a_host_and_isolate_state) |
+    test(grpc_stdio_host_exits_when_stdin_closes) |
+    test(hung_grpc_stdio_host_is_reaped_and_the_session_recovers) |
+    test(confirmed_root_delivery_invalidates_root_and_worker_cached_approvals) |
+    test(guardian_subagent_review_preserves_late_root_user_authorization) |
+    test(confirmed_root_delivery_invalidates_pending_worker_allow) |
+    test(confirmed_delivery_invalidates_pending_local_allow) |
+    test(guardian_code_mode_messaging_request_history)
+)
+"""
+
 [workspace.package]
 version = "0.0.0"
 # Track the edition for all workspace crates in one place. Individual
