@@ -331,9 +331,10 @@ jobs:
           # Gitiles archives use request-time tar timestamps. Verify the four
           # required file contents instead of the nondeterministic archive bytes.
           mkdir -p tools/win
-          tar -xzf "$archive" -C tools/win \
+          # Read stdin so GNU tar does not parse a Windows drive as a remote host.
+          tar -xzf - -C tools/win \
             DebugVisualizers/BUILD.gn DebugVisualizers/absl.natvis \
-            DebugVisualizers/blink.natvis DebugVisualizers/chrome.natvis
+            DebugVisualizers/blink.natvis DebugVisualizers/chrome.natvis < "$archive"
           echo "55ebb8be249935e5ae9a1dc9a3d8c488cbb8f2d7007259f1190ca964fb2e5ebf  tools/win/DebugVisualizers/BUILD.gn" | sha256sum --check
           echo "af13198b912ed22a3abe0c41e77af032cff56ee72b1f6f4a37535257c87be5c1  tools/win/DebugVisualizers/absl.natvis" | sha256sum --check
           echo "fbe28d541ecc20d2e5d67f3ad859b1b35b60e4b069b0795a3d4766aa0828da2c  tools/win/DebugVisualizers/blink.natvis" | sha256sum --check
