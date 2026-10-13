@@ -44,11 +44,13 @@ Use `ExternalMessage` for messages from other agents, tools, or applications:
 ```python
 from openai_codex import ExternalMessage
 
-result = thread.run(ExternalMessage(
-    tool_name="notifications",
-    namespace="slack",
-    content="Deployment notification: the staging checks failed.",
-))
+result = thread.run(
+    ExternalMessage(
+        tool_name="notifications",
+        namespace="slack",
+        content="Deployment notification: the staging checks failed.",
+    )
+)
 ```
 
 The content has tool-level authority, below user and developer instructions.

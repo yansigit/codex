@@ -193,7 +193,15 @@ impl RequestBuilder {
             HttpClientBackend::BrowserChat(client) => client.send(self.request?).await,
             HttpClientBackend::Routed(pool) => pool.send(self.request?).await,
             HttpClientBackend::Direct(client) => {
-                Ok(client.execute(self.request?.build(&client)?).await?.into())
+                let response: HttpResponse =
+                    client.execute(self.request?.build(&client)?).await?.into();
+                Ok(
+                    if client.request_logging == crate::client::RequestLogging::Disabled {
+                        response.without_error_urls()
+                    } else {
+                        response
+                    },
+                )
             }
         }
     }

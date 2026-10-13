@@ -12,7 +12,7 @@ use rama_http::HeaderMap;
 use rama_http::HeaderName;
 use rama_http::HeaderValue;
 use rama_http::header::AUTHORIZATION;
-use rand::Rng as _;
+use rand::RngExt as _;
 use regex::Regex;
 use regex::RegexBuilder;
 use regex_automata::Anchored;

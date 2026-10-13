@@ -370,6 +370,7 @@ pub struct SubAgentActivityItem {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, TS, JsonSchema, PartialEq)]
+#[schemars(rename = "CoreWebSearchItem")]
 pub struct WebSearchItem {
     pub id: String,
     pub query: String,
@@ -395,6 +396,7 @@ pub struct ImageViewItem {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, TS, JsonSchema, PartialEq)]
+#[schemars(rename = "CoreImageGenerationItem")]
 pub struct ImageGenerationItem {
     pub id: String,
     pub status: String,

@@ -2,6 +2,7 @@ use std::io;
 use std::io::Read;
 use std::io::Write;
 use std::net::TcpListener;
+use std::process::Command;
 use std::sync::Arc;
 use std::sync::mpsc;
 use std::thread;
@@ -35,8 +36,49 @@ type SuccessfulTlsFallbackServer = (
     mpsc::Receiver<io::Result<Vec<String>>>,
 );
 
+/// Exercise the default native backend independently of the developer's or Cargo's CA settings.
+/// A configured CA deliberately selects Rustls. Use a subprocess so clearing those overrides
+/// cannot race with other tests or change the environment of the test runner.
+fn run_native_tls_subprocess(test_name: &str) -> bool {
+    const CHILD_ENV: &str = "CODEX_NATIVE_TLS_TEST_CHILD";
+    const CA_ENV: [&str; 3] = ["CODEX_CA_CERTIFICATE", "SSL_CERT_FILE", "SSL_CERT_DIR"];
+    let (_, module) = module_path!()
+        .split_once("::")
+        .expect("test module has a crate prefix");
+    let test_name = format!("{module}::{test_name}");
+    if std::env::var(CHILD_ENV).ok().as_deref() == Some(test_name.as_str()) {
+        for key in CA_ENV {
+            assert!(std::env::var_os(key).is_none(), "child retained {key}");
+        }
+        return false;
+    }
+
+    let mut child = Command::new(std::env::current_exe().expect("current test binary"));
+    child
+        .args(["--exact", &test_name, "--nocapture", "--color", "never"])
+        .env(CHILD_ENV, &test_name);
+    for key in CA_ENV {
+        child.env_remove(key);
+    }
+    let output = child.output().expect("native TLS test subprocess");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "{test_name} failed in the clean CA environment:\n{stdout}\n{stderr}"
+    );
+    assert!(
+        stdout.contains("test result: ok. 1 passed; 0 failed;"),
+        "subprocess must execute exactly the requested test:\n{stdout}\n{stderr}"
+    );
+    true
+}
+
 #[tokio::test]
 async fn default_pool_does_not_retry_a_native_tls_protocol_failure() {
+    if run_native_tls_subprocess("default_pool_does_not_retry_a_native_tls_protocol_failure") {
+        return;
+    }
     let (url, attempts, stop_server) =
         spawn_protocol_version_rejection_server(/*maximum_attempts*/ 2)
             .expect("TLS rejection server should start");
@@ -67,6 +109,9 @@ async fn default_pool_does_not_retry_a_native_tls_protocol_failure() {
 
 #[tokio::test]
 async fn retries_a_native_tls_protocol_failure_once_with_rustls() {
+    if run_native_tls_subprocess("retries_a_native_tls_protocol_failure_once_with_rustls") {
+        return;
+    }
     let (url, attempts, stop_server) =
         spawn_protocol_version_rejection_server(/*maximum_attempts*/ 2)
             .expect("TLS rejection server should start");
@@ -108,6 +153,10 @@ async fn retries_a_native_tls_protocol_failure_once_with_rustls() {
 
 #[tokio::test]
 async fn retries_a_native_tls_failure_after_another_request_caches_rustls() {
+    if run_native_tls_subprocess("retries_a_native_tls_failure_after_another_request_caches_rustls")
+    {
+        return;
+    }
     let (url, attempts, stop_server) =
         spawn_protocol_version_rejection_server(/*maximum_attempts*/ 2)
             .expect("TLS rejection server should start");
@@ -165,6 +214,9 @@ async fn retries_a_native_tls_failure_after_another_request_caches_rustls() {
 
 #[tokio::test]
 async fn does_not_retry_a_cached_rustls_tls_protocol_failure() {
+    if run_native_tls_subprocess("does_not_retry_a_cached_rustls_tls_protocol_failure") {
+        return;
+    }
     let (url, attempts, stop_server) =
         spawn_protocol_version_rejection_server(/*maximum_attempts*/ 2)
             .expect("TLS rejection server should start");
@@ -202,6 +254,11 @@ async fn does_not_retry_a_cached_rustls_tls_protocol_failure() {
 
 #[tokio::test]
 async fn successful_rustls_fallback_replays_the_request_and_reuses_the_destination() {
+    if run_native_tls_subprocess(
+        "successful_rustls_fallback_replays_the_request_and_reuses_the_destination",
+    ) {
+        return;
+    }
     let (url, trusted_rustls_client, observed_requests) =
         spawn_successful_tls_fallback_server().expect("TLS fallback server should start");
     let pool = RouteAwareClientPool::new(
@@ -266,6 +323,11 @@ async fn successful_rustls_fallback_replays_the_request_and_reuses_the_destinati
 
 #[tokio::test]
 async fn retries_a_tls_protocol_failure_when_request_url_contains_certificate_markers() {
+    if run_native_tls_subprocess(
+        "retries_a_tls_protocol_failure_when_request_url_contains_certificate_markers",
+    ) {
+        return;
+    }
     let (url, attempts, stop_server) =
         spawn_protocol_version_rejection_server(/*maximum_attempts*/ 2)
             .expect("TLS rejection server should start");
@@ -297,6 +359,9 @@ async fn retries_a_tls_protocol_failure_when_request_url_contains_certificate_ma
 
 #[tokio::test]
 async fn does_not_retry_a_non_replayable_streaming_request() {
+    if run_native_tls_subprocess("does_not_retry_a_non_replayable_streaming_request") {
+        return;
+    }
     let (url, attempts, stop_server) =
         spawn_protocol_version_rejection_server(/*maximum_attempts*/ 2)
             .expect("TLS rejection server should start");

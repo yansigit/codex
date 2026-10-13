@@ -11,7 +11,7 @@ use crate::helper_materialization::resolve_command_runner;
 use crate::winutil::resolve_sid;
 use crate::winutil::string_from_sid_bytes;
 use crate::winutil::to_wide;
-use rand::Rng;
+use rand::RngExt;
 use rand::SeedableRng;
 use rand::rngs::SmallRng;
 use std::io;
@@ -44,8 +44,8 @@ pub fn find_runner_exe(codex_home: &Path, log_dir: Option<&Path>) -> anyhow::Res
 
 /// Generates a unique named-pipe path used to communicate with the runner process.
 pub fn pipe_pair() -> (String, String) {
-    let mut rng = SmallRng::from_entropy();
-    let nonce: u128 = rng.r#gen();
+    let mut rng = SmallRng::from_rng(&mut rand::rng());
+    let nonce: u128 = rng.random();
     let base = format!(r"\\.\pipe\codex-runner-{nonce:x}");
     (format!("{base}-in"), format!("{base}-out"))
 }

@@ -38,6 +38,7 @@ pub enum EscalationPermissions {
 /// commands that start with this token sequence.
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
 #[serde(transparent)]
+#[schemars(inline)]
 #[ts(type = "Array<string>")]
 pub struct ExecPolicyAmendment {
     pub command: Vec<String>,

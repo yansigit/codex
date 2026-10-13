@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "definitions": {
     "AbsolutePathBuf": {
-      "description": "A path that is guaranteed to be absolute and normalized (though it is not guaranteed to be canonicalized or exist on the filesystem).\n\nIMPORTANT: When deserializing an `AbsolutePathBuf`, a base path must be set using [AbsolutePathBufGuard::new]. If no base path is set, the deserialization will fail unless the path being deserialized is already absolute.",
+      "description": "A path that is guaranteed to be absolute and normalized (though it is not\nguaranteed to be canonicalized or exist on the filesystem).\n\nIMPORTANT: When deserializing an `AbsolutePathBuf`, a base path must be set\nusing [AbsolutePathBufGuard::new]. If no base path is set, the\ndeserialization will fail unless the path being deserialized is already\nabsolute.",
       "type": "string"
     },
     "ConfigLayerMetadata": {
@@ -82,7 +82,7 @@
                   "$ref": "#/definitions/AbsolutePathBuf"
                 }
               ],
-              "description": "This is the path to the system config.toml file, though it is not guaranteed to exist."
+              "description": "This is the path to the system config.toml file, though it is not\nguaranteed to exist."
             },
             "type": {
               "enum": [
@@ -107,7 +107,7 @@
               "type": "string"
             },
             "name": {
-              "description": "Admin-facing name for the delivered layer. This is surfaced in diagnostics so users know which cloud layer needs administrator attention.",
+              "description": "Admin-facing name for the delivered layer. This is surfaced in\ndiagnostics so users know which cloud layer needs administrator\nattention.",
               "type": "string"
             },
             "type": {
@@ -127,7 +127,7 @@
           "type": "object"
         },
         {
-          "description": "User config layer from $CODEX_HOME/config.toml. This layer is special in that it is expected to be: - writable by the user - generally outside the workspace directory",
+          "description": "User config layer from $CODEX_HOME/config.toml. This layer is special\nin that it is expected to be:\n- writable by the user\n- generally outside the workspace directory",
           "properties": {
             "file": {
               "allOf": [
@@ -135,10 +135,10 @@
                   "$ref": "#/definitions/AbsolutePathBuf"
                 }
               ],
-              "description": "This is the path to the user's config.toml file, though it is not guaranteed to exist."
+              "description": "This is the path to the user's config.toml file, though it is not\nguaranteed to exist."
             },
             "profile": {
-              "description": "Name of the selected profile-v2 config layered on top of the base user config, when this layer represents one.",
+              "description": "Name of the selected profile-v2 config layered on top of the base\nuser config, when this layer represents one.",
               "type": [
                 "string",
                 "null"
@@ -160,7 +160,7 @@
           "type": "object"
         },
         {
-          "description": "Path to a .codex/ folder within a project. There could be multiple of these between `cwd` and the project/repo root.",
+          "description": "Path to a .codex/ folder within a project. There could be multiple of\nthese between `cwd` and the project/repo root.",
           "properties": {
             "dotCodexFolder": {
               "$ref": "#/definitions/AbsolutePathBuf"
@@ -198,7 +198,7 @@
           "type": "object"
         },
         {
-          "description": "`managed_config.toml` was designed to be a config that was loaded as the last layer on top of everything else. This scheme did not quite work out as intended, but we keep this variant as a \"best effort\" while we phase out `managed_config.toml` in favor of `requirements.toml`.",
+          "description": "`managed_config.toml` was designed to be a config that was loaded\nas the last layer on top of everything else. This scheme did not quite\nwork out as intended, but we keep this variant as a \"best effort\" while\nwe phase out `managed_config.toml` in favor of `requirements.toml`.",
           "properties": {
             "file": {
               "$ref": "#/definitions/AbsolutePathBuf"

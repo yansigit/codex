@@ -1,3 +1,4 @@
+diff --git a/cargo/private/cargo_build_script_runner/lib.rs b/cargo/private/cargo_build_script_runner/lib.rs
 --- a/cargo/private/cargo_build_script_runner/lib.rs
 +++ b/cargo/private/cargo_build_script_runner/lib.rs
 @@ -337,9 +337,18 @@

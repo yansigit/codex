@@ -7,8 +7,8 @@ use serde::Serializer;
 
 #[cfg(test)]
 pub(crate) fn nullable_string_schema(
-    generator: &mut schemars::r#gen::SchemaGenerator,
-) -> schemars::schema::Schema {
+    generator: &mut schemars::generate::SchemaGenerator,
+) -> schemars::Schema {
     generator.subschema_for::<Option<String>>()
 }
 

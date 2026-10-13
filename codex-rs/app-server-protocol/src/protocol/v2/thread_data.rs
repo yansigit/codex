@@ -15,9 +15,9 @@ use codex_protocol::protocol::ThreadHistoryMode as CoreThreadHistoryMode;
 use codex_protocol::protocol::ThreadSource as CoreThreadSource;
 use codex_utils_absolute_path::AbsolutePathBuf;
 #[cfg(test)]
-use schemars::r#gen::SchemaGenerator;
+use schemars::Schema;
 #[cfg(test)]
-use schemars::schema::Schema;
+use schemars::generate::SchemaGenerator;
 use serde::Deserialize;
 use serde::Serialize;
 use std::fmt;
@@ -113,8 +113,8 @@ pub enum ThreadSource {
 
 #[cfg(test)]
 impl JsonSchema for ThreadSource {
-    fn schema_name() -> String {
-        "ThreadSource".to_string()
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "ThreadSource".into()
     }
 
     fn json_schema(generator: &mut SchemaGenerator) -> Schema {

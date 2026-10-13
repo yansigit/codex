@@ -19,7 +19,7 @@ use crate::spawn_pipe_process_no_stdin;
 const PARENT_FIXTURE: &str = "--codex-spawn-test-parent";
 const CHILD_FIXTURE: &str = "--codex-spawn-test-child";
 
-#[ctor::ctor]
+#[ctor::ctor(unsafe)]
 fn initialize_spawn_helper() {
     if let Ok(arguments) = std::fs::read("/proc/self/cmdline") {
         let mut arguments = arguments.split(|byte| *byte == 0).skip(1);

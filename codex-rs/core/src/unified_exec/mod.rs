@@ -32,7 +32,7 @@ use codex_network_proxy::NetworkProxy;
 use codex_protocol::models::AdditionalPermissionProfile;
 use codex_utils_output_truncation::TruncationPolicy;
 use codex_utils_path_uri::PathUri;
-use rand::Rng;
+use rand::RngExt;
 use rand::rng;
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;

@@ -21,7 +21,7 @@ fn bundled_module_and_sources_match_the_reviewed_manifest() {
     let manifest: serde_json::Value =
         serde_json::from_str(include_str!("../../pdf-validator/manifest.json")).unwrap();
     assert_eq!(
-        format!("{:x}", Sha256::digest(VALIDATOR)),
+        hex::encode(Sha256::digest(VALIDATOR)),
         manifest["artifact_sha256"].as_str().unwrap()
     );
     for (name, bytes) in [
@@ -43,7 +43,7 @@ fn bundled_module_and_sources_match_the_reviewed_manifest() {
         ),
     ] {
         assert_eq!(
-            format!("{:x}", Sha256::digest(bytes)),
+            hex::encode(Sha256::digest(bytes)),
             manifest["input_sha256"][name].as_str().unwrap(),
             "validator input changed: {name}"
         );

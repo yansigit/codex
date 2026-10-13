@@ -556,6 +556,39 @@ def test_generated_inline_image_class_names_remain_stable() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    "union_name, class_name, payload",
+    [
+        ("UserInput", "ImageUserInput", {"type": "image", "url": "https://example.com/a.png"}),
+        ("UserInput", "FileIdUserInput", {"type": "image", "fileId": "file-test"}),
+        (
+            "ContentItem",
+            "InputImageContentItem",
+            {"type": "input_image", "image_url": "https://example.com/a.png"},
+        ),
+        (
+            "FunctionCallOutputContentItem",
+            "InputImageFunctionCallOutputContentItem",
+            {"type": "input_image", "image_url": "https://example.com/a.png"},
+        ),
+    ],
+)
+def test_generated_image_variants_preserve_flat_fields(
+    union_name: str, class_name: str, payload: dict
+) -> None:
+    from openai_codex.generated import v2_all
+
+    model = getattr(v2_all, class_name)
+    image = model.model_validate(payload)
+    assert image.type == payload["type"]
+    assert image.model_dump(by_alias=True, exclude_none=True) == payload
+    union = getattr(v2_all, union_name).model_validate(payload)
+    assert isinstance(union.root, model)
+    assert union.model_dump(by_alias=True, exclude_none=True) == payload
+    with pytest.raises(ValidationError):
+        model.model_validate({"type": payload["type"]})
+
+
 def test_runtime_package_template_has_no_checked_in_binaries() -> None:
     runtime_root = ROOT.parent / "python-runtime" / "src" / "codex_cli_bin"
     assert sorted(
@@ -602,10 +635,10 @@ def test_source_sdk_package_declares_stable_documentation() -> None:
         "readme_is_stable": "# OpenAI Codex Python SDK\n" in readme,
         "local_license_file": (ROOT / "LICENSE").exists(),
     } == {
-        "description": "Python SDK for Codex",
+        "description": "Nyacode Python compatibility SDK",
         "is_stable": True,
         "license": "Apache-2.0",
-        "documentation": "https://github.com/openai/codex/tree/main/sdk/python/docs",
+        "documentation": "https://github.com/yansigit/nyacode/tree/main/sdk/python/docs",
         "readme_is_stable": True,
         "local_license_file": False,
     }

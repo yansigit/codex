@@ -132,7 +132,7 @@ pub(super) fn read_session_import(
         custom_title: None,
         ai_title: None,
         messages,
-        content_sha256: format!("{:x}", hasher.finalize()),
+        content_sha256: hex::encode(hasher.finalize()),
         attributed_mcp_server_ids: BTreeSet::new(),
     })
 }

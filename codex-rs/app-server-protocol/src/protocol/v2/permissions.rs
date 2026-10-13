@@ -716,6 +716,7 @@ impl From<codex_protocol::protocol::SandboxPolicy> for SandboxPolicy {
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
 #[serde(transparent)]
+#[schemars(inline)]
 #[ts(type = "Array<string>", export_to = "v2/")]
 pub struct ExecPolicyAmendment {
     pub command: Vec<String>,

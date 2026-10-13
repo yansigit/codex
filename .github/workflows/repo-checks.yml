@@ -11,7 +11,7 @@ jobs:
       NODE_OPTIONS: --max-old-space-size=4096
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -20,6 +20,9 @@ jobs:
       - name: Verify codex-rs Cargo manifests inherit workspace settings
         run: python3 .github/scripts/verify_cargo_workspace_manifests.py
 
+      - name: Test Cargo manifest policy exceptions
+        run: python3 -m unittest discover -s .github/scripts -p 'test_verify_cargo_workspace_manifests.py'
+
       - name: Verify codex-tui does not import codex-core directly
         run: python3 .github/scripts/verify_tui_core_boundary.py
 
@@ -27,9 +30,9 @@ jobs:
         run: python3 .github/scripts/verify_bazel_clippy_lints.py
 
       - name: Install uv
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
-          version: "0.11.3"
+          version: "0.13.0"
 
       - name: Test downstream Python release resolution
         run: python3 -m unittest discover -s .github/scripts -p 'test_resolve_python_cli_release.py'
@@ -37,8 +40,13 @@ jobs:
       - name: Test release version comparison
         run: python3 -m unittest discover -s .github/scripts -p 'test_releases.py'
 
+      - name: Test V8 source fetch retries and change detection
+        run: |
+          python3 -m unittest discover -s .github/scripts -p 'test_run_v8_bazel_build.py'
+          python3 -m unittest discover -s .github/scripts -p 'test_v8_canary_changes.py'
+
       - name: Test PyPI release verification
-        run: uv run --no-project --with packaging==26.2 python -m unittest discover -s .github/scripts -p 'test_verify_pypi_release.py'
+        run: uv run --no-project --with packaging==26.3 python -m unittest discover -s .github/scripts -p 'test_verify_pypi_release.py'
 
       - name: Test Codex package builder
         run: python3 -m unittest discover -s scripts/codex_package -p 'test_*.py'
@@ -50,14 +58,14 @@ jobs:
         run: python3 -m unittest discover -s .github/scripts/macos-signing -p 'test_*.py'
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@a8198c4bff370c8506180b035930dea56dbd5288 # v5
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           run_install: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 22
+          node-version: 26.11.1
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

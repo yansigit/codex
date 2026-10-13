@@ -52,7 +52,7 @@
       "type": "object"
     }
   },
-  "description": "Internal-only notification containing the exact usage from one upstream Responses API completion.",
+  "description": "Internal-only notification containing the exact usage from one upstream\nResponses API completion.",
   "properties": {
     "responseId": {
       "type": "string"

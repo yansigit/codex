@@ -439,7 +439,7 @@
           ]
         },
         "allowedLoginMethods": {
-          "description": "Effective login methods after managed, forced-login, and workspace restrictions. An empty list permits no login method. Older servers may omit this field.",
+          "description": "Effective login methods after managed, forced-login, and workspace restrictions.\nAn empty list permits no login method. Older servers may omit this field.",
           "items": {
             "$ref": "#/definitions/ForcedLoginMethod"
           },
@@ -632,9 +632,9 @@
         {
           "properties": {
             "additionalContextLimit": {
-              "description": "Approximate token threshold for spilling this hook's `additionalContext` to disk. `null` uses 2,500 tokens; `0` disables spilling for this hook. The threshold is evaluated against the original context; a spilled preview also includes recovery metadata.",
+              "description": "Approximate token threshold for spilling this hook's `additionalContext` to disk.\n`null` uses 2,500 tokens; `0` disables spilling for this hook. The threshold is\nevaluated against the original context; a spilled preview also includes recovery\nmetadata.",
               "format": "uint",
-              "minimum": 0.0,
+              "minimum": 0,
               "type": [
                 "integer",
                 "null"
@@ -660,7 +660,7 @@
             },
             "timeoutSec": {
               "format": "uint64",
-              "minimum": 0.0,
+              "minimum": 0,
               "type": [
                 "integer",
                 "null"
@@ -699,7 +699,7 @@
             },
             "timeoutSec": {
               "format": "uint64",
-              "minimum": 0.0,
+              "minimum": 0,
               "type": [
                 "integer",
                 "null"
@@ -1007,14 +1007,15 @@
         },
         "httpPort": {
           "format": "uint16",
-          "minimum": 0.0,
+          "maximum": 65535,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
           ]
         },
         "managedAllowedDomainsOnly": {
-          "description": "When true, only managed allowlist entries are respected while managed network enforcement is active.",
+          "description": "When true, only managed allowlist entries are respected while managed\nnetwork enforcement is active.",
           "type": [
             "boolean",
             "null"
@@ -1022,7 +1023,8 @@
         },
         "socksPort": {
           "format": "uint16",
-          "minimum": 0.0,
+          "maximum": 65535,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
@@ -1141,7 +1143,7 @@
     },
     "supportsIndependentSpeedModes": {
       "default": null,
-      "description": "Whether Fast and Ultra Fast requirements are enforced independently. Older servers omit this field and use Fast mode as a shared speed gate.",
+      "description": "Whether Fast and Ultra Fast requirements are enforced independently.\nOlder servers omit this field and use Fast mode as a shared speed gate.",
       "type": [
         "boolean",
         "null"

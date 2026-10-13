@@ -14,7 +14,7 @@
         },
         "globScanMaxDepth": {
           "format": "uint",
-          "minimum": 1.0,
+          "minimum": 1,
           "type": [
             "integer",
             "null"
@@ -83,7 +83,7 @@
     "ApplyPatchApprovalParams": {
       "properties": {
         "callId": {
-          "description": "Use to correlate this with [codex_protocol::protocol::PatchApplyBeginEvent] and [codex_protocol::protocol::PatchApplyEndEvent].",
+          "description": "Use to correlate this with [codex_protocol::protocol::PatchApplyBeginEvent]\nand [codex_protocol::protocol::PatchApplyEndEvent].",
           "type": "string"
         },
         "conversationId": {
@@ -96,7 +96,7 @@
           "type": "object"
         },
         "grantRoot": {
-          "description": "When set, the agent is asking the user to allow writes under this root for the remainder of the session (unclear if this is honored today).",
+          "description": "When set, the agent is asking the user to allow writes under this root\nfor the remainder of the session (unclear if this is honored today).",
           "type": [
             "string",
             "null"
@@ -123,7 +123,7 @@
     "ChatgptAuthTokensRefreshParams": {
       "properties": {
         "previousAccountId": {
-          "description": "Workspace/account identifier that Codex was previously using.\n\nClients that manage multiple accounts/workspaces can use this as a hint to refresh the token for the correct workspace.\n\nThis may be `null` when the prior auth state did not include a workspace identifier (`chatgpt_account_id`).",
+          "description": "Workspace/account identifier that Codex was previously using.\n\nClients that manage multiple accounts/workspaces can use this as a hint\nto refresh the token for the correct workspace.\n\nThis may be `null` when the prior auth state did not include a workspace\nidentifier (`chatgpt_account_id`).",
           "type": [
             "string",
             "null"
@@ -269,7 +269,7 @@
           "type": "string"
         },
         {
-          "description": "User approved the command and future prompts in the same session-scoped approval cache should run without prompting.",
+          "description": "User approved the command and future prompts in the same session-scoped\napproval cache should run without prompting.",
           "enum": [
             "acceptForSession"
           ],
@@ -277,7 +277,7 @@
         },
         {
           "additionalProperties": false,
-          "description": "User approved the command, and wants to apply the proposed execpolicy amendment so future matching commands can run without prompting.",
+          "description": "User approved the command, and wants to apply the proposed execpolicy amendment so future\nmatching commands can run without prompting.",
           "properties": {
             "acceptWithExecpolicyAmendment": {
               "properties": {
@@ -349,7 +349,7 @@
     "CommandExecutionRequestApprovalParams": {
       "properties": {
         "approvalId": {
-          "description": "Unique identifier for this specific approval callback.\n\nFor regular shell/unified_exec approvals, this is null.\n\nFor zsh-exec-bridge subcommand approvals, multiple callbacks can belong to one parent `itemId`, so `approvalId` is a distinct opaque callback id (a UUID) used to disambiguate routing. Stdin approvals also use a distinct callback id; inspect `kind` to distinguish them.",
+          "description": "Unique identifier for this specific approval callback.\n\nFor regular shell/unified_exec approvals, this is null.\n\nFor zsh-exec-bridge subcommand approvals, multiple callbacks can belong to\none parent `itemId`, so `approvalId` is a distinct opaque callback id\n(a UUID) used to disambiguate routing.\nStdin approvals also use a distinct callback id; inspect `kind` to distinguish them.",
           "type": [
             "string",
             "null"
@@ -502,7 +502,7 @@
           ]
         },
         "callId": {
-          "description": "Use to correlate this with [codex_protocol::protocol::ExecCommandBeginEvent] and [codex_protocol::protocol::ExecCommandEndEvent].",
+          "description": "Use to correlate this with [codex_protocol::protocol::ExecCommandBeginEvent]\nand [codex_protocol::protocol::ExecCommandEndEvent].",
           "type": "string"
         },
         "command": {
@@ -612,7 +612,7 @@
     "FileChangeRequestApprovalParams": {
       "properties": {
         "grantRoot": {
-          "description": "[UNSTABLE] When set, the agent is asking the user to allow writes under this root for the remainder of the session (unclear if this is honored today).",
+          "description": "[UNSTABLE] When set, the agent is asking the user to allow writes under this root\nfor the remainder of the session (unclear if this is honored today).",
           "type": [
             "string",
             "null"
@@ -1058,7 +1058,7 @@
     },
     "McpElicitationSchema": {
       "additionalProperties": false,
-      "description": "Typed form schema for MCP `elicitation/create` requests.\n\nThis matches the `requestedSchema` shape from the MCP 2025-11-25 `ElicitRequestFormParams` schema.",
+      "description": "Typed form schema for MCP `elicitation/create` requests.\n\nThis matches the `requestedSchema` shape from the MCP 2025-11-25\n`ElicitRequestFormParams` schema.",
       "properties": {
         "$schema": {
           "type": [
@@ -1137,7 +1137,7 @@
         },
         "maxLength": {
           "format": "uint32",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
@@ -1145,7 +1145,7 @@
         },
         "minLength": {
           "format": "uint32",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
@@ -1210,7 +1210,7 @@
         },
         "maxItems": {
           "format": "uint64",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
@@ -1218,7 +1218,7 @@
         },
         "minItems": {
           "format": "uint64",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
@@ -1319,7 +1319,7 @@
         },
         "maxItems": {
           "format": "uint64",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
@@ -1327,7 +1327,7 @@
         },
         "minItems": {
           "format": "uint64",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
@@ -1489,7 +1489,7 @@
           "type": "string"
         },
         "turnId": {
-          "description": "Active Codex turn when this elicitation was observed, if app-server could correlate one.\n\nThis is nullable because MCP models elicitation as a standalone server-to-client request identified by the MCP server request id. It may be triggered during a turn, but turn context is app-server correlation rather than part of the protocol identity of the elicitation itself.",
+          "description": "Active Codex turn when this elicitation was observed, if app-server could correlate one.\n\nThis is nullable because MCP models elicitation as a standalone server-to-client request\nidentified by the MCP server request id. It may be triggered during a turn, but turn\ncontext is app-server correlation rather than part of the protocol identity of the\nelicitation itself.",
           "type": [
             "string",
             "null"
@@ -1559,7 +1559,7 @@
               "type": "string"
             },
             "path": {
-              "description": "(Best effort) Path to the file being read by the command. When possible, this is an absolute path, though when relative, it should be resolved against the `cwd`` that will be used to run the command to derive the absolute path.",
+              "description": "(Best effort) Path to the file being read by the command. When\npossible, this is an absolute path, though when relative, it should\nbe resolved against the `cwd`` that will be used to run the command\nto derive the absolute path.",
               "type": "string"
             },
             "type": {
@@ -1768,7 +1768,7 @@
           "default": null,
           "description": "@deprecated Use `isBlocking` to decide whether the request should block.",
           "format": "uint64",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
@@ -1843,7 +1843,7 @@
   "description": "Request initiated from the server and sent to the client.",
   "oneOf": [
     {
-      "description": "NEW APIs Sent when approval is requested for a specific command execution. This request is used for Turns started via turn/start.",
+      "description": "NEW APIs\nSent when approval is requested for a specific command execution.\nThis request is used for Turns started via turn/start.",
       "properties": {
         "id": {
           "$ref": "#/definitions/RequestId"
@@ -1868,7 +1868,7 @@
       "type": "object"
     },
     {
-      "description": "Sent when approval is requested for a specific file change. This request is used for Turns started via turn/start.",
+      "description": "Sent when approval is requested for a specific file change.\nThis request is used for Turns started via turn/start.",
       "properties": {
         "id": {
           "$ref": "#/definitions/RequestId"
@@ -2042,7 +2042,7 @@
       "type": "object"
     },
     {
-      "description": "DEPRECATED APIs below Request to approve a patch. This request is used for Turns started via the legacy APIs (i.e. SendUserTurn, SendUserMessage).",
+      "description": "DEPRECATED APIs below\nRequest to approve a patch.\nThis request is used for Turns started via the legacy APIs (i.e. SendUserTurn, SendUserMessage).",
       "properties": {
         "id": {
           "$ref": "#/definitions/RequestId"
@@ -2067,7 +2067,7 @@
       "type": "object"
     },
     {
-      "description": "Request to exec a command. This request is used for Turns started via the legacy APIs (i.e. SendUserTurn, SendUserMessage).",
+      "description": "Request to exec a command.\nThis request is used for Turns started via the legacy APIs (i.e. SendUserTurn, SendUserMessage).",
       "properties": {
         "id": {
           "$ref": "#/definitions/RequestId"

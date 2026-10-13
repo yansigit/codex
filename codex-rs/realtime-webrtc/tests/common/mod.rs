@@ -108,7 +108,7 @@ pub fn package(test: &str) -> Result<Option<PathBuf>> {
     Ok(None)
 }
 
-#[ctor::ctor]
+#[ctor::ctor(unsafe)]
 fn dispatch_helper() {
     if std::env::current_exe()
         .ok()

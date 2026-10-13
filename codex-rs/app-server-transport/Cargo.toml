@@ -13,6 +13,7 @@ doctest = false
 workspace = true
 
 [dependencies]
+hex = { workspace = true }
 codex-http-client = { workspace = true }
 codex-websocket-client = { workspace = true }
 axum = { workspace = true, default-features = false, features = [

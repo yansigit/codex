@@ -45,7 +45,7 @@ use futures::SinkExt;
 use futures::StreamExt;
 use futures::stream::SplitSink;
 use futures::stream::SplitStream;
-use rand::Rng;
+use rand::RngExt;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::io;
