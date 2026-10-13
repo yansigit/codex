@@ -93,6 +93,9 @@ jobs:
       - name: Check terminal rendering and state snapshots
         working-directory: codex-rs
         run: cargo test --locked -p codex-tui --lib
+      - name: Check Code Mode execution and bundled ICU data
+        working-directory: codex-rs
+        run: cargo test --locked -p codex-code-mode-runtime --all-targets
       - name: Verify checks did not rewrite tracked source or dependency pins
         run: git diff --exit-code
       - name: Upload stage logs and summary
