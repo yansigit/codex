@@ -3861,7 +3861,11 @@ async fn incomplete_response_is_terminal(use_websocket: bool) -> anyhow::Result<
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;
-    insta::assert_snapshot!(errors.join("\n"), @"Incomplete response returned, reason: max_output_tokens");
+    // `test_case` runs both transports in one `cargo test` process. Insta treats
+    // a second hit of this inline snapshot as a loop unless duplicates are allowed.
+    insta::allow_duplicates! {
+        insta::assert_snapshot!(errors.join("\n"), @"Incomplete response returned, reason: max_output_tokens");
+    }
     if let Some(server) = websocket_server {
         assert_eq!(
             server
