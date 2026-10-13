@@ -208,7 +208,7 @@ jobs:
             bazel_args+=(--config=v8-release-compat)
           fi
 
-          ./.github/scripts/run_bazel_with_buildbuddy.py \
+          python3 .github/scripts/run_v8_bazel_build.py \
             --noexperimental_remote_repo_contents_cache \
             "${bazel_args[@]}" \
             "--config=${{ matrix.bazel_config }}"

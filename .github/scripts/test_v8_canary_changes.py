@@ -69,6 +69,11 @@ version = "149.2.0"
             )
         )
 
+    def test_bazel_retry_helper_change_requires_its_source_build_matrix(self) -> None:
+        paths = {".github/scripts/run_v8_bazel_build.py"}
+        self.assertTrue(canary_required(paths, "152.2.0", "152.2.0"))
+        self.assertFalse(windows_source_required(paths, "152.2.0", "152.2.0"))
+
     def test_changed_files_excludes_changes_made_only_on_base_branch(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

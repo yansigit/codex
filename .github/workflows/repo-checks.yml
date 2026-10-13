@@ -40,6 +40,11 @@ jobs:
       - name: Test release version comparison
         run: python3 -m unittest discover -s .github/scripts -p 'test_releases.py'
 
+      - name: Test V8 source fetch retries and change detection
+        run: |
+          python3 -m unittest discover -s .github/scripts -p 'test_run_v8_bazel_build.py'
+          python3 -m unittest discover -s .github/scripts -p 'test_v8_canary_changes.py'
+
       - name: Test PyPI release verification
         run: uv run --no-project --with packaging==26.3 python -m unittest discover -s .github/scripts -p 'test_verify_pypi_release.py'
 
