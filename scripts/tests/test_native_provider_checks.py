@@ -15,7 +15,7 @@ import native_provider_checks as checks
 
 
 class NativeProviderChecksTest(unittest.TestCase):
-    def test_fresh_checkout_builds_cli_before_integration_tests_spawn_it(self):
+    def test_fresh_checkout_builds_helpers_before_integration_tests_spawn_them(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             manifest = root / "docs/native-providers/integration-manifest.json"
@@ -37,7 +37,10 @@ class NativeProviderChecksTest(unittest.TestCase):
                     }
                 )
             )
-            helper = root / "target/debug/codex"
+            helpers = [
+                root / "target/debug" / name
+                for name in ("codex", "nyacode", "codex-code-mode-host")
+            ]
 
             def run(command, **kwargs):
                 if command[:2] == ["git", "rev-parse"]:
@@ -45,13 +48,15 @@ class NativeProviderChecksTest(unittest.TestCase):
                 log = kwargs["stdout"]
                 if command[:2] == ["cargo", "build"]:
                     self.assertIn("codex-cli", command)
-                    self.assertIn("codex", command)
-                    self.assertIn("nyacode", command)
-                    helper.parent.mkdir(parents=True)
-                    helper.touch()
+                    for helper in helpers:
+                        self.assertIn(helper.name, command)
+                        helper.parent.mkdir(parents=True, exist_ok=True)
+                        helper.touch()
                 if command[:2] == ["cargo", "test"]:
-                    if "codex-core" in command and not helper.is_file():
-                        log.write("CARGO_BIN_EXE_codex is unset\n")
+                    if "codex-core" in command and not all(
+                        helper.is_file() for helper in helpers
+                    ):
+                        log.write("required integration test helper is missing\n")
                         return subprocess.CompletedProcess(command, 101)
                     log.write("test result: ok. 1 passed; 0 failed;\n")
                 return subprocess.CompletedProcess(command, 0)
@@ -63,7 +68,7 @@ class NativeProviderChecksTest(unittest.TestCase):
             ):
                 stages = checks.run_checks(root, root / "logs")
 
-            self.assertTrue(helper.is_file())
+            self.assertTrue(all(helper.is_file() for helper in helpers))
             self.assertTrue(all(stage["exit_code"] == 0 for stage in stages))
             summary = json.loads((root / "logs/summary.json").read_text())
             self.assertEqual(summary["result"], "passed")

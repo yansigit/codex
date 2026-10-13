@@ -145,8 +145,8 @@ def run_checks(root: Path, artifact_dir: Path) -> list[dict[str, Any]]:
     clippy_command.extend(["--all-targets", "--", "-D", "warnings"])
     run_stage("provider-clippy", clippy_command)
 
-    # Core integration tests launch the CLI as an exec-server helper.
-    # Build both names before any test can discover them on a fresh runner.
+    # Core integration tests launch the CLI exec-server and Code Mode host.
+    # Build every helper before tests discover them on a fresh runner.
     run_stage(
         "cli-build",
         [
@@ -157,10 +157,14 @@ def run_checks(root: Path, artifact_dir: Path) -> list[dict[str, Any]]:
             "codex-rs/Cargo.toml",
             "-p",
             "codex-cli",
+            "-p",
+            "codex-code-mode-host",
             "--bin",
             "nyacode",
             "--bin",
             "codex",
+            "--bin",
+            "codex-code-mode-host",
         ],
     )
 
