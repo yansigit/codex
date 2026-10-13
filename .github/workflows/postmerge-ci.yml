@@ -18,6 +18,10 @@ jobs:
   v8-canary:
     name: v8-canary
     if: github.repository == 'openai/codex'
+    # GitHub validates callee permissions even when this job is skipped.
+    permissions:
+      actions: read
+      contents: read
     uses: ./.github/workflows/v8-canary.yml
     secrets: inherit
 
