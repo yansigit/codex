@@ -201,7 +201,7 @@ pub(crate) fn resume_directory(
     SelectionViewParams {
         title: Some("Resume directory".to_string()),
         subtitle: Some(
-            "Choose which working directory to use when the current directory and saved session differ. A directory passed with --cd takes precedence for that Codex session."
+            "Choose which working directory to use when the current directory and saved session differ. A directory passed with --cd takes precedence for that Nyacode session."
                 .to_string(),
         ),
         footer_hint: Some(picker_hint_line_for_keymap(keymap)),
@@ -254,7 +254,7 @@ impl Renderable for ConfigPanelHeader {
 fn header(summary: String) -> Box<dyn Renderable> {
     Box::new(ConfigPanelHeader(vec![
         Line::from("Configuration".bold()),
-        Line::from("Changes save automatically; some apply after restarting Codex.".dim()),
+        Line::from("Changes save automatically; some apply after restarting Nyacode.".dim()),
         Line::from(summary.dim()),
     ]))
 }

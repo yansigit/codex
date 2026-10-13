@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Unified entry point for the Codex CLI.
+// Unified entry point for the Nyacode CLI.
 
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync, realpathSync } from "fs";
@@ -14,12 +14,12 @@ const require = createRequire(import.meta.url);
 const codexPackageRoot = realpathSync(path.join(__dirname, ".."));
 
 const PLATFORM_PACKAGE_BY_TARGET = {
-  "x86_64-unknown-linux-musl": "@openai/codex-linux-x64",
-  "aarch64-unknown-linux-musl": "@openai/codex-linux-arm64",
-  "x86_64-apple-darwin": "@openai/codex-darwin-x64",
-  "aarch64-apple-darwin": "@openai/codex-darwin-arm64",
-  "x86_64-pc-windows-msvc": "@openai/codex-win32-x64",
-  "aarch64-pc-windows-msvc": "@openai/codex-win32-arm64",
+  "x86_64-unknown-linux-musl": "@yansigit/nyacode-linux-x64",
+  "aarch64-unknown-linux-musl": "@yansigit/nyacode-linux-arm64",
+  "x86_64-apple-darwin": "@yansigit/nyacode-darwin-x64",
+  "aarch64-apple-darwin": "@yansigit/nyacode-darwin-arm64",
+  "x86_64-pc-windows-msvc": "@yansigit/nyacode-win32-x64",
+  "aarch64-pc-windows-msvc": "@yansigit/nyacode-win32-arm64",
 };
 
 const { platform, arch } = process;
@@ -76,7 +76,7 @@ if (!platformPackage) {
   throw new Error(`Unsupported target triple: ${targetTriple}`);
 }
 
-function findCodexExecutable() {
+function findNyacodeExecutable() {
   let vendorRoot;
   try {
     const packageJsonPath = require.resolve(`${platformPackage}/package.json`);
@@ -98,18 +98,18 @@ function findCodexExecutable() {
   const packageManager = detectPackageManager();
   const updateCommand =
     packageManager === "bun"
-      ? "bun install -g @openai/codex@latest"
+      ? "bun install -g @yansigit/nyacode@latest"
       : packageManager === "pnpm"
-        ? "pnpm add -g @openai/codex@latest"
+        ? "pnpm add -g @yansigit/nyacode@latest"
         : packageManager === "vite-plus"
-          ? "vp install -g @openai/codex@latest"
-          : "npm install -g @openai/codex@latest";
+          ? "vp install -g @yansigit/nyacode@latest"
+          : "npm install -g @yansigit/nyacode@latest";
   throw new Error(
-    `Missing optional dependency ${platformPackage}. Reinstall Codex: ${updateCommand}`,
+    `Missing optional dependency ${platformPackage}. Reinstall Nyacode: ${updateCommand}`,
   );
 }
 
-const binaryPath = findCodexExecutable();
+const binaryPath = findNyacodeExecutable();
 
 // Use an asynchronous spawn instead of spawnSync so that Node is able to
 // respond to signals (e.g. Ctrl-C / SIGINT) while the native binary is
@@ -117,14 +117,14 @@ const binaryPath = findCodexExecutable();
 // and guarantees that when either the child terminates or the parent
 // receives a fatal signal, both processes exit in a predictable manner.
 
-function isPnpmOwnedCodexInstall(nodeModulesDir) {
+function isPnpmOwnedNyacodeInstall(nodeModulesDir) {
   if (!existsSync(path.join(nodeModulesDir, ".modules.yaml"))) {
     return false;
   }
 
   try {
     return (
-      realpathSync(path.join(nodeModulesDir, "@openai", "codex")) ===
+      realpathSync(path.join(nodeModulesDir, "@yansigit", "nyacode")) ===
       codexPackageRoot
     );
   } catch {
@@ -132,31 +132,31 @@ function isPnpmOwnedCodexInstall(nodeModulesDir) {
   }
 }
 
-function isVitePlusOwnedCodexInstall(packagesDir) {
+function isVitePlusOwnedNyacodeInstall(packagesDir) {
   if (path.basename(packagesDir) !== "packages") {
     return false;
   }
 
   try {
     const metadata = JSON.parse(
-      readFileSync(path.join(packagesDir, "@openai", "codex.json"), "utf8"),
+      readFileSync(path.join(packagesDir, "@yansigit", "nyacode.json"), "utf8"),
     );
-    if (metadata.name !== "@openai/codex") {
+    if (metadata.name !== "@yansigit/nyacode") {
       return false;
     }
 
-    // Vite+ records the active global installation in packages/@openai/codex.json.
+    // Vite+ records the active global installation in packages/@yansigit/nyacode.json.
     // Older installs have no ID or append a #-prefixed ID to the package name;
     // newer installs put the ID in a subdirectory of the package prefix.
     const installId = metadata.installId || "";
     const installDir = installId.startsWith("#")
-      ? path.join(packagesDir, `@openai/codex${installId}`)
-      : path.join(packagesDir, "@openai/codex", installId);
+      ? path.join(packagesDir, `@yansigit/nyacode${installId}`)
+      : path.join(packagesDir, "@yansigit/nyacode", installId);
     for (const nodeModulesDir of [
       path.join(installDir, "lib", "node_modules"),
       path.join(installDir, "node_modules"),
     ]) {
-      const packageRoot = path.join(nodeModulesDir, "@openai", "codex");
+      const packageRoot = path.join(nodeModulesDir, "@yansigit", "nyacode");
       if (
         existsSync(packageRoot) &&
         realpathSync(packageRoot) === codexPackageRoot
@@ -165,13 +165,13 @@ function isVitePlusOwnedCodexInstall(packagesDir) {
       }
     }
   } catch {
-    // Missing or unreadable ownership metadata must not prevent Codex starting.
+    // Missing or unreadable ownership metadata must not prevent Nyacode starting.
   }
   return false;
 }
 
 /**
- * Use heuristics to detect the package manager that was used to install Codex
+ * Use heuristics to detect the package manager that was used to install Nyacode
  * in order to give the user a hint about how to update it.
  */
 function detectPackageManager() {
@@ -186,15 +186,15 @@ function detectPackageManager() {
       currentDir !== filesystemRoot;
       currentDir = path.dirname(currentDir)
     ) {
-      if (isVitePlusOwnedCodexInstall(currentDir)) {
+      if (isVitePlusOwnedNyacodeInstall(currentDir)) {
         return "vite-plus";
       }
-      if (isPnpmOwnedCodexInstall(path.join(currentDir, "node_modules"))) {
+      if (isPnpmOwnedNyacodeInstall(path.join(currentDir, "node_modules"))) {
         return "pnpm";
       }
     }
 
-    if (isPnpmOwnedCodexInstall(path.join(filesystemRoot, "node_modules"))) {
+    if (isPnpmOwnedNyacodeInstall(path.join(filesystemRoot, "node_modules"))) {
       return "pnpm";
     }
   }
@@ -222,21 +222,27 @@ function detectPackageManager() {
 const packageManager = detectPackageManager();
 const packageManagerEnvVar =
   packageManager === "bun"
-    ? "CODEX_MANAGED_BY_BUN"
+    ? "NYACODE_MANAGED_BY_BUN"
     : packageManager === "pnpm"
-      ? "CODEX_MANAGED_BY_PNPM"
+      ? "NYACODE_MANAGED_BY_PNPM"
       : packageManager === "vite-plus"
-        ? "CODEX_MANAGED_BY_VITE_PLUS"
-        : "CODEX_MANAGED_BY_NPM";
+        ? "NYACODE_MANAGED_BY_VITE_PLUS"
+        : "NYACODE_MANAGED_BY_NPM";
 const env = {
   ...process.env,
   CODEX_MANAGED_PACKAGE_ROOT: codexPackageRoot,
 };
+delete env.NYACODE_MANAGED_BY_NPM;
+delete env.NYACODE_MANAGED_BY_BUN;
+delete env.NYACODE_MANAGED_BY_PNPM;
+delete env.NYACODE_MANAGED_BY_VITE_PLUS;
 delete env.CODEX_MANAGED_BY_NPM;
 delete env.CODEX_MANAGED_BY_BUN;
 delete env.CODEX_MANAGED_BY_PNPM;
 delete env.CODEX_MANAGED_BY_VITE_PLUS;
+// Keep legacy launch metadata for compatible diagnostics and subprocesses.
 env[packageManagerEnvVar] = "1";
+env[packageManagerEnvVar.replace("NYACODE_", "CODEX_")] = "1";
 
 const child = spawn(binaryPath, process.argv.slice(2), {
   stdio: "inherit",

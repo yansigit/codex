@@ -194,6 +194,23 @@ def run_checks(root: Path, artifact_dir: Path) -> list[dict[str, Any]]:
             "codex-rs/Cargo.toml",
             "-p",
             "codex-cli",
+            "--bin",
+            "nyacode",
+            "--bin",
+            "codex",
+        ],
+    )
+    run_stage(
+        "nyacode-branding",
+        [
+            sys.executable,
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "scripts/tests",
+            "-p",
+            "test_nyacode_branding.py",
         ],
     )
 

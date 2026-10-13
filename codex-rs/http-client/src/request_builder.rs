@@ -48,6 +48,16 @@ impl fmt::Debug for RequestBuilder {
 }
 
 impl RequestBuilder {
+    pub(crate) fn browser_chat<U: IntoUrl>(
+        client: Arc<crate::browser_chat::BrowserChatClient>,
+        method: Method,
+        url: U,
+    ) -> Self {
+        Self {
+            backend: HttpClientBackend::BrowserChat(client),
+            request: RequestDraft::new(method, url).map_err(HttpError::Request),
+        }
+    }
     pub(crate) fn direct<U: IntoUrl>(client: &TransportClient, method: Method, url: U) -> Self {
         Self {
             backend: HttpClientBackend::Direct(client.clone()),
@@ -180,6 +190,7 @@ impl RequestBuilder {
 
     pub async fn send(self) -> Result<HttpResponse, HttpError> {
         match self.backend {
+            HttpClientBackend::BrowserChat(client) => client.send(self.request?).await,
             HttpClientBackend::Routed(pool) => pool.send(self.request?).await,
             HttpClientBackend::Direct(client) => {
                 Ok(client.execute(self.request?.build(&client)?).await?.into())

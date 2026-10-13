@@ -278,7 +278,7 @@ impl App {
             Err(external_editor::EditorError::MissingEditor) => {
                 self.chat_widget
                     .add_to_history(history_cell::new_error_event(
-                    "Cannot open external editor: set $VISUAL or $EDITOR before starting Codex."
+                    "Cannot open external editor: set $VISUAL or $EDITOR before starting Nyacode."
                         .to_string(),
                 ));
                 self.reset_external_editor_state(tui);
@@ -528,17 +528,17 @@ impl App {
                     items: [
                         (
                             "Cancel task",
-                            "Stop the current task and stay in Codex",
+                            "Stop the current task and stay in Nyacode",
                             RunningTaskExitAction::CancelTask,
                         ),
                         (
                             "Run in background",
-                            "Exit Codex and leave the task running",
+                            "Exit Nyacode and leave the task running",
                             RunningTaskExitAction::RunInBackground,
                         ),
                         (
                             "Exit",
-                            "Stop the current task and exit Codex",
+                            "Stop the current task and exit Nyacode",
                             RunningTaskExitAction::Exit,
                         ),
                     ]
@@ -684,6 +684,12 @@ impl App {
         app_server: &mut AppServerSession,
         key_event: KeyEvent,
     ) -> bool {
+        if self.keymap.app.switch_surface.is_pressed(key_event)
+            && self.config.features.enabled(Feature::ChatgptChat)
+        {
+            self.switch_native_surface(!self.native_chat.active, tui, app_server);
+            return true;
+        }
         if self.keymap.app.open_warnings.is_pressed(key_event) {
             self.chat_widget.open_warnings(&self.transcript_cells);
             return true;

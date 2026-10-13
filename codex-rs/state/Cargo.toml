@@ -19,9 +19,11 @@ sqlx = { workspace = true }
 sqlx-macros = { workspace = true }
 sqlx-sqlite = { workspace = true }
 strum = { workspace = true, features = ["derive"] }
+thiserror = { workspace = true }
 tokio = { workspace = true, features = ["fs", "io-util", "macros", "rt-multi-thread", "sync", "time"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+url = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]

@@ -870,7 +870,7 @@ impl App {
                 color_eyre::eyre::eyre!(
                     "Invalid `tui.keymap` configuration: {err}\n\
 Fix the config and retry.\n\
-See the Codex keymap documentation for supported actions and examples."
+See the Nyacode keymap documentation for supported actions and examples."
                 )
             })?;
         #[cfg(not(debug_assertions))]
@@ -907,6 +907,7 @@ See the Codex keymap documentation for supported actions and examples."
             routed_key_activation: None,
             transcript_cells: Vec::new(),
             native_history: Default::default(),
+            native_chat: Default::default(),
             turn_tips: Default::default(),
             transcript_view: Default::default(),
             last_rendered_history_tail: None,
@@ -1443,7 +1444,16 @@ See the Codex keymap documentation for supported actions and examples."
                             terminal_color_probe_pending = false;
                         }
                     }
-                    AppRunControl::Exit(reason) => break Ok(reason),
+                    AppRunControl::Exit(reason) => {
+                        if app
+                            .native_chat
+                            .finish_writes(&app_server, &tui.frame_requester())
+                            .await
+                        {
+                            break Ok(reason);
+                        }
+                        tui.frame_requester().schedule_frame();
+                    }
                 }
             }
         };

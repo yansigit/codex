@@ -542,6 +542,12 @@ impl ChatWidget {
             SlashCommand::Hooks => {
                 self.add_hooks_output();
             }
+            SlashCommand::Chat => self
+                .app_event_tx
+                .send(AppEvent::SwitchSurface { chat: true }),
+            SlashCommand::Codex => self
+                .app_event_tx
+                .send(AppEvent::SwitchSurface { chat: false }),
             SlashCommand::Daemon => self.app_event_tx.send(AppEvent::OpenDaemonMenu),
             SlashCommand::Warnings => self.app_event_tx.send(AppEvent::OpenWarnings),
             SlashCommand::Status => {
@@ -1250,6 +1256,7 @@ impl ChatWidget {
             service_tier_commands_enabled: !self.current_model_service_tier_commands().is_empty(),
             daybreak_command_description: self.daybreak_command_description(),
             voice_command_enabled: self.realtime_conversation_available_for_thread,
+            native_chat_enabled: self.config.features.enabled(Feature::ChatgptChat),
             worktrees_enabled: self.config.features.enabled(Feature::Worktrees)
                 && self.local_worktree_operations,
             allow_elevate_sandbox,
@@ -1273,6 +1280,8 @@ impl ChatWidget {
             SlashCommand::Ide
             | SlashCommand::Status
             | SlashCommand::Daemon
+            | SlashCommand::Chat
+            | SlashCommand::Codex
             | SlashCommand::Pwd
             | SlashCommand::Usage
             | SlashCommand::DebugConfig

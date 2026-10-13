@@ -266,6 +266,8 @@ mod misalignment_policy;
 mod model_display_name_tests;
 #[path = "tests/model_picker_tests.rs"]
 mod model_picker_tests;
+#[path = "tests/native_chat_isolation_tests.rs"]
+mod native_chat_isolation_tests;
 #[path = "tests/permission_picker_tests.rs"]
 mod permission_picker_tests;
 #[path = "tests/permission_shortcuts_tests.rs"]

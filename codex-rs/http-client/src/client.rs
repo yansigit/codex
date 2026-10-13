@@ -27,6 +27,7 @@ pub struct HttpClient {
 
 #[derive(Clone, Debug)]
 pub(crate) enum HttpClientBackend {
+    BrowserChat(Arc<crate::browser_chat::BrowserChatClient>),
     Direct(TransportClient),
     Routed(Arc<RouteAwareClientPool>),
 }
@@ -61,6 +62,7 @@ impl HttpClient {
     /// Suppresses URL and response-header diagnostics while preserving this client's routing.
     pub fn without_request_logging(mut self) -> Self {
         match &mut self.backend {
+            HttpClientBackend::BrowserChat(_) => {}
             HttpClientBackend::Direct(client) => client.request_logging = RequestLogging::Disabled,
             HttpClientBackend::Routed(pool) => {
                 Arc::make_mut(pool).client_builder.request_logging = RequestLogging::Disabled;
@@ -101,6 +103,9 @@ impl HttpClient {
 
     pub fn request<U: IntoUrl>(&self, method: Method, url: U) -> RequestBuilder {
         match &self.backend {
+            HttpClientBackend::BrowserChat(client) => {
+                RequestBuilder::browser_chat(Arc::clone(client), method, url)
+            }
             HttpClientBackend::Direct(client) => RequestBuilder::direct(client, method, url),
             HttpClientBackend::Routed(pool) => {
                 RequestBuilder::routed(Arc::clone(pool), method, url)
@@ -110,6 +115,7 @@ impl HttpClient {
 
     pub(crate) fn request_logging_enabled(&self) -> bool {
         match &self.backend {
+            HttpClientBackend::BrowserChat(_) => false,
             HttpClientBackend::Direct(client) => client.request_logging == RequestLogging::Enabled,
             HttpClientBackend::Routed(pool) => {
                 pool.client_builder.request_logging == RequestLogging::Enabled

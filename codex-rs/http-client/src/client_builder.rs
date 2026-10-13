@@ -19,6 +19,7 @@ use crate::ClientRouteClass;
 use crate::HttpClient;
 use crate::HttpClientFactory;
 use crate::HttpClientTlsConfig;
+use crate::OutboundProxyPolicy;
 use crate::OutboundProxyRoute;
 use crate::chatgpt_cloudflare_cookies::ChatGptCookieStore;
 use crate::client::HttpClientBackend;
@@ -37,6 +38,7 @@ pub struct HttpClientBuilder {
     http2_prior_knowledge: bool,
     pub(crate) default_headers: Option<HeaderMap>,
     follow_redirects: bool,
+    automatic_retries: bool,
     pub(crate) redirect_observed: Option<Arc<AtomicBool>>,
     connect_timeout: Option<Duration>,
     chatgpt_cloudflare_cookie_store: bool,
@@ -118,6 +120,13 @@ impl HttpClientBuilder {
 
     pub fn without_redirects(mut self) -> Self {
         self.follow_redirects = false;
+        self
+    }
+
+    /// Disables transport-level replay for operations with application-owned
+    /// reconciliation, including ChatGPT submissions and signed uploads.
+    pub fn without_automatic_retries(mut self) -> Self {
+        self.automatic_retries = false;
         self
     }
 
@@ -252,6 +261,24 @@ impl HttpClientBuilder {
         self.build_with_proxy_routing(ProxyRouting::Direct)
     }
 
+    /// Builds a direct client with explicit TLS settings, for exceptional uses
+    /// such as a hermetic local TLS fixture. The proxy-bypass restrictions in
+    /// [`Self::build_direct`] apply; product traffic should use [`Self::build_with_tls`].
+    pub fn build_direct_with_tls(
+        mut self,
+        tls: HttpClientTlsConfig,
+    ) -> Result<HttpClient, BuildRouteAwareHttpClientError> {
+        self.tls = tls;
+        let inner = self.build_for_resolved_route(
+            &HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault),
+            ClientRouteClass::Other,
+            &OutboundProxyRoute::Direct,
+        )?;
+        Ok(HttpClient {
+            backend: HttpClientBackend::Direct(inner),
+        })
+    }
+
     /// Builds a transport-default client while preserving the legacy custom-CA fallback.
     ///
     /// # Legacy compatibility only
@@ -358,6 +385,9 @@ impl HttpClientBuilder {
 
     fn base_reqwest_builder(self) -> reqwest::ClientBuilder {
         let mut builder = reqwest::Client::builder();
+        if !self.automatic_retries {
+            builder = builder.retry(reqwest::retry::never());
+        }
         if self.http2_prior_knowledge {
             builder = builder.http2_prior_knowledge();
         }
@@ -400,6 +430,7 @@ impl Default for HttpClientBuilder {
             http2_prior_knowledge: false,
             default_headers: None,
             follow_redirects: true,
+            automatic_retries: true,
             redirect_observed: None,
             connect_timeout: None,
             chatgpt_cloudflare_cookie_store: false,

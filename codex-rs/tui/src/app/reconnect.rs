@@ -184,6 +184,7 @@ impl App {
             return false;
         }
         if !self.reconnect.offline {
+            self.native_chat.disconnected();
             #[cfg(target_os = "windows")]
             if self.windows_sandbox_setup_is_local()
                 && let Some(message) = self.chat_widget.initial_user_message.take()
@@ -509,7 +510,7 @@ impl App {
         #[cfg(any(target_os = "windows", test))]
         if interrupted_windows_setup {
             self.chat_widget.add_error_message(
-                "Windows sandbox setup was interrupted. Restart Codex before using Agent mode."
+                "Windows sandbox setup was interrupted. Restart Nyacode before using Agent mode."
                     .to_string(),
             );
         }
@@ -518,6 +519,8 @@ impl App {
             server.reconnect(app_server.request_handle(), self.app_event_tx.clone());
         }
         self.reconnect.offline = false;
+        self.native_chat
+            .reconnected(app_server, &tui.frame_requester());
         self.chat_widget.update_account_state(
             bootstrap.status_account_display,
             bootstrap.plan_type,

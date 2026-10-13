@@ -53,6 +53,25 @@ pub struct PastedImageInfo {
 /// Capture image from system clipboard, encode to PNG, and return bytes + info.
 #[cfg(not(target_os = "android"))]
 pub fn paste_image_as_png() -> Result<(Vec<u8>, PastedImageInfo), PasteImageError> {
+    read_image_as_png(false)
+}
+
+/// Chat clipboard selections remain in bounded memory. This path never writes a
+/// temporary file or runs a platform fallback that stages clipboard contents.
+#[cfg(not(target_os = "android"))]
+pub(crate) fn paste_chat_image_as_png() -> Result<Vec<u8>, PasteImageError> {
+    read_image_as_png(true).map(|(bytes, _)| bytes)
+}
+
+#[cfg(target_os = "android")]
+pub(crate) fn paste_chat_image_as_png() -> Result<Vec<u8>, PasteImageError> {
+    Err(PasteImageError::ClipboardUnavailable(
+        "unsupported platform".into(),
+    ))
+}
+
+#[cfg(not(target_os = "android"))]
+fn read_image_as_png(bounded: bool) -> Result<(Vec<u8>, PastedImageInfo), PasteImageError> {
     let _span = tracing::debug_span!("paste_image_as_png").entered();
     tracing::debug!("attempting clipboard image read");
     let mut cb = arboard::Clipboard::new()
@@ -67,8 +86,45 @@ pub fn paste_image_as_png() -> Result<(Vec<u8>, PastedImageInfo), PasteImageErro
     let dyn_img = if let Some(img) = files
         .unwrap_or_default()
         .into_iter()
-        .find_map(|f| image::open(f).ok())
-    {
+        .take(if bounded { 20 } else { usize::MAX })
+        .find_map(|f| {
+            if !bounded {
+                return image::open(f).ok();
+            }
+            use std::io::Read;
+            if !std::fs::metadata(&f).ok()?.is_file() {
+                return None;
+            }
+            let mut options = std::fs::OpenOptions::new();
+            options.read(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                // A path can change after metadata; never block on a FIFO.
+                options.custom_flags(libc::O_NONBLOCK);
+            }
+            let file = options.open(f).ok()?;
+            let metadata = file.metadata().ok()?;
+            if !metadata.is_file() || metadata.len() > 32 * 1024 * 1024 {
+                return None;
+            }
+            let mut bytes = Vec::new();
+            file.take(32 * 1024 * 1024 + 1)
+                .read_to_end(&mut bytes)
+                .ok()?;
+            if bytes.len() > 32 * 1024 * 1024 {
+                return None;
+            }
+            let mut reader = image::ImageReader::new(std::io::Cursor::new(bytes))
+                .with_guessed_format()
+                .ok()?;
+            let mut limits = image::Limits::default();
+            limits.max_alloc = Some(128 * 1024 * 1024);
+            limits.max_image_width = Some(16384);
+            limits.max_image_height = Some(16384);
+            reader.limits(limits);
+            reader.decode().ok()
+        }) {
         tracing::debug!(
             "clipboard image opened from file: {}x{}",
             img.width(),
@@ -80,6 +136,20 @@ pub fn paste_image_as_png() -> Result<(Vec<u8>, PastedImageInfo), PasteImageErro
         let img = cb
             .get_image()
             .map_err(|e| PasteImageError::NoImage(e.to_string()))?;
+        if bounded
+            && (img.width > 16384
+                || img.height > 16384
+                || img
+                    .width
+                    .checked_mul(img.height)
+                    .and_then(|n| n.checked_mul(4))
+                    .is_none_or(|n| n > 128 * 1024 * 1024)
+                || img.bytes.len() > 128 * 1024 * 1024)
+        {
+            return Err(PasteImageError::EncodeFailed(
+                "image exceeds Chat limits".into(),
+            ));
+        }
         let w = img.width as u32;
         let h = img.height as u32;
         tracing::debug!("clipboard image opened from image: {}x{}", w, h);
@@ -95,7 +165,10 @@ pub fn paste_image_as_png() -> Result<(Vec<u8>, PastedImageInfo), PasteImageErro
     {
         let span =
             tracing::debug_span!("encode_image", byte_length = tracing::field::Empty).entered();
-        let mut cursor = std::io::Cursor::new(&mut png);
+        let mut cursor = BoundedImageWriter {
+            inner: std::io::Cursor::new(&mut png),
+            limit: if bounded { 20 * 1024 * 1024 } else { u64::MAX },
+        };
         dyn_img
             .write_to(&mut cursor, image::ImageFormat::Png)
             .map_err(|e| PasteImageError::EncodeFailed(e.to_string()))?;
@@ -110,6 +183,38 @@ pub fn paste_image_as_png() -> Result<(Vec<u8>, PastedImageInfo), PasteImageErro
             encoded_format: EncodedImageFormat::Png,
         },
     ))
+}
+
+#[cfg(not(target_os = "android"))]
+struct BoundedImageWriter<'a> {
+    inner: std::io::Cursor<&'a mut Vec<u8>>,
+    limit: u64,
+}
+
+#[cfg(not(target_os = "android"))]
+impl std::io::Write for BoundedImageWriter<'_> {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        if self.inner.position().saturating_add(bytes.len() as u64) > self.limit {
+            return Err(std::io::Error::other("encoded image exceeds Chat limit"));
+        }
+        std::io::Write::write(&mut self.inner, bytes)
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+impl std::io::Seek for BoundedImageWriter<'_> {
+    fn seek(&mut self, position: std::io::SeekFrom) -> std::io::Result<u64> {
+        let previous = self.inner.position();
+        let next = std::io::Seek::seek(&mut self.inner, position)?;
+        if next > self.limit {
+            self.inner.set_position(previous);
+            return Err(std::io::Error::other("encoded image exceeds Chat limit"));
+        }
+        Ok(next)
+    }
 }
 
 /// Android/Termux does not support arboard; return a clear error.

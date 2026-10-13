@@ -1,3 +1,5 @@
+> Nyacode fork: Python distribution names, imports, and exported types remain compatibility interfaces. Published `openai-codex` packages belong to upstream. To run this fork, use the local SDK source with `CodexConfig(codex_bin="/absolute/path/to/nyacode")`. The upstream installation and release examples below are retained as reference; they do not install Nyacode.
+
 # OpenAI Codex Python SDK
 
 Build Python applications that start Codex threads, run turns, stream progress,

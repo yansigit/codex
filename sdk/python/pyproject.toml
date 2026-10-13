@@ -5,7 +5,7 @@ build-backend = "uv_build"
 [project]
 name = "openai-codex"
 version = "0.0.0-dev"
-description = "Python SDK for Codex"
+description = "Nyacode Python compatibility SDK"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
@@ -19,10 +19,10 @@ classifiers = [
 dependencies = ["pydantic>=2.12", "packaging>=26.2", "openai-codex-cli-bin==0.153.4"]
 
 [project.urls]
-Homepage = "https://github.com/openai/codex"
-Repository = "https://github.com/openai/codex"
-Issues = "https://github.com/openai/codex/issues"
-Documentation = "https://github.com/openai/codex/tree/main/sdk/python/docs"
+Homepage = "https://github.com/yansigit/nyacode"
+Repository = "https://github.com/yansigit/nyacode"
+Issues = "https://github.com/yansigit/nyacode/issues"
+Documentation = "https://github.com/yansigit/nyacode/tree/main/sdk/python/docs"
 
 [dependency-groups]
 format = ["ruff>=0.15.8"]

@@ -795,6 +795,7 @@ mod tests {
     fn fast_mode_action_filter() -> KeymapActionFilter {
         KeymapActionFilter {
             fast_mode_enabled: true,
+            ..Default::default()
         }
     }
 
@@ -825,7 +826,7 @@ mod tests {
             frame_requester: FrameRequester::test_dummy(),
             has_input_focus: true,
             enhanced_keys_supported: false,
-            placeholder_text: "Ask Codex to do anything".to_string(),
+            placeholder_text: "Ask Nyacode to do anything".to_string(),
             disable_paste_burst: false,
             animations_enabled: false,
             effects: Default::default(),
@@ -872,7 +873,10 @@ mod tests {
         let params = build_keymap_picker_params_with_filter(
             &runtime,
             &TuiKeymap::default(),
-            fast_mode_action_filter(),
+            KeymapActionFilter {
+                fast_mode_enabled: true,
+                native_chat_enabled: true,
+            },
         );
         let all_tab = selection_tab(&params, KEYMAP_ALL_TAB_ID);
 

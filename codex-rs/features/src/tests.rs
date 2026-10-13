@@ -15,6 +15,16 @@ use toml::Table;
 use toml::Value as TomlValue;
 
 #[test]
+fn native_chatgpt_chat_is_experimental_and_opt_in() {
+    assert_eq!(feature_for_key("chatgpt_chat"), Some(Feature::ChatgptChat));
+    assert!(matches!(
+        Feature::ChatgptChat.stage(),
+        Stage::Experimental { .. }
+    ));
+    assert!(!Feature::ChatgptChat.default_enabled());
+}
+
+#[test]
 fn guardian_transcript_mode_rejects_invalid_values() {
     for input in [
         "[guardianv2]\ntranscript_mode = 'xml'",

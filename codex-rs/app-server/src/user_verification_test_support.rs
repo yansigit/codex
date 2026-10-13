@@ -117,7 +117,25 @@ pub(super) struct Harness {
 
 impl Harness {
     pub(super) async fn new(origin: ConnectionOrigin, supported: fn() -> bool) -> Result<Self> {
+        Self::new_inner(origin, supported, false).await
+    }
+
+    pub(super) async fn with_chat(origin: ConnectionOrigin) -> Result<Self> {
+        Self::new_inner(origin, || true, true).await
+    }
+
+    async fn new_inner(
+        origin: ConnectionOrigin,
+        supported: fn() -> bool,
+        chat: bool,
+    ) -> Result<Self> {
         let home = tempfile::tempdir()?;
+        if chat {
+            std::fs::write(
+                home.path().join("config.toml"),
+                "[features]\nchatgpt_chat = true\n",
+            )?;
+        }
         write_auth(home.path(), "first")?;
         let config = Arc::new(
             ConfigBuilder::default()
@@ -153,6 +171,14 @@ impl Harness {
             sender,
             AnalyticsEventsClient::disabled(),
         ));
+        let state_db = if chat {
+            Some(
+                codex_state::StateRuntime::init(config.sqlite_config().clone(), "test".into())
+                    .await?,
+            )
+        } else {
+            None
+        };
         let processor = Arc::new(MessageProcessor::new(MessageProcessorArgs {
             outgoing: Arc::clone(&outgoing),
             analytics_events_client: AnalyticsEventsClient::disabled(),
@@ -162,7 +188,7 @@ impl Harness {
             environment_manager: Arc::new(EnvironmentManager::default_for_tests()),
             feedback: CodexFeedback::new(),
             log_db: None,
-            state_db: None,
+            state_db,
             config_warnings: Vec::new(),
             session_source: SessionSource::Cli,
             auth_manager: Arc::clone(&auth),
@@ -174,7 +200,9 @@ impl Harness {
                 ConnectionOrigin::Stdio | ConnectionOrigin::RemoteControl => {
                     AppServerRpcTransport::Stdio
                 }
-                ConnectionOrigin::WebSocket => AppServerRpcTransport::Websocket,
+                ConnectionOrigin::WebSocket | ConnectionOrigin::LocalSocket => {
+                    AppServerRpcTransport::Websocket
+                }
             },
             remote_control_handle: None,
             plugin_startup_tasks: None,
@@ -189,9 +217,11 @@ impl Harness {
             messages,
             home,
             transport: match origin {
-                ConnectionOrigin::WebSocket => AppServerTransport::WebSocket {
-                    bind_address: "127.0.0.1:0".parse()?,
-                },
+                ConnectionOrigin::WebSocket | ConnectionOrigin::LocalSocket => {
+                    AppServerTransport::WebSocket {
+                        bind_address: "127.0.0.1:0".parse()?,
+                    }
+                }
                 // Remote control can share a process whose primary listener is stdio.
                 // Keeping that case tests that authorization uses the connection's origin.
                 ConnectionOrigin::Stdio

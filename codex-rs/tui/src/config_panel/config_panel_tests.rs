@@ -412,7 +412,7 @@ fn refresh_preserves_search_and_updates_visible_state() {
         },
         keymap,
         status: STATUS,
-        notice: Some("Saved · restart Codex to apply".to_string()),
+        notice: Some("Saved · restart Nyacode to apply".to_string()),
     });
 
     assert_eq!(panel.picker.search_query(), Some("animations"));

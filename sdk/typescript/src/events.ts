@@ -72,7 +72,7 @@ export type ThreadErrorEvent = {
   message: string;
 };
 
-/** Top-level JSONL events emitted by codex exec. */
+/** Top-level JSONL events emitted by nyacode exec. */
 export type ThreadEvent =
   | ThreadStartedEvent
   | TurnStartedEvent

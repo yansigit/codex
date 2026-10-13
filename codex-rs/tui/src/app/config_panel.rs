@@ -97,7 +97,7 @@ impl App {
         let notice = if !effective {
             "Saved · another config layer or system preference overrides this value"
         } else if requires_restart {
-            "Saved · restart Codex to apply"
+            "Saved · restart Nyacode to apply"
         } else if matches!(
             preference,
             ConfigPreference::Toggle {
@@ -143,7 +143,7 @@ impl App {
             return;
         }
         self.config_notification_test_pending = None;
-        let notice = if !tui.notify_test("Codex notification test") {
+        let notice = if !tui.notify_test("Nyacode notification test") {
             "Could not send the notification test · check the terminal connection"
         } else if codex_terminal_detection::terminal_info().name
             == codex_terminal_detection::TerminalName::Ghostty

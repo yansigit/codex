@@ -40,6 +40,7 @@ pub use runtime::MAX_GUARDIAN_REVIEW_RECORDS;
 pub use runtime::MAX_GUARDIAN_REVIEW_RECORDS_PER_THREAD;
 /// Preferred entrypoint: owns configuration and metrics.
 pub use runtime::StateRuntime;
+pub use runtime::chat;
 pub use sqlite::SqliteConfig;
 
 pub use audit::ThreadStateAuditRow;

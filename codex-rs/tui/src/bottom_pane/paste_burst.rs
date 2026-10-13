@@ -130,6 +130,10 @@
 //!     to normal insertion.
 //!   - [`CharDecision::BufferAppend`]: call [`PasteBurst::append_char_to_buffer`].
 //!
+//! The native Chat surface also uses the direct-insert timing path. Enter during
+//! a rapid burst inserts a newline and cannot submit the pending draft. Its
+//! explicit bracketed pastes bypass burst buffering and stay in its own editor.
+//!
 //! - For each plain non-ASCII `KeyCode::Char`, call [`PasteBurst::on_plain_char_no_hold`] and then:
 //!   - If it returns `Some(CharDecision::BufferAppend)`, call
 //!     [`PasteBurst::append_char_to_buffer`].

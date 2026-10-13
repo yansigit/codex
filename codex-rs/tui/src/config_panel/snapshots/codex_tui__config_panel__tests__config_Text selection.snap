@@ -1,11 +1,10 @@
 ---
 source: tui/src/config_panel/config_panel_tests.rs
-assertion_line: 71
 expression: "render(&panel, 140)"
 ---
 
   Configuration
-  Changes save automatically; some apply after restarting Codex.
+  Changes save automatically; some apply after restarting Nyacode.
   Settings in this group: 3.
 
    Appearance   Notifications   Input   Sessions   Text selection

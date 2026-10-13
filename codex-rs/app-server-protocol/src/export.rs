@@ -133,6 +133,7 @@ pub fn generate_ts_with_options(
     export_client_responses(out_dir)?;
     ClientNotification::export_all_to(out_dir)?;
     crate::UserVerificationRpcError::export_all_to(out_dir)?;
+    crate::ChatErrorDetails::export_all_to(out_dir)?;
 
     ServerRequest::export_all_to(out_dir)?;
     export_server_responses(out_dir)?;
@@ -230,6 +231,10 @@ pub fn generate_json_with_experimental(out_dir: &Path, experimental_api: bool) -
         schemas.push(emit(out_dir)?);
     }
 
+    schemas.push(write_json_schema::<crate::ChatErrorDetails>(
+        out_dir,
+        "v2::ChatErrorDetails",
+    )?);
     schemas.push(write_json_schema::<crate::UserVerificationRpcError>(
         out_dir,
         "v2::UserVerificationRpcError",
@@ -272,6 +277,16 @@ fn filter_experimental_ts(out_dir: &Path) -> Result<()> {
     // post-processing because they encode method/field information locally.
     filter_request_ts(out_dir, "ClientRequest.ts", EXPERIMENTAL_CLIENT_METHODS)?;
     filter_request_ts(out_dir, "ServerRequest.ts", EXPERIMENTAL_SERVER_METHODS)?;
+    filter_request_ts(
+        out_dir,
+        "ServerNotification.ts",
+        crate::CHAT_EXPERIMENTAL_NOTIFICATION_METHODS,
+    )?;
+    filter_request_ts(
+        out_dir,
+        "ServerNotificationEnvelope.ts",
+        crate::CHAT_EXPERIMENTAL_NOTIFICATION_METHODS,
+    )?;
     filter_experimental_type_fields_ts(out_dir, &registered_fields)?;
     remove_generated_type_files(out_dir, &experimental_method_types, "ts")?;
     let elicitation_path = out_dir.join("v2/McpServerElicitationRequestParams.ts");
@@ -288,9 +303,24 @@ pub(crate) fn filter_experimental_ts_tree(tree: &mut BTreeMap<PathBuf, String>) 
     for (file_name, experimental_methods) in [
         ("ClientRequest.ts", EXPERIMENTAL_CLIENT_METHODS),
         ("ServerRequest.ts", EXPERIMENTAL_SERVER_METHODS),
+        (
+            "ServerNotification.ts",
+            crate::CHAT_EXPERIMENTAL_NOTIFICATION_METHODS,
+        ),
+        (
+            "ServerNotificationEnvelope.ts",
+            crate::CHAT_EXPERIMENTAL_NOTIFICATION_METHODS,
+        ),
     ] {
         if let Some(content) = tree.get_mut(Path::new(file_name)) {
-            *content = filter_request_ts_contents(std::mem::take(content), experimental_methods);
+            *content = filter_request_ts_contents(
+                std::mem::take(content),
+                experimental_methods,
+                matches!(
+                    file_name,
+                    "ServerNotification.ts" | "ServerNotificationEnvelope.ts"
+                ),
+            );
         }
     }
 
@@ -333,13 +363,24 @@ fn filter_request_ts(out_dir: &Path, file_name: &str, experimental_methods: &[&s
     }
     let mut content =
         fs::read_to_string(&path).with_context(|| format!("Failed to read {}", path.display()))?;
-    content = filter_request_ts_contents(content, experimental_methods);
+    content = filter_request_ts_contents(
+        content,
+        experimental_methods,
+        matches!(
+            file_name,
+            "ServerNotification.ts" | "ServerNotificationEnvelope.ts"
+        ),
+    );
 
     fs::write(&path, content).with_context(|| format!("Failed to write {}", path.display()))?;
     Ok(())
 }
 
-fn filter_request_ts_contents(mut content: String, experimental_methods: &[&str]) -> String {
+fn filter_request_ts_contents(
+    mut content: String,
+    experimental_methods: &[&str],
+    preserve_outer_whitespace: bool,
+) -> String {
     let Some((prefix, body, suffix)) = split_type_alias(&content) else {
         return content;
     };
@@ -348,20 +389,63 @@ fn filter_request_ts_contents(mut content: String, experimental_methods: &[&str]
         .copied()
         .filter(|method| !method.is_empty())
         .collect();
-    let arms = split_top_level(&body, '|');
-    let filtered_arms: Vec<String> = arms
-        .into_iter()
-        .filter(|arm| {
-            extract_discriminator_from_arm(arm, "method")
-                .is_none_or(|method| !experimental_methods.contains(method.as_str()))
-        })
-        .collect();
-    let new_body = filtered_arms.join(" | ");
-    content = format!("{prefix}{new_body}{suffix}");
+    let new_body = filter_method_union(&body, &experimental_methods);
+    // Request fixtures historically trim the alias body. Newly filtered
+    // notification unions retain their existing ts-rs whitespace byte for byte.
+    content = if preserve_outer_whitespace {
+        let leading = &body[..body.len() - body.trim_start().len()];
+        let trailing = &body[body.trim_end().len()..];
+        format!("{prefix}{leading}{new_body}{trailing}{suffix}")
+    } else {
+        format!("{prefix}{new_body}{suffix}")
+    };
     let import_usage_scope = split_type_alias(&content)
         .map(|(_, filtered_body, _)| filtered_body)
         .unwrap_or_else(|| new_body.clone());
     prune_unused_type_imports(content, &import_usage_scope)
+}
+
+// Flattened notification envelopes put the method union inside an intersection.
+// Traverse those generated type expressions without touching object properties.
+fn filter_method_union(body: &str, methods: &HashSet<&str>) -> String {
+    let arms = split_top_level(body, '|');
+    if arms.len() > 1 {
+        let kept: Vec<_> = arms
+            .into_iter()
+            .filter(|arm| {
+                extract_discriminator_from_arm(arm, "method")
+                    .is_none_or(|method| !methods.contains(method.as_str()))
+            })
+            .map(|arm| filter_method_union(&arm, methods))
+            .collect();
+        return if kept.is_empty() {
+            "never".into()
+        } else {
+            kept.join(" | ")
+        };
+    }
+    let intersections = split_top_level(body, '&');
+    if intersections.len() > 1 {
+        return intersections
+            .into_iter()
+            .map(|part| filter_method_union(&part, methods))
+            .collect::<Vec<_>>()
+            .join(" & ");
+    }
+    let body = body.trim();
+    if let Some(inner) = body
+        .strip_prefix('(')
+        .and_then(|inner| inner.strip_suffix(')'))
+    {
+        return format!("({})", filter_method_union(inner, methods));
+    }
+    if extract_discriminator_from_arm(body, "method")
+        .is_some_and(|method| methods.contains(method.as_str()))
+    {
+        "never".into()
+    } else {
+        body.to_owned()
+    }
 }
 
 /// Removes experimental properties from generated TypeScript type files.
@@ -437,6 +521,7 @@ fn filter_experimental_schema(bundle: &mut Value) -> Result<()> {
     filter_experimental_fields_in_definitions(bundle, &registered_fields);
     prune_experimental_methods(bundle, EXPERIMENTAL_CLIENT_METHODS);
     prune_experimental_methods(bundle, EXPERIMENTAL_SERVER_METHODS);
+    prune_experimental_methods(bundle, crate::CHAT_EXPERIMENTAL_NOTIFICATION_METHODS);
     remove_experimental_method_type_definitions(bundle);
     user_verification::filter_json(bundle);
     Ok(())
@@ -594,6 +679,7 @@ fn experimental_method_types() -> HashSet<String> {
     collect_experimental_type_names(EXPERIMENTAL_CLIENT_METHOD_PARAM_TYPES, &mut type_names);
     collect_experimental_type_names(EXPERIMENTAL_CLIENT_METHOD_RESPONSE_TYPES, &mut type_names);
     collect_experimental_type_names(EXPERIMENTAL_CLIENT_METHOD_DEPENDENCY_TYPES, &mut type_names);
+    collect_experimental_type_names(crate::CHAT_EXPERIMENTAL_TYPES, &mut type_names);
     collect_experimental_type_names(EXPERIMENTAL_SERVER_METHOD_PARAM_TYPES, &mut type_names);
     collect_experimental_type_names(EXPERIMENTAL_SERVER_METHOD_RESPONSE_TYPES, &mut type_names);
     type_names
@@ -2925,6 +3011,61 @@ permissionProfile?: string | null};
             filtered.contains(r#"import type { SandboxPolicy } from "./SandboxPolicy";"#),
             true
         );
+        Ok(())
+    }
+
+    #[test]
+    fn stable_exports_exclude_all_chat_methods_and_dependencies() -> Result<()> {
+        let root = tempfile::tempdir()?;
+        generate_json_with_experimental(root.path(), false)?;
+        for name in crate::CHAT_EXPERIMENTAL_TYPES {
+            assert!(
+                !root.path().join("v2").join(format!("{name}.json")).exists(),
+                "{name}"
+            );
+        }
+        for file in [
+            "ClientRequest.json",
+            "ServerNotification.json",
+            "codex_app_server_protocol.schemas.json",
+            "codex_app_server_protocol.v2.schemas.json",
+        ] {
+            let contents = fs::read_to_string(root.path().join(file))?;
+            assert!(!contents.contains("chat/"), "{file}");
+            for name in crate::CHAT_EXPERIMENTAL_TYPES {
+                assert!(
+                    !contents.contains(&format!("\"{name}\""))
+                        && !contents.contains(&format!("/{name}\"")),
+                    "{name} in {file}"
+                );
+            }
+        }
+        let typescript = tempfile::tempdir()?;
+        generate_ts_with_options(
+            typescript.path(),
+            None,
+            GenerateTsOptions {
+                experimental_api: false,
+                run_prettier: false,
+                ..Default::default()
+            },
+        )?;
+        for name in crate::CHAT_EXPERIMENTAL_TYPES {
+            assert!(
+                !typescript
+                    .path()
+                    .join("v2")
+                    .join(format!("{name}.ts"))
+                    .exists(),
+                "{name}"
+            );
+        }
+        let request = fs::read_to_string(typescript.path().join("ClientRequest.ts"))?;
+        let notification = fs::read_to_string(typescript.path().join("ServerNotification.ts"))?;
+        let envelope = fs::read_to_string(typescript.path().join("ServerNotificationEnvelope.ts"))?;
+        assert!(!request.contains("chat/"));
+        assert!(!notification.contains("chat/"));
+        assert!(!envelope.contains("chat/"));
         Ok(())
     }
 

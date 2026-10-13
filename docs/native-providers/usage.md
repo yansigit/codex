@@ -29,7 +29,7 @@ a nonempty registered ID; `native_provider` cannot accompany `responses`.
 An installed build may recognize a provider whose transport feature was omitted;
 attempting to use it reports that it was not compiled into the binary.
 
-Use a model ID printed by `codex provider models <provider>`. Discovery reports
+Use a model ID printed by `nyacode provider models <provider>`. Discovery reports
 the catalog visible to the selected account; it is not an entitlement check.
 Availability and supported features can vary by account and model.
 
@@ -38,21 +38,21 @@ Availability and supported features can vary by account and model.
 The provider commands are:
 
 ```text
-codex provider login <provider> [--account <name>] [--with-token] [--add]
-codex provider status [<provider>]
-codex provider logout <provider> [--account <name>]
-codex provider models <provider>
-codex provider accounts <provider> [--json]
-codex provider pool <provider> <action>
+nyacode provider login <provider> [--account <name>] [--with-token] [--add]
+nyacode provider status [<provider>]
+nyacode provider logout <provider> [--account <name>]
+nyacode provider models <provider>
+nyacode provider accounts <provider> [--json]
+nyacode provider pool <provider> <action>
 ```
 
 For an OAuth provider, start its browser flow and inspect status or available
 models after it finishes:
 
 ```sh
-codex provider login claude
-codex provider status claude
-codex provider models claude
+nyacode provider login claude
+nyacode provider status claude
+nyacode provider models claude
 ```
 
 Antigravity requires the OAuth application's registration credentials in the
@@ -61,7 +61,7 @@ CLI or app-server process environment, including when using a stored account:
 ```sh
 export ANTIGRAVITY_OAUTH_CLIENT_ID="<OAuth application client ID>"
 export ANTIGRAVITY_OAUTH_CLIENT_SECRET="<OAuth application client secret>"
-codex provider login antigravity
+nyacode provider login antigravity
 ```
 
 Load the real values from a secret manager or a protected environment file
@@ -75,9 +75,9 @@ OpenCode Go accepts an API key from stdin. Keep the key in a protected file or
 pipe it from a secret manager; do not put it in a command argument:
 
 ```sh
-codex provider login opencode-go --account work --with-token \
+nyacode provider login opencode-go --account work --with-token \
   < /path/to/protected-token-file
-codex provider status opencode-go
+nyacode provider status opencode-go
 ```
 
 `login` selects the named account (default: `default`). `--add` saves and enrolls
@@ -87,17 +87,17 @@ automatically activates pooling for that provider and endpoint. An explicit
 accounts does not silently deactivate a pool.
 
 ```sh
-codex provider login cursor --account personal
-codex provider login cursor --account work --add
-codex provider accounts cursor --json
-codex provider pool cursor order personal work
-codex provider pool cursor disable-account personal
-codex provider pool cursor prefer work
-codex provider pool cursor disable
-codex provider pool cursor enable
-codex provider pool cursor enroll previously-saved-label
-codex provider pool cursor remove personal
-codex provider logout cursor --account personal
+nyacode provider login cursor --account personal
+nyacode provider login cursor --account work --add
+nyacode provider accounts cursor --json
+nyacode provider pool cursor order personal work
+nyacode provider pool cursor disable-account personal
+nyacode provider pool cursor prefer work
+nyacode provider pool cursor disable
+nyacode provider pool cursor enable
+nyacode provider pool cursor enroll previously-saved-label
+nyacode provider pool cursor remove personal
+nyacode provider logout cursor --account personal
 ```
 
 Pool actions are `status [--json]`, `enable`, `disable`, `enroll <label>`,
@@ -145,8 +145,8 @@ bearer token/environment variable. A configured token is authoritative for
 requests. Login and logout are refused while the selected provider has a token
 override, so remove that override before changing the stored login. For example,
 OpenCode Go's built-in provider reads `OPENCODE_API_KEY`; while it is set,
-`codex provider status opencode-go` reports a configured token and
-`codex provider logout opencode-go` asks you to remove the override.
+`nyacode provider status opencode-go` reports a configured token and
+`nyacode provider logout opencode-go` asks you to remove the override.
 
 Built-in provider entries are not overridden by a same-named TOML table. If you
 need an environment key for a native protocol, define a separate provider ID
@@ -163,8 +163,8 @@ env_key = "CLAUDE_API_KEY"
 ```
 
 The native protocol still identifies as `claude`, so use the
-`codex provider login claude`, `codex provider status claude`,
-`codex provider logout claude`, and `codex provider models claude` commands for
+`nyacode provider login claude`, `nyacode provider status claude`,
+`nyacode provider logout claude`, and `nyacode provider models claude` commands for
 the native account store.
 When `CLAUDE_API_KEY` supplies the effective token, login/logout of stored
 Claude credentials are disabled until it is unset. Avoid putting secrets
@@ -183,7 +183,7 @@ provider.
 
 Native credentials, refresh metadata, checkpoints, tool journals, and
 interruption markers are stored under
-`$CODEX_HOME/native-providers/` (or the default Codex home when `CODEX_HOME` is
+`$NYACODE_HOME/native-providers/` (or the default Codex home when `CODEX_HOME` is
 unset). Filenames are derived from hashed provider/account/session keys. On
 Unix, the state directory is private and state files are owner-readable only.
 Pool settings, account indexes, availability, affinity, and handoff journals are

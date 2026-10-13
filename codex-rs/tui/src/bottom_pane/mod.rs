@@ -205,6 +205,7 @@ pub(crate) use title_setup::TerminalTitleSetupView;
 #[cfg(test)]
 pub(crate) use title_setup::preview_line_for_title_items;
 mod paste_burst;
+pub(crate) use paste_burst::PasteBurst;
 mod pending_input_preview;
 mod pending_thread_approvals;
 mod picker_option;
@@ -637,6 +638,10 @@ impl BottomPane {
     pub fn set_goal_command_enabled(&mut self, enabled: bool) {
         self.composer.set_goal_command_enabled(enabled);
         self.request_redraw();
+    }
+
+    pub fn set_native_chat_enabled(&mut self, enabled: bool) {
+        self.composer.set_native_chat_enabled(enabled);
     }
 
     pub fn set_voice_command_enabled(&mut self, enabled: bool) {
@@ -2615,7 +2620,7 @@ mod tests {
             frame_requester: FrameRequester::test_dummy(),
             has_input_focus: true,
             enhanced_keys_supported: false,
-            placeholder_text: "Ask Codex to do anything".to_string(),
+            placeholder_text: "Ask Nyacode to do anything".to_string(),
             disable_paste_burst,
             animations_enabled: true,
             effects: Default::default(),
@@ -2948,7 +2953,7 @@ mod tests {
             frame_requester: FrameRequester::test_dummy(),
             has_input_focus: true,
             enhanced_keys_supported: false,
-            placeholder_text: "Ask Codex to do anything".to_string(),
+            placeholder_text: "Ask Nyacode to do anything".to_string(),
             disable_paste_burst: true,
             animations_enabled: true,
             effects: Default::default(),
@@ -2969,7 +2974,7 @@ mod tests {
             frame_requester: FrameRequester::test_dummy(),
             has_input_focus: true,
             enhanced_keys_supported: false,
-            placeholder_text: "Ask Codex to do anything".to_string(),
+            placeholder_text: "Ask Nyacode to do anything".to_string(),
             disable_paste_burst: true,
             animations_enabled: true,
             effects: Default::default(),
@@ -3003,7 +3008,7 @@ mod tests {
             frame_requester: FrameRequester::test_dummy(),
             has_input_focus: true,
             enhanced_keys_supported: false,
-            placeholder_text: "Ask Codex to do anything".to_string(),
+            placeholder_text: "Ask Nyacode to do anything".to_string(),
             disable_paste_burst: false,
             animations_enabled: true,
             effects: Default::default(),
@@ -3329,7 +3334,7 @@ mod tests {
             frame_requester: FrameRequester::test_dummy(),
             has_input_focus: true,
             enhanced_keys_supported: false,
-            placeholder_text: "Ask Codex to do anything".to_string(),
+            placeholder_text: "Ask Nyacode to do anything".to_string(),
             disable_paste_burst: false,
             animations_enabled: true,
             effects: Default::default(),
@@ -3377,7 +3382,7 @@ mod tests {
             for x in 0..area.width {
                 row.push(buf[(x, y)].symbol().chars().next().unwrap_or(' '));
             }
-            if row.contains("Ask Codex") {
+            if row.contains("Ask Nyacode") {
                 found_composer = true;
                 break;
             }
@@ -3397,7 +3402,7 @@ mod tests {
             frame_requester: FrameRequester::test_dummy(),
             has_input_focus: true,
             enhanced_keys_supported: false,
-            placeholder_text: "Ask Codex to do anything".to_string(),
+            placeholder_text: "Ask Nyacode to do anything".to_string(),
             disable_paste_burst: false,
             animations_enabled: true,
             effects: Default::default(),
@@ -3472,7 +3477,7 @@ mod tests {
             frame_requester: FrameRequester::test_dummy(),
             has_input_focus: true,
             enhanced_keys_supported: false,
-            placeholder_text: "Ask Codex to do anything".to_string(),
+            placeholder_text: "Ask Nyacode to do anything".to_string(),
             disable_paste_burst: false,
             animations_enabled: true,
             effects: Default::default(),
@@ -3504,7 +3509,7 @@ mod tests {
             frame_requester: FrameRequester::test_dummy(),
             has_input_focus: true,
             enhanced_keys_supported: false,
-            placeholder_text: "Ask Codex to do anything".to_string(),
+            placeholder_text: "Ask Nyacode to do anything".to_string(),
             disable_paste_burst: false,
             animations_enabled: true,
             effects: Default::default(),
@@ -3528,7 +3533,7 @@ mod tests {
             frame_requester: FrameRequester::test_dummy(),
             has_input_focus: true,
             enhanced_keys_supported: false,
-            placeholder_text: "Ask Codex to do anything".to_string(),
+            placeholder_text: "Ask Nyacode to do anything".to_string(),
             disable_paste_burst: false,
             animations_enabled: true,
             effects: Default::default(),
@@ -3558,7 +3563,7 @@ mod tests {
             frame_requester: FrameRequester::test_dummy(),
             has_input_focus: true,
             enhanced_keys_supported: false,
-            placeholder_text: "Ask Codex to do anything".to_string(),
+            placeholder_text: "Ask Nyacode to do anything".to_string(),
             disable_paste_burst: false,
             animations_enabled: true,
             effects: Default::default(),
@@ -3596,7 +3601,7 @@ mod tests {
             frame_requester: FrameRequester::test_dummy(),
             has_input_focus: true,
             enhanced_keys_supported: false,
-            placeholder_text: "Ask Codex to do anything".to_string(),
+            placeholder_text: "Ask Nyacode to do anything".to_string(),
             disable_paste_burst: false,
             animations_enabled: true,
             effects: Default::default(),
@@ -3629,7 +3634,7 @@ mod tests {
             frame_requester: FrameRequester::test_dummy(),
             has_input_focus: true,
             enhanced_keys_supported: false,
-            placeholder_text: "Ask Codex to do anything".to_string(),
+            placeholder_text: "Ask Nyacode to do anything".to_string(),
             disable_paste_burst: false,
             animations_enabled: true,
             effects: Default::default(),
@@ -3661,7 +3666,7 @@ mod tests {
             frame_requester: FrameRequester::test_dummy(),
             has_input_focus: true,
             enhanced_keys_supported: false,
-            placeholder_text: "Ask Codex to do anything".to_string(),
+            placeholder_text: "Ask Nyacode to do anything".to_string(),
             disable_paste_burst: false,
             animations_enabled: true,
             effects: Default::default(),
@@ -3691,7 +3696,7 @@ mod tests {
             frame_requester: FrameRequester::test_dummy(),
             has_input_focus: true,
             enhanced_keys_supported: false,
-            placeholder_text: "Ask Codex to do anything".to_string(),
+            placeholder_text: "Ask Nyacode to do anything".to_string(),
             disable_paste_burst: false,
             animations_enabled: true,
             effects: Default::default(),
@@ -3715,7 +3720,7 @@ mod tests {
             frame_requester: FrameRequester::test_dummy(),
             has_input_focus: true,
             enhanced_keys_supported: false,
-            placeholder_text: "Ask Codex to do anything".to_string(),
+            placeholder_text: "Ask Nyacode to do anything".to_string(),
             disable_paste_burst: false,
             animations_enabled: true,
             effects: Default::default(),
@@ -3764,7 +3769,7 @@ mod tests {
             frame_requester: FrameRequester::test_dummy(),
             has_input_focus: true,
             enhanced_keys_supported: false,
-            placeholder_text: "Ask Codex to do anything".to_string(),
+            placeholder_text: "Ask Nyacode to do anything".to_string(),
             disable_paste_burst: false,
             animations_enabled: true,
             effects: Default::default(),
@@ -3833,7 +3838,7 @@ mod tests {
             frame_requester: FrameRequester::test_dummy(),
             has_input_focus: true,
             enhanced_keys_supported: false,
-            placeholder_text: "Ask Codex to do anything".to_string(),
+            placeholder_text: "Ask Nyacode to do anything".to_string(),
             disable_paste_burst: false,
             animations_enabled: true,
             effects: Default::default(),
@@ -3870,7 +3875,7 @@ mod tests {
             frame_requester: FrameRequester::test_dummy(),
             has_input_focus: true,
             enhanced_keys_supported: false,
-            placeholder_text: "Ask Codex to do anything".to_string(),
+            placeholder_text: "Ask Nyacode to do anything".to_string(),
             disable_paste_burst: false,
             animations_enabled: true,
             effects: Default::default(),
@@ -3919,7 +3924,7 @@ mod tests {
             frame_requester: FrameRequester::test_dummy(),
             has_input_focus: true,
             enhanced_keys_supported: false,
-            placeholder_text: "Ask Codex to do anything".to_string(),
+            placeholder_text: "Ask Nyacode to do anything".to_string(),
             disable_paste_burst: false,
             animations_enabled: true,
             effects: Default::default(),
@@ -4045,7 +4050,7 @@ mod tests {
             frame_requester: FrameRequester::test_dummy(),
             has_input_focus: true,
             enhanced_keys_supported: false,
-            placeholder_text: "Ask Codex to do anything".to_string(),
+            placeholder_text: "Ask Nyacode to do anything".to_string(),
             disable_paste_burst: false,
             animations_enabled: true,
             effects: Default::default(),
@@ -4094,7 +4099,7 @@ mod tests {
             frame_requester: FrameRequester::test_dummy(),
             has_input_focus: true,
             enhanced_keys_supported: false,
-            placeholder_text: "Ask Codex to do anything".to_string(),
+            placeholder_text: "Ask Nyacode to do anything".to_string(),
             disable_paste_burst: false,
             animations_enabled: true,
             effects: Default::default(),
@@ -4173,7 +4178,7 @@ mod tests {
             frame_requester: FrameRequester::test_dummy(),
             has_input_focus: true,
             enhanced_keys_supported: false,
-            placeholder_text: "Ask Codex to do anything".to_string(),
+            placeholder_text: "Ask Nyacode to do anything".to_string(),
             disable_paste_burst: false,
             animations_enabled: true,
             effects: Default::default(),

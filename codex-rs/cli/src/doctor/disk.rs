@@ -16,7 +16,7 @@ pub(super) fn check(config: Option<&Config>, cwd: &Path) -> DoctorCheck {
     let home = config
         .map(|config| config.codex_home.as_path().to_path_buf())
         .or_else(|| find_codex_home().ok().map(Into::into))
-        .or_else(|| std::env::var_os("CODEX_HOME").map(Into::into));
+        .or_else(|| codex_utils_home_dir::home_override().map(|(_, path)| path.into()));
 
     check_with_paths(home.as_deref(), cwd, available_space)
 }

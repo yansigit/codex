@@ -60,7 +60,7 @@ The opt-in live runner uses the built app-server and existing private credential
 ```sh
 python3 scripts/native_provider_multiagent_acceptance.py \
   --codex "$PWD/codex-rs/target/debug/codex" \
-  --codex-home "$CODEX_HOME" \
+  --codex-home "$NYACODE_HOME" \
   --provider cursor --model gpt-5.6-luna-none \
   --child opencode-go:glm-5.3 \
   --child antigravity:claude-sonnet-4-6 \

@@ -1,4 +1,4 @@
-//! The main Codex TUI chat surface.
+//! The main Nyacode TUI chat surface.
 //!
 //! `ChatWidget` consumes protocol events, builds and updates history cells, and drives rendering
 //! for both the main viewport and overlay UIs.
@@ -1723,6 +1723,10 @@ impl ChatWidget {
     }
 
     /// Whether an agent message stream is active (not a plan stream).
+    pub(crate) fn frame_requester(&self) -> crate::tui::FrameRequester {
+        self.frame_requester.clone()
+    }
+
     pub(crate) fn has_active_agent_stream(&self) -> bool {
         self.stream_controller.is_some()
     }
@@ -2077,7 +2081,7 @@ impl Drop for ChatWidget {
     }
 }
 
-const PLACEHOLDER: &str = "Ask Codex to do anything";
+const PLACEHOLDER: &str = "Ask Nyacode to do anything";
 const SIDE_PLACEHOLDER: &str = "Ask a follow-up question";
 
 // Extract the first bold (Markdown) element in the form **...** from `s`.

@@ -1,4 +1,4 @@
-//! Ambient terminal rendering for the Codex companion.
+//! Ambient terminal rendering for the Nyacode companion.
 //!
 //! Ambient pets reuse the same extracted image frames as the full-screen viewer
 //! but are rendered through a different ownership split: ratatui still owns the

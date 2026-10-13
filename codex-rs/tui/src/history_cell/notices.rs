@@ -56,7 +56,7 @@ impl HistoryCell for UpdateAvailableHistoryCell {
             update_instruction,
             "",
             "See full release notes:",
-            "https://github.com/openai/codex/releases/latest"
+            "https://github.com/yansigit/nyacode/releases/latest"
                 .fg(accent_color())
                 .underlined(),
         ];
@@ -81,7 +81,7 @@ impl HistoryCell for UpdateAvailableHistoryCell {
             Line::from(update_instruction),
             Line::from(""),
             Line::from("See full release notes:"),
-            Line::from("https://github.com/openai/codex/releases/latest"),
+            Line::from("https://github.com/yansigit/nyacode/releases/latest"),
         ]
     }
 

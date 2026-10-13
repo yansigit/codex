@@ -6,6 +6,16 @@ impl ChatWidget {
         notification: ServerNotification,
         replay_kind: Option<ReplayKind>,
     ) {
+        if matches!(
+            &notification,
+            ServerNotification::ChatAvailability(_)
+                | ServerNotification::ChatMessage(_)
+                | ServerNotification::ChatAttachment(_)
+                | ServerNotification::ChatConversation(_)
+                | ServerNotification::ChatTurnCompleted(_)
+        ) {
+            return;
+        }
         // Reject misrouted child updates before shared notification handling mutates parent state.
         if let ServerNotification::McpServerStatusUpdated(notification) = &notification
             && let (Some(notification_thread_id), Some(thread_id)) =
@@ -44,6 +54,13 @@ impl ChatWidget {
             self.restore_retry_status_header_if_present();
         }
         match notification {
+            // Native Chat notifications belong to the app's independent Chat
+            // surface. They must never enter a Codex thread transcript.
+            ServerNotification::ChatAvailability(_)
+            | ServerNotification::ChatMessage(_)
+            | ServerNotification::ChatAttachment(_)
+            | ServerNotification::ChatConversation(_)
+            | ServerNotification::ChatTurnCompleted(_) => {}
             ServerNotification::McpServerOauthLoginCompleted(notification) => {
                 if notification.success {
                     self.add_info_message(

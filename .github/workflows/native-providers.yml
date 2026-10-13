@@ -5,6 +5,10 @@ on:
     paths:
       - "codex-rs/**"
       - "scripts/native_provider_*.py"
+      - "scripts/tests/test_nyacode_branding.py"
+      - "scripts/build_nyacode.py"
+      - "scripts/install/**"
+      - "codex-cli/**"
       - "scripts/tests/test_native_provider_*.py"
       - "docs/native-providers/**"
       - ".github/workflows/native-providers.yml"
@@ -12,6 +16,10 @@ on:
     paths:
       - "codex-rs/**"
       - "scripts/native_provider_*.py"
+      - "scripts/tests/test_nyacode_branding.py"
+      - "scripts/build_nyacode.py"
+      - "scripts/install/**"
+      - "codex-cli/**"
       - "scripts/tests/test_native_provider_*.py"
       - "docs/native-providers/**"
       - ".github/workflows/native-providers.yml"
@@ -54,6 +62,12 @@ jobs:
         run: >-
           python3 scripts/native_provider_checks.py
           --artifact-dir /tmp/native-provider-checks
+      - name: Verify fork installers and package layout
+        env:
+          CODEX_REPO_ROOT: ${{ github.workspace }}
+        run: |
+          python3 -m unittest discover -s scripts/install -p "test_install_sh.py"
+          python3 -m unittest discover -s scripts/codex_package -p "test_*.py"
       - name: Upload stage logs and summary
         if: always()
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
