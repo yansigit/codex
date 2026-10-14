@@ -3801,6 +3801,87 @@ async fn incomplete_response_emits_content_filter_error_message() -> anyhow::Res
     Ok(())
 }
 
+#[test_case::test_case(false; "sse")]
+#[test_case::test_case(true; "websocket")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn incomplete_response_is_terminal(use_websocket: bool) -> anyhow::Result<()> {
+    skip_if_no_network!(Ok(()));
+    let incomplete = vec![
+        ev_response_created("resp-incomplete"),
+        ev_assistant_message("partial", "Partial reply."),
+        json!({
+            "type": "response.incomplete",
+            "response": {
+                "id": "resp-incomplete",
+                "incomplete_details": {"reason": "max_output_tokens"}
+            }
+        }),
+    ];
+    let server = MockServer::start().await;
+    let response_mock = if use_websocket {
+        None
+    } else {
+        Some(mount_sse_once(&server, sse(incomplete.clone())).await)
+    };
+    let websocket_server = if use_websocket {
+        Some(
+            core_test_support::responses::start_websocket_server(vec![vec![
+                vec![ev_response_created("prewarm"), ev_completed("prewarm")],
+                incomplete,
+            ]])
+            .await,
+        )
+    } else {
+        None
+    };
+    let mut builder = test_codex().with_config(|config| {
+        config.model_provider.stream_max_retries = Some(2);
+        config.model_provider.request_max_retries = Some(0);
+    });
+    let test = if let Some(server) = &websocket_server {
+        builder.build_with_websocket_server(server).await?
+    } else {
+        builder.build_with_auto_env(&server).await?
+    };
+    test.codex
+        .start_or_steer_turn(TurnInputRequest::user_input(vec![UserInput::Text {
+            text: "trigger output limit".into(),
+            text_elements: Vec::new(),
+        }]))
+        .await?;
+    let mut errors = Vec::new();
+    wait_for_event(&test.codex, |event| {
+        match event {
+            EventMsg::Error(error) => errors.push(error.message.clone()),
+            EventMsg::StreamError(_) | EventMsg::Warning(_) | EventMsg::RawResponseCompleted(_) => {
+                panic!("unexpected incomplete-response event: {event:?}")
+            }
+            _ => {}
+        }
+        matches!(event, EventMsg::TurnComplete(_))
+    })
+    .await;
+    // `test_case` runs both transports in one `cargo test` process. Insta treats
+    // a second hit of this inline snapshot as a loop unless duplicates are allowed.
+    insta::allow_duplicates! {
+        insta::assert_snapshot!(errors.join("\n"), @"Incomplete response returned, reason: max_output_tokens");
+    }
+    if let Some(server) = websocket_server {
+        assert_eq!(
+            server
+                .connections()
+                .iter()
+                .map(Vec::len)
+                .collect::<Vec<_>>(),
+            vec![2],
+        );
+        server.shutdown().await;
+    } else {
+        response_mock.expect("SSE response mock").single_request();
+    }
+    Ok(())
+}
+
 /// We try to avoid setting env vars in tests because std::env::set_var() is
 /// process-wide and unsafe. Though for this test, we want to simulate the
 /// presence of an environment variable that the provider will read for auth, so

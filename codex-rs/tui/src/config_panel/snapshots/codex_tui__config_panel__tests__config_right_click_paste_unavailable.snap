@@ -4,17 +4,15 @@ expression: "render(&panel, 140)"
 ---
 
   Configuration
-  Changes save automatically; some apply after restarting Nyacode.
-  Settings in this group: 3.
+  Changes save automatically
 
    Appearance   Notifications   Input   Sessions   Text selection
 
-  Copy on select           Auto · On ›          Copy transcript selections on release. Auto uses terminal defaults.
-      Deselect after copy  [ ] Off              Remove the selection highlight after Copy on select succeeds.
-› Right-click paste        On · Unavailable ›   Unavailable in inline mode. Use your terminal's paste command.
+  Copy on select        Auto · On ›          Copy transcript selections on release, with Auto following terminal defaults
+  Deselect after copy   [ ] Off              Remove the selection highlight after Copy on select succeeds
+› Right-click paste     On · Unavailable ›   Unavailable in inline mode; use your terminal's paste command
 
 
 
 
-
-  left/right group · / search · enter edit setting · esc close
+  left/right group · / search · enter open · esc clear search/close

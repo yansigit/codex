@@ -93,6 +93,8 @@
 //!
 //! - `flush_before_modified_input()` returns the buffered text (and/or a pending first ASCII char)
 //!   so the caller can apply it through the normal paste path before handling an unrelated input.
+//! - `flush_pending()` preserves the typed-key versus paste distinction. Draft recovery calls it
+//!   on a clone so a held Vim Replace key is recovered as a replacement without consuming input.
 //! - `clear_window_after_non_char()` clears the *classification window* so subsequent typing does
 //!   not get grouped into the previous burst. It assumes the caller has already flushed any buffer
 //!   because it clears `last_plain_char_time`, which means `flush_if_due()` will not flush a
@@ -308,18 +310,21 @@ impl PasteBurst {
         let timed_out = self
             .last_plain_char_time
             .is_some_and(|t| now.duration_since(t) > timeout);
-        if timed_out && self.is_active_internal() {
+        if timed_out {
+            self.flush_pending()
+        } else {
+            FlushResult::None
+        }
+    }
+
+    /// Flush without waiting, retaining the typed-key versus paste distinction.
+    pub(crate) fn flush_pending(&mut self) -> FlushResult {
+        if self.is_active_internal() {
             self.active = false;
             let out = std::mem::take(&mut self.buffer);
             FlushResult::Paste(out)
-        } else if timed_out {
-            // If we were saving a single fast char and no burst followed,
-            // flush it as normal typed input.
-            if let Some((ch, _at)) = self.pending_first_char.take() {
-                FlushResult::Typed(ch)
-            } else {
-                FlushResult::None
-            }
+        } else if let Some((ch, _at)) = self.pending_first_char.take() {
+            FlushResult::Typed(ch)
         } else {
             FlushResult::None
         }

@@ -356,7 +356,13 @@ async fn cached_legacy_resume_revalidates_history_across_migration_settings() ->
                 .expect("acquire rollout maintenance lock");
         let mut app_server =
             Box::pin(crate::start_embedded_app_server_for_picker(&startup_config)).await?;
-        app_server.remember_thread_history_mode(legacy_thread_id, ThreadHistoryMode::Legacy);
+        // Populate the hint from an authoritative read, as the picker does, before
+        // counting the requests needed to revalidate and resume that cached view.
+        let selected = app_server
+            .thread_read(legacy_thread_id, /*include_turns*/ false)
+            .await?;
+        assert_eq!(selected.history_mode, ThreadHistoryMode::Legacy);
+        app_server.remember_thread_history_mode(legacy_thread_id, selected.history_mode);
         let local_settings = crate::local_settings::LocalSettings::from(&resume_config);
         let next_request_id = app_server.next_request_id;
         let legacy = {
@@ -376,7 +382,15 @@ async fn cached_legacy_resume_revalidates_history_across_migration_settings() ->
             );
             resume.await?
         };
-        assert_eq!(app_server.next_request_id, next_request_id + 2);
+        assert_eq!(
+            app_server.next_request_id,
+            next_request_id + 2,
+            "startup migration = {startup_enabled}, workspace migration = {workspace_enabled}, history mode = {:?}",
+            app_server
+                .history_pagination
+                .get(&legacy_thread_id)
+                .map(|state| state.history_mode)
+        );
         assert!(!legacy.turns.is_empty());
         app_server.shutdown().await?;
     }

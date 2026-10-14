@@ -3389,67 +3389,91 @@ async fn assert_parent_compaction_reuse(parent_context_for_review: bool) -> Resu
         encrypted_content: "a".repeat(TruncationPolicy::Tokens(/*limit*/ 256).byte_budget()),
         internal_chat_message_metadata_passthrough: None,
     };
-    registry.tool_lifecycle_contributors()[0]
-        .on_tool_start(ToolStartInput {
-            permissions: Box::pin(async { Some(Default::default()) }),
-            session_store: &session_store,
-            thread_store,
-            turn_store: &turn_store,
-            turn_id: "turn-1",
-            root_turn_id: None,
-            call_id: "call-2",
-            originating_item_id: None,
-            tool_name: &tool_name,
-            mcp_tool: None,
-            payload: &tool_payload,
-            conversation_history: Arc::new(TestRetainedHistory {
-                current: TestConversationHistory(vec![latest_compaction, oversized_compaction]),
-                retained: Vec::new(),
-                retained_context: parent_context_for_review
-                    .then(codex_history::RetainedContext::default),
-                compaction_model_hash: thread_store
-                    .get::<ModelInfo>()
-                    .and_then(|model| model.comp_hash.clone()),
-                review_context_revision,
-            }),
-            source: ToolCallSource::Direct,
-        })
-        .await;
+    let mut rejected_compactions = vec![(oversized_compaction, "parent_compaction_oversized")];
+    // Legacy context can omit unusable checkpoints and still review its raw history.
+    if parent_context_for_review {
+        rejected_compactions.push((
+            ResponseItem::ContextCompaction {
+                id: Some(ResponseItemId::from_server("cmp_unusable".to_owned())),
+                encrypted_content: None,
+                internal_chat_message_metadata_passthrough: None,
+            },
+            "parent_compaction_unusable",
+        ));
+    }
+    for (index, (rejected_compaction, failure_reason)) in
+        rejected_compactions.into_iter().enumerate()
+    {
+        let call_id = format!("call-{}", index + 2);
+        registry.tool_lifecycle_contributors()[0]
+            .on_tool_start(ToolStartInput {
+                permissions: Box::pin(async { Some(Default::default()) }),
+                session_store: &session_store,
+                thread_store,
+                turn_store: &turn_store,
+                turn_id: "turn-1",
+                root_turn_id: None,
+                call_id: &call_id,
+                originating_item_id: None,
+                tool_name: &tool_name,
+                mcp_tool: None,
+                payload: &tool_payload,
+                conversation_history: Arc::new(TestRetainedHistory {
+                    current: TestConversationHistory(vec![
+                        latest_compaction.clone(),
+                        rejected_compaction,
+                    ]),
+                    retained: Vec::new(),
+                    retained_context: parent_context_for_review
+                        .then(codex_history::RetainedContext::default),
+                    compaction_model_hash: thread_store
+                        .get::<ModelInfo>()
+                        .and_then(|model| model.comp_hash.clone()),
+                    review_context_revision,
+                }),
+                source: ToolCallSource::Direct,
+            })
+            .await;
 
-    let fail_closed_score = cached_score(thread_store)
-        .expect("an oversized compaction should immediately receive the maximum risk score");
-    assert_eq!(
-        &fail_closed_score,
-        &SecurityRiskScore {
-            scores: BTreeMap::from([("action_risk".to_owned(), 1.0)]),
-            call_id: None,
-            action: None,
-            sampled_at: fail_closed_score.sampled_at,
-        }
-    );
-    assert_eq!(
-        cached_approval(
-            &registry,
-            thread_store,
-            "review action",
-            /*metrics*/ None,
-        )
-        .await,
-        None
-    );
-    assert_eq!(
-        server.connections().iter().map(Vec::len).sum::<usize>(),
-        1,
-        "an oversized latest compaction must bypass Luna rather than reuse stale context"
-    );
-    assert!(metrics.0.lock().unwrap().iter().any(|sample| {
-        matches!(
-            sample,
-            RecordedMetric::Counter(name, 1, tags)
-                if name == CLASSIFICATION_METRIC
-                    && tags.contains(&("outcome".to_owned(), "failure".to_owned()))
-        )
-    }));
+        let fail_closed_score = cached_score(thread_store)
+            .expect("a rejected compaction should immediately receive the maximum risk score");
+        assert_eq!(
+            &fail_closed_score,
+            &SecurityRiskScore {
+                scores: BTreeMap::from([("action_risk".to_owned(), 1.0)]),
+                call_id: None,
+                action: None,
+                sampled_at: fail_closed_score.sampled_at,
+            }
+        );
+        assert_eq!(
+            cached_approval(
+                &registry,
+                thread_store,
+                "review action",
+                /*metrics*/ None,
+            )
+            .await,
+            None
+        );
+        assert_eq!(
+            server.connections().iter().map(Vec::len).sum::<usize>(),
+            1,
+            "a rejected latest compaction must bypass Luna rather than reuse stale context"
+        );
+        assert!(metrics.0.lock().unwrap().iter().any(|sample| {
+            matches!(
+                sample,
+                RecordedMetric::Counter(name, 1, tags)
+                    if name == CLASSIFICATION_METRIC
+                        && tags.contains(&("outcome".to_owned(), "failure".to_owned()))
+                        && tags.contains(&(
+                            "failure_reason".to_owned(),
+                            failure_reason.to_owned(),
+                        ))
+            )
+        }));
+    }
 
     Ok(())
 }

@@ -799,7 +799,7 @@ async fn model_probe_uses_managed_auth_and_account_headers() {
         .and(header("x-openai-target-path", "/backend-api/models"))
         .respond_with(
             ResponseTemplate::new(200)
-                .set_body_json(json!({"models": [{"slug": "fixture-model"}]})),
+                .set_body_json(json!({"categories":[{"default_model":"fixture-model","supported_models":[]}],"models": [{"slug": "fixture-model"}]})),
         )
         .expect(1)
         .mount(&server)

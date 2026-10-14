@@ -332,7 +332,13 @@ async fn run_compact_task_inner_impl(
             {
                 return Err(err);
             }
-            Err(e) if matches!(e.details(), CodexErrorDetails::SessionBudgetExceeded) => {
+            Err(e)
+                if matches!(
+                    e.details(),
+                    CodexErrorDetails::SessionBudgetExceeded
+                        | CodexErrorDetails::ResponseIncomplete(_)
+                ) =>
+            {
                 return Err(e);
             }
             Err(e) if matches!(e.details(), CodexErrorDetails::ContextWindowExceeded) => {

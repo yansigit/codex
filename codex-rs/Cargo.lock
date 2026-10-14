@@ -3406,6 +3406,7 @@ dependencies = [
  "codex-utils-sandbox-summary",
  "codex-worktree",
  "core_test_support",
+ "insta",
  "libc",
  "opentelemetry",
  "opentelemetry_sdk",

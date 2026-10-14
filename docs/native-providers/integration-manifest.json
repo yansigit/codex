@@ -123,6 +123,20 @@
       "minimum_tests": 4
     },
     {
+      "name": "chat-saved-storage-recovery",
+      "packages": ["codex-state"],
+      "test_target": "lib",
+      "filter": "runtime::chat::tests",
+      "minimum_tests": 30
+    },
+    {
+      "name": "chat-saved-service-recovery",
+      "packages": ["codex-app-server"],
+      "test_target": "lib",
+      "filter": "chat::saved::tests",
+      "minimum_tests": 7
+    },
+    {
       "name": "schema-fixtures",
       "packages": ["codex-app-server-protocol"],
       "filter": "schema_fixtures",

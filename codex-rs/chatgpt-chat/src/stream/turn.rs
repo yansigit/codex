@@ -51,6 +51,24 @@ pub struct Message {
 }
 
 impl Message {
+    /// Apply the same presentation boundary to live turns and saved history.
+    /// Internal context must never enter client snapshots or submission journals.
+    pub(crate) fn is_visible(value: &Value) -> Result<bool, StreamError> {
+        let role = short_string(value.pointer("/author/role"), 64)?;
+        let hidden = match value.pointer("/metadata/is_visually_hidden_from_conversation") {
+            None | Some(Value::Null) => false,
+            Some(Value::Bool(hidden)) => *hidden,
+            _ => return Err(StreamError::InvalidProtocol),
+        };
+        let internal = matches!(
+            value
+                .pointer("/content/content_type")
+                .and_then(Value::as_str),
+            Some("model_editable_context" | "user_editable_context")
+        );
+        Ok(!hidden && !internal && !matches!(role, "system" | "developer"))
+    }
+
     pub(crate) fn parse(value: &Value) -> Result<Self, StreamError> {
         let id = identifier(value.get("id"))?.to_owned();
         let role = short_string(value.pointer("/author/role"), 64)?.to_owned();
@@ -240,9 +258,14 @@ impl TurnState {
             None => object.get("message"),
         };
         if let Some(message) = message.filter(|m| !m.is_null()) {
+            let visible = Message::is_visible(message)?;
             let message = Message::parse(message)?;
             if message.role == "user" && message.id == self.expected_message_id {
                 self.acceptance = Acceptance::Accepted;
+            }
+            if !visible {
+                self.messages.retain(|old| old.id != message.id);
+                return Ok(());
             }
             if message.role == "assistant"
                 && let Some(model) = &message.model
@@ -505,5 +528,89 @@ mod tests {
         decoder
             .push(b"event: delta_encoding\ndata: \"v1\"\n\nevent: delta\ndata: {\"v\":{}}\n\n")
             .unwrap();
+    }
+}
+
+#[cfg(test)]
+mod visibility_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn message(id: &str, role: &str, kind: &str, hidden: bool, model: &str) -> Value {
+        json!({"id":id,"author":{"role":role},
+            "content":{"content_type":kind,"parts":["fixture text"]},
+            "metadata":{"is_visually_hidden_from_conversation":hidden,"model_slug":model},
+            "status":"finished_successfully","end_turn":true})
+    }
+
+    #[test]
+    fn live_internal_messages_do_not_pollute_transcripts_or_response_model() {
+        let mut decoder = TurnDecoder::new("user".into());
+        let state = &mut decoder.state;
+        state.reduce(&json!({"type":"input_message","input_message":message("user","user","text",false,"input-model")})).unwrap();
+        state
+            .reduce(
+                &json!({"message":message("assistant","assistant","text",false,"response-model")}),
+            )
+            .unwrap();
+        for (id, role, kind, hidden) in [
+            ("system", "system", "text", false),
+            ("developer", "developer", "text", false),
+            ("context", "assistant", "model_editable_context", false),
+            ("profile", "user", "user_editable_context", false),
+            ("hidden", "assistant", "text", true),
+        ] {
+            state
+                .reduce(&json!({"message":message(id,role,kind,hidden,"internal-model")}))
+                .unwrap();
+        }
+        state
+            .reduce(&json!({"type":"message_stream_complete"}))
+            .unwrap();
+        state.done = true;
+        assert_eq!(state.acceptance, Acceptance::Accepted);
+        assert_eq!(state.outcome(), GenerationOutcome::Completed);
+        assert_eq!(state.resolved_model.as_deref(), Some("response-model"));
+        assert_eq!(
+            state
+                .messages
+                .iter()
+                .map(|m| m.id.as_str())
+                .collect::<Vec<_>>(),
+            ["user", "assistant"]
+        );
+        // Visible unknown content must still have an explicit placeholder.
+        state
+            .reduce(&json!({"message":message("audio","assistant","audio",false,"response-model")}))
+            .unwrap();
+        assert!(matches!(
+            state.messages.last().unwrap().parts[0],
+            MessagePart::Unsupported { .. }
+        ));
+    }
+
+    #[test]
+    fn hidden_input_can_establish_acceptance_without_becoming_transcript_content() {
+        let mut decoder = TurnDecoder::new("user".into());
+        decoder.state.reduce(&json!({"type":"input_message","input_message":message("user","user","text",true,"input-model")})).unwrap();
+        assert_eq!(decoder.state.acceptance, Acceptance::Accepted);
+        assert!(decoder.state.messages.is_empty());
+    }
+
+    #[test]
+    fn a_visibility_update_removes_an_existing_message_and_invalid_flags_fail_closed() {
+        let mut decoder = TurnDecoder::new("user".into());
+        decoder
+            .state
+            .reduce(&json!({"message":message("assistant","assistant","text",false,"model")}))
+            .unwrap();
+        decoder
+            .state
+            .reduce(&json!({"message":message("assistant","assistant","text",true,"model")}))
+            .unwrap();
+        assert!(decoder.state.messages.is_empty());
+        let mut invalid = message("other", "assistant", "text", false, "model");
+        invalid["metadata"]["is_visually_hidden_from_conversation"] = json!("yes");
+        assert!(Message::is_visible(&invalid).is_err());
     }
 }

@@ -9,6 +9,9 @@
 //! search, or blocking view. The app reads clipboard text asynchronously and delivers a normal
 //! paste only while the same thread, draft, and cursor remain eligible. Intervening input or focus
 //! loss cancels the pending paste; a late clipboard result cannot overwrite newer input.
+//! Explicit paste flushes buffered typing first. Recovery snapshots inspect a clone of that
+//! buffer, preserving Vim Replace semantics for held keys and literal insertion for pasted text,
+//! without consuming the live input or changing its paste classification.
 //! The live voice strip renders after effort ignition, followed by the Astra sparkle when eligible.
 //! Owned transcripts keep persistent status below the composer and hints on a separate final row.
 //! Shortcut help expands above the composer, with its close hint replacing the final shortcuts row
@@ -167,6 +170,7 @@
 //! intact until reconnection succeeds, except for the local `/warnings` command.
 //! When connected but the thread is unavailable, configured
 //! submit keys may dispatch explicitly allowed recovery and local commands; other drafts stay put.
+//! Empty-prompt agents navigation remains available with its usual editor and draft guards.
 //! Collapsed pastes expand into editable text so the full draft can be copied before quitting.
 //!
 //! # Reasoning Effort Animations
@@ -269,8 +273,13 @@
 //!   Expired bursts are flushed first so manual Tab keeps its normal shortcut behavior.
 //! - [`ChatComposer::flush_paste_burst_if_due`]/[`ChatComposer::handle_paste_burst_flush`]: called
 //!   from UI ticks to integrate a pending burst via [`ChatComposer::apply_paste`] or insert a
-//!   held single character. Explicit terminal paste events use [`ChatComposer::handle_paste`] to
-//!   classify input first; buffered keys have already been classified.
+//!   held single character. Explicit paste events (terminal or clipboard) use
+//!   [`ChatComposer::handle_paste`], which first commits buffered typing before classifying the
+//!   pasted text. This preserves the order when a paste arrives before the next burst-flush tick;
+//!   buffered keys have already been classified and go directly through `apply_paste`.
+//! - Startup recovery previews held keys with the live Vim Replace policy without consuming them.
+//!   Buffered pastes remain literal in recovery so large-paste and image classification stays with
+//!   the live paste path.
 //!
 //! # Input Disabled Mode
 //!
@@ -382,6 +391,7 @@ mod footer_state;
 mod history_search;
 mod inline_input;
 mod mouse;
+pub(crate) use mouse::ClipboardPasteTarget;
 mod paste_input;
 mod popup_state;
 mod reconnect;
@@ -3792,9 +3802,7 @@ impl ChatComposer {
             return false;
         }
 
-        if key_hint::plain(KeyCode::Left).is_press(*key_event) && self.agents_navigation_available()
-        {
-            self.app_event_tx.send(AppEvent::OpenAgentsOverview);
+        if self.handle_agents_navigation(*key_event) {
             return true;
         }
 
