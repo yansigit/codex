@@ -117,11 +117,11 @@ run_fmt() {
 }
 
 run_clippy() {
-    cargo clippy --locked --workspace --tests -- -D warnings
+    cargo clippy --locked --workspace --tests --keep-going -- -D warnings
 }
 
 run_build() {
-    cargo build --locked --workspace --bins --tests
+    cargo build --locked --workspace --bins --tests --keep-going
 }
 
 run_tests() {
