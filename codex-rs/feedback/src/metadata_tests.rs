@@ -70,7 +70,7 @@ fn dynamic_tags_survive_upload_alongside_static_fields() {
     ]);
     assert_eq!(event.tags, expected);
     let mut envelope = Envelope::new();
-    envelope.add_item(EnvelopeItem::Event(event));
+    envelope.add_item(EnvelopeItem::Event(Box::new(event)));
     let (_, size) = crate::upload::encode_envelope(&envelope).unwrap();
     assert!(size < crate::MAX_EVENT_BYTES);
 }
