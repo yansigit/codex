@@ -193,10 +193,11 @@ impl SavedChatSession {
             .map_err(|_| ChatError::LocalCancellation)?;
         let init = self.probe.native_model_defaults().await?;
         let (default_model, limits) = crate::models::defaults(&init)?;
-        let models = self.probe.models().await?;
+        let picker = self.probe.model_picker().await?;
+        let default_model = picker.default_model(&default_model)?;
         self.check_current()?;
         Ok(crate::models::ModelCatalog {
-            models,
+            models: picker.models,
             default_model,
             limits,
         })

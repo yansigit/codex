@@ -1050,14 +1050,10 @@ impl NativeChat {
                         .is_some_and(|t| t.acceptance == rpc::ChatAcceptance::Accepted)
                         || s.pending_submission.as_ref().is_some_and(|p| p.accepted);
                     session.apply_read(s);
-                    if session.persistence == rpc::ChatPersistence::Temporary {
-                        // Temporary service advancement changes the revision. Fetch
-                        // it without overwriting a new user edit on the same draft.
-                        if accepted {
-                            self.read_temporary_revision(index, handle, frame);
-                        }
-                    } else if accepted {
-                        self.save(index, false, handle, frame);
+                    if accepted {
+                        // Both services advance the submitted revision. Refresh it
+                        // without overwriting a newer edit in the local composer.
+                        self.read_advanced_revision(index, handle, frame);
                     }
                 }
             }
@@ -1099,7 +1095,7 @@ impl NativeChat {
         }
     }
 
-    fn read_temporary_revision(
+    fn read_advanced_revision(
         &mut self,
         index: usize,
         handle: &AppServerRequestHandle,

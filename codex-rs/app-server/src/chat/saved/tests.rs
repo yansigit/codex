@@ -353,3 +353,53 @@ async fn overlapping_local_clients_keep_drafts_and_other_conversations_remain_ca
             .is_none()
     );
 }
+
+#[tokio::test]
+async fn completed_saved_turn_advances_its_draft_before_publishing_the_terminal_snapshot() {
+    let h = Harness::new().await;
+    let session = h.session();
+    let (submission, lease, operation) = reserve(&session).await;
+    let id = submission.submission_id;
+    let draft_id = submission.draft_id;
+    let message = submission.client_message_id;
+    let mut sink = JournalSink::new(
+        &session,
+        session.store().unwrap().clone(),
+        lease,
+        submission,
+        operation.clone(),
+    );
+    sink.before_transmission(id, "fixture-model").await.unwrap();
+    let mut decoder = TurnDecoder::new(message.to_string());
+    for (id, role, text) in [
+        (message.to_string(), "user", "private fixture"),
+        (
+            "assistant-response".into(),
+            "assistant",
+            "completed response",
+        ),
+    ] {
+        let value = json!({"conversation_id":"fixture-conversation","message":{"id":id,"author":{"role":role},"content":{"content_type":"text","parts":[text]}}});
+        decoder
+            .push(format!("data: {value}\n\n").as_bytes())
+            .unwrap();
+    }
+    let mut terminal = result(&sink, Acceptance::Accepted, ChatError::Transport);
+    terminal.conversation_id = Some("fixture-conversation".into());
+    terminal.messages = decoder.state().messages.clone();
+    terminal.outcome = GenerationOutcome::Completed;
+    terminal.error = None;
+    sink.finish(terminal).await.unwrap();
+    let advanced = session.draft_read(draft_id).await.unwrap().unwrap();
+    assert!(advanced.content.text.is_empty());
+    assert_eq!(
+        advanced.content.conversation_id.as_deref(),
+        Some("fixture-conversation")
+    );
+    assert_eq!(
+        advanced.content.expected_parent_id.as_deref(),
+        Some("assistant-response")
+    );
+    assert!(!operation.snapshot().recovery_pending);
+    assert_eq!(operation.snapshot().outcome, GenerationOutcome::Completed);
+}

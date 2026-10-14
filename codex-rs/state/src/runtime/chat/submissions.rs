@@ -314,6 +314,23 @@ impl SavedChatStore {
         outcome: ChatSubmissionOutcome,
         resolved_model: Option<&str>,
     ) -> Result<(), ChatStoreError> {
+        self.finish_submission_and_advance(lease, outcome, resolved_model, None)
+            .await
+    }
+
+    /// Commit the terminal journal checkpoint and advance its unchanged draft
+    /// together. A client disconnect cannot leave accepted input sendable, and
+    /// a newer draft revision is never cleared or moved to another parent.
+    pub async fn finish_submission_and_advance(
+        &self,
+        lease: &ChatSubmissionLease,
+        outcome: ChatSubmissionOutcome,
+        resolved_model: Option<&str>,
+        next_parent_id: Option<&str>,
+    ) -> Result<(), ChatStoreError> {
+        if let Some(parent) = next_parent_id {
+            validate_id(parent)?;
+        }
         if outcome == ChatSubmissionOutcome::InProgress {
             return Err(ChatStoreError::InvalidTransition);
         }
@@ -344,6 +361,27 @@ impl SavedChatStore {
         .bind(lease.submission_id.to_string())
         .execute(&mut *tx)
         .await?;
+        if current.accepted
+            && let Some(parent) = next_parent_id
+            && let Some(conversation) = current.conversation_id.as_deref()
+        {
+            sqlx::query(
+                "UPDATE chat_drafts SET revision=?,conversation_id=?,expected_parent_id=?,
+                  text='',selections='[]',updated_at_ms=MAX(updated_at_ms+1,?)
+                 WHERE principal=? AND account=? AND workspace=? AND draft_id=? AND revision=?",
+            )
+            .bind(Uuid::new_v4().to_string())
+            .bind(conversation)
+            .bind(parent)
+            .bind(Utc::now().timestamp_millis())
+            .bind(&self.scope.principal)
+            .bind(&self.scope.account)
+            .bind(&self.scope.workspace)
+            .bind(current.draft_id.to_string())
+            .bind(current.draft_revision.to_string())
+            .execute(&mut *tx)
+            .await?;
+        }
         tx.commit().await?;
         Ok(())
     }
