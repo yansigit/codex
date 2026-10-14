@@ -6,7 +6,7 @@ use test_case::test_case;
 enum SnapshotSandbox {
     None,
     WorkspaceWrite,
-    DenyFdPath,
+    UnavailableDescriptors,
 }
 
 pub(super) struct StartupProcesses(pub(super) std::path::PathBuf);
@@ -91,9 +91,9 @@ async fn shell_snapshot_preserves_successful_startup_output_and_services(
 #[test_case("bash", true, SnapshotSandbox::None; "bash_tty")]
 #[cfg_attr(target_os = "macos", test_case("zsh", false, SnapshotSandbox::None; "zsh"))]
 #[cfg_attr(target_os = "macos", test_case("zsh", true, SnapshotSandbox::None; "zsh_tty"))]
-#[test_case("bash", false, SnapshotSandbox::DenyFdPath; "blocked_descriptor_path")]
-#[cfg_attr(target_os = "macos", test_case("zsh", false, SnapshotSandbox::DenyFdPath; "zsh_blocked_descriptor_path"))]
-#[cfg_attr(target_os = "macos", test_case("zsh", true, SnapshotSandbox::DenyFdPath; "zsh_blocked_descriptor_path_tty"))]
+#[test_case("bash", false, SnapshotSandbox::UnavailableDescriptors; "unavailable_descriptors")]
+#[cfg_attr(target_os = "macos", test_case("zsh", false, SnapshotSandbox::UnavailableDescriptors; "zsh_blocked_descriptor_path"))]
+#[cfg_attr(target_os = "macos", test_case("zsh", true, SnapshotSandbox::UnavailableDescriptors; "zsh_blocked_descriptor_path_tty"))]
 #[test_case("bash", false, SnapshotSandbox::WorkspaceWrite; "bash_protected_transport")]
 #[test_case("bash", true, SnapshotSandbox::WorkspaceWrite; "bash_protected_transport_tty")]
 #[cfg_attr(target_os = "macos", test_case("zsh", false, SnapshotSandbox::WorkspaceWrite; "zsh_protected_transport"))]
@@ -105,7 +105,8 @@ async fn shell_snapshot_concurrent_replays_keep_independent_readers(
     tty: bool,
     sandbox_mode: SnapshotSandbox,
 ) -> Result<()> {
-    let deny_fd_path = sandbox_mode == SnapshotSandbox::DenyFdPath;
+    let unavailable_descriptors = sandbox_mode == SnapshotSandbox::UnavailableDescriptors;
+    let deny_fd_path = unavailable_descriptors && cfg!(target_os = "macos");
     let use_sandbox = sandbox_mode != SnapshotSandbox::None;
     if use_sandbox
         && let Some(warning) = codex_sandboxing::system_bwrap_warning(
@@ -130,20 +131,37 @@ async fn shell_snapshot_concurrent_replays_keep_independent_readers(
             _server: None,
         }
     } else {
-        create_process_context(deny_fd_path).await?
+        create_process_context(unavailable_descriptors).await?
     };
     let home = TempDir::new()?;
     let cwd = PathUri::from_host_native_path(home.path())?;
+    let shell_path = if unavailable_descriptors && cfg!(target_os = "linux") {
+        // /dev/fd is a process-relative symlink on Linux: bwrap rejects a
+        // mask over it before the shell can run. Instead exercise fallback
+        // with a launcher that closes the inherited snapshot descriptor.
+        let launcher = home.path().join("bash-without-inherited-descriptors");
+        codex_utils_cargo_bin::write_executable(
+            &launcher,
+            "#!/bin/bash\nfor descriptor in /dev/fd/[0-9]*; do descriptor=${descriptor##*/}; if [ \"$descriptor\" -ge 10 ]; then eval \"exec $descriptor<&-\"; fi; done; exec /bin/bash \"$@\"\n",
+        )?;
+        launcher.to_string_lossy().into_owned()
+    } else {
+        format!("/bin/{shell}")
+    };
     // Keep full-size state in a function, below the 512 KiB state + environment cap.
-    // The blocked-path case still exercises the smaller environment fallback.
-    let payload_len = if deny_fd_path { 1 } else { 480 * 1024 };
+    // Unavailable descriptors exercise the smaller environment fallback.
+    let payload_len = if unavailable_descriptors {
+        1
+    } else {
+        480 * 1024
+    };
     let payload = "x".repeat(payload_len);
     let source = if shell == "bash" {
         "${BASH_SOURCE[0]}"
     } else {
         "${(%):-%x}"
     };
-    let source_check = if deny_fd_path {
+    let source_check = if unavailable_descriptors {
         String::new()
     } else {
         format!("case \"{source}\" in /dev/fd/*) ;; *) return 42 ;; esac; ")
@@ -186,7 +204,7 @@ async fn shell_snapshot_concurrent_replays_keep_independent_readers(
                 PathUri::from_host_native_path("/dev/fd")?.into(),
                 FileSystemAccessMode::Deny,
             ));
-        } else {
+        } else if sandbox_mode == SnapshotSandbox::WorkspaceWrite {
             policy.entries.push(FileSystemSandboxEntry::new(
                 PathUri::from_host_native_path(std::fs::canonicalize("/tmp")?)?.into(),
                 FileSystemAccessMode::Write,
@@ -206,12 +224,13 @@ async fn shell_snapshot_concurrent_replays_keep_independent_readers(
         let sandbox = sandbox.clone();
         let command = command.clone();
         let protected_path = protected_file.path();
+        let shell_path = shell_path.clone();
         async move {
             let started = backend
                 .start(ExecParams {
                     metadata: Default::default(),
                     process_id: format!("parallel-{index}").into(),
-                    argv: vec![format!("/bin/{shell}"), "-lc".to_string(), command],
+                    argv: vec![shell_path.clone(), "-lc".to_string(), command],
                     cwd,
                     env: HashMap::new(),
                     env_policy: Some(ExecEnvPolicy {
@@ -232,7 +251,7 @@ async fn shell_snapshot_concurrent_replays_keep_independent_readers(
                         scope_id: "parallel".to_string(),
                         shell: ShellInfo {
                             name: shell.to_string(),
-                            path: format!("/bin/{shell}"),
+                            path: shell_path,
                         },
                     }),
                     tty,
@@ -252,7 +271,7 @@ async fn shell_snapshot_concurrent_replays_keep_independent_readers(
                 collect_process_output_from_events(started.process).await?;
             assert!(
                 output.ends_with(&format!("restored:input-{index}")),
-                "{output:?}"
+                "stdout={output:?}, stderr={errors:?}, status={status:?}, closed={closed}"
             );
             if shell == "zsh" {
                 assert!(

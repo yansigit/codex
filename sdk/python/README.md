@@ -67,6 +67,13 @@ Use Python's standard `help(openai_codex)`, `help(Codex)`, or
 
 ## Documentation
 
+For SDK development, run `uv sync --only-group dev --frozen` from this
+directory. The `.python-version` file selects Python 3.14.8 for tests and
+schema generation. The current `datamodel-code-generator` release cannot
+run on Python 3.15 ([upstream issue #4589](https://github.com/datamodel-code-generator/datamodel-code-generator/issues/4589)).
+This development toolchain pin does not change the SDK's supported runtime
+versions.
+
 - [Getting started](https://github.com/openai/codex/blob/main/sdk/python/docs/getting-started.md)
 - [API reference](https://github.com/openai/codex/blob/main/sdk/python/docs/api-reference.md)
 - [Untrusted external messages](https://github.com/openai/codex/blob/main/sdk/python/docs/api-reference.md#externalmessage)

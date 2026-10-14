@@ -71,6 +71,15 @@ just test -p codex-cli
 
 `just codex` and the internal `codex-*` build targets remain compatible aliases. Run affected crate tests; full workspace builds need substantially more resources.
 
+For a repeatable Ubuntu 26.04 run, use the container verifier. It pins Rust 1.95, leaves the host home unmounted, and caches Cargo outputs between runs:
+
+```sh
+scripts/verify-container.sh fast
+scripts/verify-container.sh
+```
+
+Full workspace checks, cache volumes, and container requirements are described in [container verification](container-verify.md).
+
 ## Logging
 
 Nyacode honors `RUST_LOG`. The TUI records diagnostics in bounded local stores by default. To enable plaintext logging:

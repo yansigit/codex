@@ -21,7 +21,8 @@ fn packet(size: usize, at: Instant) -> TaggedPacket {
                 ..Default::default()
             },
             payload: vec![5; size - 12].into(),
-        }),
+        })
+        .into(),
     }
 }
 
@@ -30,7 +31,7 @@ fn arrival_and_rtp_bytes_survive_the_adapter_without_an_upstream_copy() {
     let (mut incoming, mut ingress) = pair();
     let at = Instant::now() - Duration::from_millis(/*millis*/ 20);
     let input = packet(/*size*/ 32, at);
-    let Packet::Rtp(expected) = &input.message else {
+    let Packet::Rtp(expected) = &input.message.packet else {
         panic!()
     };
     let expected = expected.marshal().unwrap();
@@ -38,6 +39,33 @@ fn arrival_and_rtp_bytes_survive_the_adapter_without_an_upstream_copy() {
     let received = incoming.take().unwrap().unwrap();
     assert_eq!((received.at, received.as_ref()), (at, expected.as_ref()));
     assert!(ingress.poll_read().is_none());
+}
+
+#[test]
+fn registered_interceptor_preserves_outbound_metadata_and_consumes_inbound_audio() {
+    let (mut incoming, ingress) = pair();
+    let mut chain = rtc::interceptor::Registry::new()
+        .with(rtc::interceptor::Slot::from(0), ingress)
+        .build();
+    let at = Instant::now();
+    let mut outbound = packet(/*size*/ 32, at);
+    outbound
+        .message
+        .add(rtc::interceptor::Attribute::Retransmission);
+    let expected = outbound.message.packet.clone();
+    chain.handle_write(outbound).unwrap();
+    let sent = chain.poll_write().unwrap();
+    assert_eq!((sent.now, &sent.message.packet), (at, &expected));
+    assert!(
+        sent.message
+            .has(&rtc::interceptor::Attribute::Retransmission)
+    );
+    assert!(chain.poll_write().is_none());
+
+    chain.handle_read(sent).unwrap();
+    assert!(incoming.take().unwrap().is_some());
+    assert!(incoming.take().unwrap().is_none());
+    assert!(chain.poll_read().is_none());
 }
 
 #[test]
@@ -109,7 +137,7 @@ fn invalid_stream_and_oversize_packets_fail_without_returning_media() {
         let (mut incoming, mut ingress) = pair();
         let mut input = packet(size, Instant::now());
         if size == 32
-            && let Packet::Rtp(packet) = &mut input.message
+            && let Packet::Rtp(packet) = &mut input.message.packet
         {
             packet.header.payload_type = 96;
         }

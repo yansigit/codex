@@ -27,6 +27,104 @@ use crate::protocol::ShellInfo;
 use crate::protocol::ShellSnapshotRequest;
 use crate::telemetry::ExecServerTelemetry;
 
+#[tokio::test]
+async fn cached_bash_snapshot_does_not_reload_profile_with_socket_stdin() -> anyhow::Result<()> {
+    let home = tempfile::TempDir::new()?;
+    std::fs::write(
+        home.path().join(".bashrc"),
+        "printf x >> \"$HOME/captures\"\nexport PROFILE_SECRET=leaked\nprofile_helper() { printf '%s' \"${PROFILE_SECRET-missing}\"; }\n",
+    )?;
+    let params = ExecParams {
+        metadata: Default::default(),
+        process_id: ProcessId::from("snapshot-socket-stdin"),
+        argv: vec![
+            "/bin/bash".to_string(),
+            "-lc".to_string(),
+            "profile_helper".to_string(),
+        ],
+        cwd: codex_utils_path_uri::PathUri::from_host_native_path(home.path())?,
+        env: HashMap::from([
+            (
+                "HOME".to_string(),
+                home.path().to_string_lossy().into_owned(),
+            ),
+            ("PATH".to_string(), "/usr/bin:/bin".to_string()),
+        ]),
+        env_policy: Some(ExecEnvPolicy {
+            inherit: ShellEnvironmentPolicyInherit::None,
+            ignore_default_excludes: false,
+            exclude: Vec::new(),
+            r#set: HashMap::new(),
+            include_only: vec!["HOME".to_string(), "PATH".to_string()],
+        }),
+        shell_snapshot: Some(ShellSnapshotRequest {
+            scope_id: "socket-stdin".to_string(),
+            shell: ShellInfo {
+                name: "bash".to_string(),
+                path: "/bin/bash".to_string(),
+            },
+        }),
+        tty: false,
+        pipe_stdin: true,
+        arg0: None,
+        sandbox: None,
+        enforce_managed_network: false,
+        managed_network: None,
+        network_proxy: None,
+    };
+    let cache = ShellSnapshotCache::default();
+    for _ in 0..2 {
+        let mut prepared = prepare_exec_request_with_telemetry(
+            &params,
+            params.env.clone(),
+            /*runtime_paths*/ None,
+            /*network_policy_decider*/ None,
+            /*network_policy_audit_observer*/ None,
+            &ProcessTelemetry::default(),
+        )
+        .await
+        .expect("prepare capture");
+        let reader = cache
+            .prepare(
+                &params,
+                &mut prepared,
+                &ExecServerTelemetry::default(),
+                CapturePurpose::Execution,
+            )
+            .await
+            .expect("prepare replay");
+        let (stdin, _peer) = std::os::unix::net::UnixStream::pair()?;
+        let mut command = tokio::process::Command::new(&prepared.command[0]);
+        command
+            .args(&prepared.command[1..])
+            .current_dir(prepared.cwd.as_path())
+            .env_clear()
+            .envs(&prepared.env)
+            .stdin(std::process::Stdio::from(std::os::fd::OwnedFd::from(stdin)))
+            .kill_on_drop(true);
+        if let Some(reader) = &reader {
+            let fd = std::os::fd::AsRawFd::as_raw_fd(reader);
+            // SAFETY: reader stays alive through spawn; only the child's
+            // descriptor flags change, without allocation after fork.
+            unsafe {
+                command.pre_exec(move || {
+                    if libc::fcntl(fd, libc::F_SETFD, 0) == -1 {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                    Ok(())
+                });
+            }
+        }
+        let output =
+            tokio::time::timeout(std::time::Duration::from_secs(5), command.output()).await??;
+        assert!(output.status.success(), "{output:?}");
+        assert_eq!(output.stdout, b"missing");
+        assert!(output.stderr.is_empty(), "{output:?}");
+    }
+    assert_eq!(std::fs::read_to_string(home.path().join("captures"))?, "x");
+    Ok(())
+}
+
 #[test_case(1, CapturePurpose::Execution; "succeeds_on_first_attempt")]
 #[test_case(2, CapturePurpose::Execution; "recovers_on_second_attempt")]
 #[test_case(3, CapturePurpose::Execution; "recovers_on_last_attempt")]
@@ -136,8 +234,8 @@ async fn snapshot_failure_retries_are_bounded_and_single_flight(
         for (prepared, reader) in [(&mut prepared, first), (&mut concurrent, second)] {
             if let Some(reader) = reader {
                 let fd = std::os::fd::AsRawFd::as_raw_fd(&reader);
-                prepared.command[2] =
-                    prepared.command[2].replace(&format!("/dev/fd/{fd}"), "/dev/fd/SNAPSHOT");
+                let script = prepared.command.last_mut().expect("shell script");
+                *script = script.replace(&format!("/dev/fd/{fd}"), "/dev/fd/SNAPSHOT");
             }
         }
         assert_eq!(

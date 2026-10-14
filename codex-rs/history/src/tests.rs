@@ -858,22 +858,22 @@ fn rollout_item_schema_matches_tagged_payload_and_sibling_metadata() -> Result<(
 
     let response_item = variants
         .iter()
-        .find(|variant| variant["properties"]["type"]["enum"] == json!(["response_item"]))
+        .find(|variant| variant["properties"]["type"]["const"] == json!("response_item"))
         .expect("response item schema");
     assert!(response_item["properties"].get("metadata").is_some());
     assert_eq!(
         response_item["properties"]["payload"]["$ref"],
-        json!("#/definitions/ResponseItem")
+        json!("#/$defs/ResponseItem")
     );
 
-    let compacted = &schema["definitions"]["CompactedItem"];
+    let compacted = &schema["$defs"]["CompactedItem"];
     assert_eq!(
         compacted["properties"]["replacement_history"]["items"]["$ref"],
-        json!("#/definitions/ResponseItem")
+        json!("#/$defs/ResponseItem")
     );
     assert_eq!(
         compacted["properties"]["replacement_history_metadata"]["items"]["$ref"],
-        json!("#/definitions/CodexHarnessMetadata")
+        json!("#/$defs/CodexHarnessMetadata")
     );
     let required = compacted["required"].as_array().expect("required fields");
     assert!(!required.contains(&json!("replacement_history")));

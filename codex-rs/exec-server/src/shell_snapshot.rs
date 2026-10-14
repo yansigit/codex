@@ -328,6 +328,14 @@ impl ShellSnapshotCache {
             "{startup}if ! {restore} >/dev/null; then printf 'failed to restore shell snapshot\\n' >&2; fi\n{}",
             params.argv[2]
         );
+        if shell_type == ShellType::Bash {
+            // Bash may read .bashrc even for a noninteractive shell when stdin
+            // looks like a remote connection. Privileged mode alone does not
+            // suppress that path; replay must never re-run filtered startup.
+            prepared
+                .command
+                .insert(shell_start + 1, "--norc".to_string());
+        }
 
         telemetry.shell_snapshot_command(wait, availability, "used");
         Ok(reader)

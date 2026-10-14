@@ -35,6 +35,18 @@ async fn root_metadata_symlinks_cannot_reopen_approved_denials() {
     fs::write(private.join("sibling"), "sibling").unwrap();
     codex_utils_cargo_bin::copy_executable(&codex_linux_sandbox_exe(), &work.join("sandbox"))
         .unwrap();
+    // The synthetic root is owned by namespace root, so PATH trust checks may
+    // reject even /usr/bin. Give the copied launcher its packaged fallback.
+    let bundled = codex_linux_sandbox::find_bundled_bwrap_for_exe(
+        &codex_linux_sandbox_exe(),
+        &std::env::current_dir().unwrap(),
+        |key| std::env::var_os(key),
+    );
+    let helper = bundled
+        .as_ref()
+        .map_or(bwrap.as_path(), |path| path.as_path());
+    fs::create_dir(work.join("codex-resources")).unwrap();
+    codex_utils_cargo_bin::copy_executable(helper, &work.join("codex-resources/bwrap")).unwrap();
 
     let path_entry = |path: &str, access| {
         FileSystemSandboxEntry::new(
