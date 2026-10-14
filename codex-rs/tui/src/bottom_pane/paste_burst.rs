@@ -93,6 +93,8 @@
 //!
 //! - `flush_before_modified_input()` returns the buffered text (and/or a pending first ASCII char)
 //!   so the caller can apply it through the normal paste path before handling an unrelated input.
+//! - `flush_pending()` preserves the typed-key versus paste distinction. Draft recovery calls it
+//!   on a clone so a held Vim Replace key is recovered as a replacement without consuming input.
 //! - `clear_window_after_non_char()` clears the *classification window* so subsequent typing does
 //!   not get grouped into the previous burst. It assumes the caller has already flushed any buffer
 //!   because it clears `last_plain_char_time`, which means `flush_if_due()` will not flush a
