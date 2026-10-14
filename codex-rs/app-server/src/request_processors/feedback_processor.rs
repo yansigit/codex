@@ -423,7 +423,7 @@ async fn feedback_turn_metadata_from_rollout(
 
 fn normalized_prompt_hash(prompt: &str) -> String {
     let normalized_prompt = prompt.split_whitespace().collect::<Vec<_>>().join(" ");
-    format!("{:x}", Sha256::digest(normalized_prompt.as_bytes()))
+    hex::encode(Sha256::digest(normalized_prompt.as_bytes()))
 }
 
 fn tool_cache_feedback_attachments(

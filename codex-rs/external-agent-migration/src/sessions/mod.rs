@@ -236,7 +236,7 @@ mod tests {
         let codex_home = root.path().join("codex-home");
         let source_path = root.path().join("session.jsonl");
         let initial = session_record(root.path(), "first request");
-        let expected_source_content_sha256 = format!("{:x}", Sha256::digest(&initial));
+        let expected_source_content_sha256 = hex::encode(Sha256::digest(&initial));
         std::fs::write(&source_path, initial).expect("initial session");
         let imported_thread_id = ThreadId::new();
         ledger::record_imported_session(&codex_home, &source_path, imported_thread_id)
@@ -317,7 +317,7 @@ mod tests {
 
         assert_eq!(
             pending.source_content_sha256,
-            format!("{:x}", Sha256::digest(contents))
+            hex::encode(Sha256::digest(contents))
         );
         assert_eq!(pending.target, SessionImportTarget::New);
     }

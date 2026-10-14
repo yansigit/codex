@@ -13,7 +13,7 @@ runs:
   using: composite
   steps:
     - name: Checkout DotSlash publisher
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         repository: facebook/dotslash-publish-release
         ref: 9c9ec027515c34db9282a09a25a9cab5880b2c52 # v2
@@ -21,7 +21,7 @@ runs:
         persist-credentials: false
 
     - name: Install uv
-      uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+      uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
       with:
         version: "0.12.13"
         checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"

@@ -111,7 +111,7 @@
         },
         "isEnabled": {
           "default": true,
-          "description": "Whether this app is enabled in config.toml. Example: ```toml [apps.bad_app] enabled = false ```",
+          "description": "Whether this app is enabled in config.toml.\nExample:\n```toml\n[apps.bad_app]\nenabled = false\n```",
           "type": "boolean"
         },
         "labels": {

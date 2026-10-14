@@ -146,7 +146,7 @@ pub(super) fn read_session_import(path: &Path) -> io::Result<ParsedSessionImport
         custom_title,
         ai_title,
         messages,
-        content_sha256: format!("{:x}", hasher.finalize()),
+        content_sha256: hex::encode(hasher.finalize()),
         attributed_mcp_server_ids,
     })
 }

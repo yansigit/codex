@@ -26,12 +26,12 @@
           "type": "null"
         }
       ],
-      "description": "Controls how much MCP inventory data to fetch for each server. Defaults to `Full` when omitted."
+      "description": "Controls how much MCP inventory data to fetch for each server.\nDefaults to `Full` when omitted."
     },
     "limit": {
       "description": "Optional page size; defaults to a server-defined value.",
       "format": "uint32",
-      "minimum": 0.0,
+      "minimum": 0,
       "type": [
         "integer",
         "null"

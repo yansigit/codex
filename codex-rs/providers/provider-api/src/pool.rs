@@ -5,7 +5,10 @@ use serde::Serialize;
 /// Stable, non-secret identity used to join credentials drawing on shared quota.
 pub fn quota_identity(kind: &str, id: &str) -> String {
     use sha2::Digest;
-    format!("{kind}:{:x}", sha2::Sha256::digest(id.as_bytes()))
+    format!(
+        "{kind}:{}",
+        hex::encode(sha2::Sha256::digest(id.as_bytes()))
+    )
 }
 
 pub fn retry_after_seconds(value: &str, now: u64) -> Option<u64> {

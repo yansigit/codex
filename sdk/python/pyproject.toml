@@ -1,5 +1,5 @@
 [build-system]
-requires = ["uv_build>=0.11.19,<0.12"]
+requires = ["uv_build>=0.12.23,<0.13"]
 build-backend = "uv_build"
 
 [project]
@@ -25,10 +25,10 @@ Issues = "https://github.com/yansigit/nyacode/issues"
 Documentation = "https://github.com/yansigit/nyacode/tree/main/sdk/python/docs"
 
 [dependency-groups]
-format = ["ruff>=0.15.8"]
+format = ["ruff>=0.16.10"]
 test = [
   "pytest>=8.0",
-  "datamodel-code-generator==0.31.2",
+  "datamodel-code-generator==0.83.0",
   { include-group = "format" },
 ]
 dev = [
@@ -45,7 +45,7 @@ testpaths = ["tests"]
 
 [tool.ruff]
 target-version = "py310"
-required-version = ">=0.15.8"
+required-version = ">=0.16.10"
 line-length = 100
 extend-exclude = [
   "notebooks/**",

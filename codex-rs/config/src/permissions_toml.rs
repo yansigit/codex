@@ -403,6 +403,7 @@ pub struct NetworkMitmInjectedHeaderToml {
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema)]
 #[serde(transparent)]
+#[schemars(inline)]
 struct MitmHookBodyConfigSchema(pub serde_json::Value);
 
 impl<'de> Deserialize<'de> for NetworkMitmToml {

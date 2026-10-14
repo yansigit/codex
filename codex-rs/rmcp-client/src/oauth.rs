@@ -1092,7 +1092,7 @@ fn compute_secret_name(server_name: &str, server_url: &str) -> Result<SecretName
     let mut hasher = Sha256::new();
     hasher.update(key.as_bytes());
     let digest = hasher.finalize();
-    let hex = format!("{digest:X}");
+    let hex = hex::encode_upper(digest);
     SecretName::new(&format!("{MCP_OAUTH_SECRET_PREFIX}_{}", &hex[..32]))
 }
 
@@ -1180,7 +1180,7 @@ fn sha_256_prefix(value: &Value) -> Result<String> {
     let mut hasher = Sha256::new();
     hasher.update(serialized.as_bytes());
     let digest = hasher.finalize();
-    let hex = format!("{digest:x}");
+    let hex = hex::encode(digest);
     let truncated = &hex[..16];
     Ok(truncated.to_string())
 }

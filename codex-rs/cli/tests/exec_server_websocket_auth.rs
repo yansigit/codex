@@ -53,7 +53,7 @@ async fn exec_server_websocket_auth_gates_rpc_connections() -> Result<()> {
                     command.args([
                         "capability-token",
                         "--ws-token-sha256",
-                        &format!("{:x}", Sha256::digest(secret.as_bytes())),
+                        &hex::encode(Sha256::digest(secret.as_bytes())),
                     ]);
                     secret.to_string()
                 }
@@ -94,7 +94,8 @@ async fn exec_server_websocket_auth_gates_rpc_connections() -> Result<()> {
             };
 
             // A missing or incorrect credential must fail before any RPC session opens.
-            let digest_as_bearer = format!("Bearer {:x}", Sha256::digest(secret.as_bytes()));
+            let digest_as_bearer =
+                format!("Bearer {}", hex::encode(Sha256::digest(secret.as_bytes())));
             for authorization in [
                 None,
                 Some("Bearer incorrect"),
@@ -246,7 +247,7 @@ async fn app_server_executor_auth_supports_tokens_and_legacy_configuration() -> 
                     "--ws-auth",
                     "capability-token",
                     "--ws-token-sha256",
-                    &format!("{:x}", Sha256::digest(token.as_bytes())),
+                    &hex::encode(Sha256::digest(token.as_bytes())),
                 ]);
             }
             let mut executor = command

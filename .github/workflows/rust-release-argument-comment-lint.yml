@@ -61,11 +61,11 @@ jobs:
               labels: ${{ github.event.repository.name }}-windows-x64
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9 # master
+      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master, 2026-10-12
         with:
           toolchain: nightly-2026-08-20
           targets: ${{ matrix.target }}
@@ -107,7 +107,7 @@ jobs:
             (cd "${RUNNER_TEMP}" && tar -czf "$GITHUB_WORKSPACE/$archive_path" argument-comment-lint)
           fi
 
-      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: argument-comment-lint-${{ matrix.target }}
           path: dist/argument-comment-lint/${{ matrix.target }}/*

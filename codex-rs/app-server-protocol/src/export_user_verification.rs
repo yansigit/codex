@@ -38,6 +38,7 @@ pub(super) fn filter_json(value: &mut Value) {
         Value::Array(items) => {
             items.retain(|item| {
                 item.pointer("/properties/mode/enum") != Some(&serde_json::json!([MODE]))
+                    && item.pointer("/properties/mode/const") != Some(&serde_json::json!(MODE))
             });
             for item in items {
                 filter_json(item);

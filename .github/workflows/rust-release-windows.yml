@@ -80,7 +80,7 @@ jobs:
               labels: ${{ github.event.repository.name }}-windows-arm64
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-ci
@@ -100,8 +100,9 @@ jobs:
           Write-Host "Disk usage:"
           Get-PSDrive -PSProvider FileSystem | Format-Table -AutoSize Name, @{Name='Size(GB)';Expression={[math]::Round(($_.Used + $_.Free) / 1GB, 1)}}, @{Name='Free(GB)';Expression={[math]::Round($_.Free / 1GB, 1)}}
       - name: Set up Rust toolchain
-        uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+        uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master, 2026-10-12
         with:
+          toolchain: 1.95.0
           targets: ${{ matrix.build-system == 'cargo' && matrix.target || '' }}
 
       - name: Prepare Bazel release build
@@ -170,7 +171,7 @@ jobs:
           done
 
       - name: Upload Windows binaries
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: windows-binaries-${{ matrix.target }}-${{ matrix.bundle }}${{ env.ARTIFACT_SUFFIX }}
           path: |
@@ -199,10 +200,10 @@ jobs:
               group: ${{ github.event.repository.name }}-runners
               labels: ${{ github.event.repository.name }}-windows-arm64
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
           architecture: ${{ matrix.python_arch }}
@@ -296,7 +297,7 @@ jobs:
           cp bazel-bin/codex-rs/voice-host/codex-voice-host.exe "$output/codex-voice-host.exe"
           chmod -R u+w "$output"
           tar -C "$output" -czf "voice-unsigned-${TARGET}.tar.gz" runtime codex-voice-host.exe
-      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: voice-${{ matrix.target }}-unsigned
           path: voice-unsigned-${{ matrix.target }}.tar.gz
@@ -325,12 +326,12 @@ jobs:
           - aarch64-pc-windows-msvc
           - x86_64-pc-windows-msvc
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-ci
       - name: Download prebuilt Windows binaries
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: windows-binaries-${{ matrix.target }}-{primary,helpers,app-server}${{ env.ARTIFACT_SUFFIX }}
           merge-multiple: true
@@ -356,7 +357,7 @@ jobs:
           done
 
       - name: Upload symbols archive
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ matrix.target }}-symbols${{ env.ARTIFACT_SUFFIX }}
           path: codex-rs/symbols-dist/${{ matrix.target }}/*
@@ -402,26 +403,26 @@ jobs:
               labels: ${{ github.event.repository.name }}-windows-x64
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - uses: ./.github/actions/setup-ci
 
       - name: Download prebuilt Windows primary binaries
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: windows-binaries-${{ matrix.target }}-primary${{ env.ARTIFACT_SUFFIX }}
           path: ${{ env.CARGO_TARGET_DIR }}/${{ matrix.target }}/release
 
       - name: Download prebuilt Windows helper binaries
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: windows-binaries-${{ matrix.target }}-helpers${{ env.ARTIFACT_SUFFIX }}
           path: ${{ env.CARGO_TARGET_DIR }}/${{ matrix.target }}/release
 
       - name: Download prebuilt Windows app-server binary
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: windows-binaries-${{ matrix.target }}-app-server${{ env.ARTIFACT_SUFFIX }}
           path: ${{ env.CARGO_TARGET_DIR }}/${{ matrix.target }}/release
@@ -449,7 +450,7 @@ jobs:
           certificate-profile-name: ${{ secrets.AZURE_ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME }}
 
       - name: Download matching native voice build
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: voice-${{ matrix.target }}-unsigned
           path: ${{ runner.temp }}/unsigned-voice
@@ -606,7 +607,7 @@ jobs:
 
       - name: Upload Python runtime wheel
         if: ${{ matrix.build-system == 'cargo' }}
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: python-runtime-wheel-${{ matrix.target }}
           path: python-runtime-dist/${{ matrix.target }}/*.whl
@@ -694,7 +695,7 @@ jobs:
             mv "$artifact" "${artifact%/*}/${stem}-bazel${name#"$stem"}"
           done
 
-      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ matrix.target }}${{ env.ARTIFACT_SUFFIX }}
           path: |

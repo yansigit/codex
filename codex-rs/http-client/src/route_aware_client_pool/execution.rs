@@ -179,7 +179,16 @@ impl RouteAwareClientPool {
                 })
                 .await??;
             let Some(mut next_request) = next_request else {
-                return Ok(HttpResponse::new(response, permit));
+                let response = HttpResponse::new(response, permit);
+                return Ok(
+                    if self.client_builder.request_logging
+                        == crate::client::RequestLogging::Disabled
+                    {
+                        response.without_error_urls()
+                    } else {
+                        response
+                    },
+                );
             };
             if let Some(redirect_observed) = &self.client_builder.redirect_observed {
                 redirect_observed.store(/*val*/ true, Ordering::Relaxed);

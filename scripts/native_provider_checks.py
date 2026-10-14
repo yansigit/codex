@@ -28,7 +28,7 @@ def run_checks(root: Path, artifact_dir: Path) -> list[dict[str, Any]]:
     env = os.environ.copy()
     env["CARGO_TERM_COLOR"] = "never"
     # Match the repository's `just test` stack size for large host test futures.
-    env.setdefault("RUST_MIN_STACK", "67108864")
+    env.setdefault("RUST_MIN_STACK", "8388608")
     env.setdefault("CARGO_BUILD_JOBS", "2")
     env["CARGO_INCREMENTAL"] = "0"
     revision = subprocess.run(
@@ -145,6 +145,29 @@ def run_checks(root: Path, artifact_dir: Path) -> list[dict[str, Any]]:
     clippy_command.extend(["--all-targets", "--", "-D", "warnings"])
     run_stage("provider-clippy", clippy_command)
 
+    # Core integration tests launch the CLI exec-server and Code Mode host.
+    # Build every helper before tests discover them on a fresh runner.
+    run_stage(
+        "cli-build",
+        [
+            "cargo",
+            "build",
+            "--locked",
+            "--manifest-path",
+            "codex-rs/Cargo.toml",
+            "-p",
+            "codex-cli",
+            "-p",
+            "codex-code-mode-host",
+            "--bin",
+            "nyacode",
+            "--bin",
+            "codex",
+            "--bin",
+            "codex-code-mode-host",
+        ],
+    )
+
     for group in manifest["focused_test_groups"]:
         command = ["cargo", "test", "--manifest-path", "codex-rs/Cargo.toml"]
         for package in group["packages"]:
@@ -185,21 +208,6 @@ def run_checks(root: Path, artifact_dir: Path) -> list[dict[str, Any]]:
             minimum_tests=1,
         )
 
-    run_stage(
-        "cli-build",
-        [
-            "cargo",
-            "build",
-            "--manifest-path",
-            "codex-rs/Cargo.toml",
-            "-p",
-            "codex-cli",
-            "--bin",
-            "nyacode",
-            "--bin",
-            "codex",
-        ],
-    )
     run_stage(
         "nyacode-branding",
         [

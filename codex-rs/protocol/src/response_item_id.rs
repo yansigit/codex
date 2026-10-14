@@ -12,7 +12,7 @@ use ts_rs::TS;
     Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, JsonSchema, TS,
 )]
 #[serde(transparent)]
-#[schemars(with = "String")]
+#[schemars(with = "String", inline)]
 #[ts(type = "string")]
 pub struct ResponseItemId(String);
 

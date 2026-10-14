@@ -86,7 +86,8 @@ fn image_generation_item_preserves_authoritative_transparency() {
 #[test]
 fn image_generation_transparency_is_optional_in_typescript() {
     assert!(
-        ImageGenerationItem::inline().contains("transparentBackground?: boolean"),
+        ImageGenerationItem::inline(&ts_rs::Config::default())
+            .contains("transparentBackground?: boolean"),
         "image-generation transparency must remain optional for existing TypeScript clients"
     );
 }
@@ -110,8 +111,8 @@ fn image_generation_request_id_stays_internal() {
     };
     assert_eq!(round_tripped.imagegen_request_id, None);
     assert_eq!(round_tripped.generation_id, None);
-    assert!(!ImageGenerationItem::inline().contains("imagegenRequestId"));
-    assert!(!ImageGenerationItem::inline().contains("generationId"));
+    assert!(!ImageGenerationItem::inline(&ts_rs::Config::default()).contains("imagegenRequestId"));
+    assert!(!ImageGenerationItem::inline(&ts_rs::Config::default()).contains("generationId"));
 }
 
 #[test]

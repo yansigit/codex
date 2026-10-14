@@ -4,7 +4,7 @@ use std::ffi::OsString;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 
-/// This is designed to be called pre-main() (using `#[ctor::ctor]`) to perform
+/// This is designed to be called pre-main() (using `#[ctor::ctor(unsafe)]`) to perform
 /// various process hardening steps, such as
 /// - disabling core dumps
 /// - disabling ptrace attach on Linux and macOS.

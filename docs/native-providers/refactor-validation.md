@@ -46,10 +46,9 @@ The manifest now selects the established 33 `client::tests::` library tests;
 all 33 passed using the freshly compiled core test binary. Their receipt is
 `core-responses-corrected.log`; the original zero-test result remains archived.
 
-The TUI status run initially exceeded the default test-thread stack. That rerun
-used `RUST_MIN_STACK=8388608`. The repository default is now 64 MiB because
-debug `codex-app-server` and `codex-tui` tests overflow at 8 MiB; `just test`
-and this runner follow that default. Four Windows cross-test targets were skipped by
+The TUI status run initially exceeded the default test-thread stack. The rerun
+uses `RUST_MIN_STACK=8388608`, matching `just test`; the compatibility runner
+now supplies the same setting. Four Windows cross-test targets were skipped by
 the Linux Bazel invocation. The full repository suite and other platforms were
 not tested.
 

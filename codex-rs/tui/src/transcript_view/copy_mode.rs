@@ -147,13 +147,13 @@ impl TranscriptView {
                 let mut quotes = Vec::new();
                 for (event, span) in pulldown_cmark::Parser::new(source).into_offset_iter() {
                     match event {
-                        pulldown_cmark::Event::Start(pulldown_cmark::Tag::BlockQuote) => {
+                        pulldown_cmark::Event::Start(pulldown_cmark::Tag::BlockQuote(_)) => {
                             if depth == 0 {
                                 quotes.push(crate::markdown_copy::quote_content(&source[span]));
                             }
                             depth += 1;
                         }
-                        pulldown_cmark::Event::End(pulldown_cmark::TagEnd::BlockQuote) => {
+                        pulldown_cmark::Event::End(pulldown_cmark::TagEnd::BlockQuote(_)) => {
                             depth -= 1
                         }
                         _ => {}
@@ -343,7 +343,7 @@ fn user_ranges(text: &str, message: &str) -> Vec<(Range<usize>, &'static str, Op
     let mut code: Option<(Range<usize>, String)> = None;
     for (event, range) in pulldown_cmark::Parser::new(text).into_offset_iter() {
         match event {
-            Event::Start(Tag::BlockQuote) => {
+            Event::Start(Tag::BlockQuote(_)) => {
                 if depth == 0 {
                     let source = message
                         .is_empty()
@@ -352,7 +352,7 @@ fn user_ranges(text: &str, message: &str) -> Vec<(Range<usize>, &'static str, Op
                 }
                 depth += 1;
             }
-            Event::End(TagEnd::BlockQuote) => depth -= 1,
+            Event::End(TagEnd::BlockQuote(_)) => depth -= 1,
             Event::Start(Tag::CodeBlock(_)) => {
                 code = Some((range.start..range.start, String::new()))
             }

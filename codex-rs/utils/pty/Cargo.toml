@@ -30,6 +30,8 @@ winapi = { version = "0.3.9", features = [
     "libloaderapi",
     "minwinbase",
     "processthreadsapi",
+    # ConPTY handles cross std::ffi and winapi boundaries.
+    "std",
     "synchapi",
     "winbase",
     "wincon",

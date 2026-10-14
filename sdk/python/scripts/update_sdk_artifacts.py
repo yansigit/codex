@@ -214,6 +214,15 @@ def stage_python_runtime_package(
     runtime_package_root = staged_runtime_package_root(staging_dir)
     if package_source.is_dir():
         shutil.copytree(package_source, runtime_package_root, dirs_exist_ok=True)
+        # Match tarfile's data filter for directory inputs, including under a
+        # group-writable umask. Keep executable binaries executable.
+        for source_path in package_source.rglob("*"):
+            if source_path.is_file():
+                path = runtime_package_root / source_path.relative_to(package_source)
+                mode = path.stat().st_mode & 0o755
+                if not mode & 0o100:
+                    mode &= ~0o111
+                path.chmod(mode | 0o600)
         _validate_codex_package_layout(runtime_package_root, package_source)
     else:
         _extract_codex_package_archive(package_source, runtime_package_root)
@@ -396,14 +405,52 @@ def _variant_collision_key(base: str, variant: dict[str, Any], generated_name: s
     return "|".join(parts)
 
 
-def _set_discriminator_titles(props: dict[str, Any], owner: str) -> None:
+def _inline_discriminator_literals(props: dict[str, Any]) -> None:
     for key in DISCRIMINATOR_KEYS:
         prop = props.get(key)
         if not isinstance(prop, dict):
             continue
-        if _string_literal(prop) is None or "title" in prop:
+        if _string_literal(prop) is None:
             continue
-        prop["title"] = f"{owner}{_to_pascal_case(key)}"
+        # Newer generators emit titled scalar literals as RootModel classes.
+        # Discriminators must remain inline Literal fields in the public SDK.
+        prop.pop("title", None)
+
+
+def _flatten_inline_image_variants(schema: dict[str, Any]) -> None:
+    """Keep inline image alternatives as public leaf models, not new wrappers."""
+    definitions = schema.get("definitions", {})
+    for name in ("UserInput", "ContentItem", "FunctionCallOutputContentItem"):
+        definition = definitions.get(name, {})
+        variants = definition.get("oneOf", [])
+        flattened = []
+        for variant in variants:
+            alternatives = variant.get("anyOf")
+            properties = variant.get("properties", {})
+            if not alternatives or properties.get("type", {}).get("enum") not in (
+                ["image"],
+                ["input_image"],
+            ):
+                flattened.append(variant)
+                continue
+            for alternative in alternatives:
+                if (
+                    alternative.get("type") != "object"
+                    or properties.keys() & alternative.get("properties", {}).keys()
+                ):
+                    raise RuntimeError(f"Unexpected inline image schema in {name}")
+                flattened.append(
+                    {
+                        **{key: value for key, value in variant.items() if key != "anyOf"},
+                        **alternative,
+                        "properties": {**properties, **alternative.get("properties", {})},
+                        "required": sorted(
+                            set(variant.get("required", [])) | set(alternative.get("required", []))
+                        ),
+                    }
+                )
+        if variants:
+            definition["oneOf"] = flattened
 
 
 def _annotate_variant_list(variants: list[Any], base: str | None) -> None:
@@ -440,7 +487,7 @@ def _annotate_variant_list(variants: list[Any], base: str | None) -> None:
         if isinstance(variant_name, str):
             props = variant.get("properties")
             if isinstance(props, dict):
-                _set_discriminator_titles(props, variant_name)
+                _inline_discriminator_literals(props)
 
         _annotate_schema(variant, base)
 
@@ -457,7 +504,7 @@ def _annotate_schema(value: Any, base: str | None = None) -> None:
     owner = value.get("title")
     props = value.get("properties")
     if isinstance(owner, str) and isinstance(props, dict):
-        _set_discriminator_titles(props, owner)
+        _inline_discriminator_literals(props)
 
     one_of = value.get("oneOf")
     if isinstance(one_of, list):
@@ -542,6 +589,22 @@ def _normalized_schema_bundle_text(schema_dir: Path) -> str:
     # Normalize the schema into something datamodel-code-generator can map to
     # stable class names instead of anonymous numbered helpers.
     _annotate_schema(schema)
+    _flatten_inline_image_variants(schema)
+    # These fields historically defaulted to None in the Python SDK. Preserve
+    # acceptance of older server responses and existing caller constructors.
+    for name, field in (
+        ("Thread", "projectId"),
+        ("ThreadProjectUpdatedNotification", "projectId"),
+        ("ThreadSectionMoveParams", "sectionId"),
+    ):
+        definition = definitions[name]
+        definition["required"] = [item for item in definition["required"] if item != field]
+        definition["properties"][field]["default"] = None
+    # A titled scalar branch now creates a wrapper instead of an inline literal.
+    # Keep ReasoningSummary("none").root as the public string value.
+    for variant in definitions["ReasoningSummary"]["oneOf"]:
+        if _string_literal(variant) is not None:
+            variant.pop("title", None)
     return json.dumps(schema, indent=2, sort_keys=True) + "\n"
 
 
@@ -572,6 +635,7 @@ def generate_v2_all(schema_dir: Path) -> None:
                 "--use-standard-collections",
                 "--enum-field-as-literal",
                 "one",
+                "--no-use-specialized-enum",
                 "--field-constraints",
                 "--use-default-kwarg",
                 "--snake-case-field",
@@ -635,7 +699,7 @@ def _require_nullable_field(out_path: Path, class_name: str, field_pattern: str)
         source[class_start:class_end],
         flags=re.MULTILINE,
     )
-    if count != 1:
+    if count != 1 and not re.search(rf"^    {field_pattern}$", class_source, flags=re.MULTILINE):
         raise RuntimeError(f"Generated {class_name} field did not have the expected nullable shape")
     out_path.write_text(source[:class_start] + class_source + source[class_end:])
 

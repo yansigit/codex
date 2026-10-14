@@ -647,7 +647,7 @@ impl FeedbackSnapshot {
             options.session_source.as_ref(),
         );
         let mut envelope = Envelope::new();
-        envelope.add_item(EnvelopeItem::Event(event));
+        envelope.add_item(EnvelopeItem::Event(Box::new(event)));
         let (event_body, event_bytes) =
             upload::encode_envelope(&envelope).context("failed to serialize feedback event")?;
         anyhow::ensure!(

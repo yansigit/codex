@@ -12,6 +12,7 @@ use codex_config::AbsolutePathBuf;
 use codex_config::CloudConfigBundle;
 use codex_config::CloudConfigBundlePolicyRevision;
 use hmac::Hmac;
+use hmac::KeyInit;
 use hmac::Mac;
 use serde::Deserialize;
 use serde::Serialize;

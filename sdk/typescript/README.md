@@ -67,7 +67,7 @@ const turn = await thread.run("Summarize repository status", { outputSchema: sch
 console.log(turn.finalResponse);
 ```
 
-You can also create a JSON schema from a [Zod schema](https://github.com/colinhacks/zod) using the [`zod-to-json-schema`](https://www.npmjs.com/package/zod-to-json-schema) package and setting the `target` to `"openAi"`.
+Zod 4 can generate the JSON schema directly with `z.toJSONSchema`.
 
 ```typescript
 const schema = z.object({
@@ -76,7 +76,7 @@ const schema = z.object({
 });
 
 const turn = await thread.run("Summarize repository status", {
-  outputSchema: zodToJsonSchema(schema, { target: "openAi" }),
+  outputSchema: z.toJSONSchema(schema, { target: "draft-07" }),
 });
 console.log(turn.finalResponse);
 ```

@@ -121,7 +121,7 @@ impl FeedbackSnapshot {
         event.event_id =
             Uuid::parse_str(report_id).map_err(|_| anyhow!("invalid feedback report ID"))?;
         let mut envelope = Envelope::new();
-        envelope.add_item(EnvelopeItem::Event(event));
+        envelope.add_item(EnvelopeItem::Event(Box::new(event)));
         prepare_envelope(envelope, MAX_EVENT_BYTES)
     }
 }

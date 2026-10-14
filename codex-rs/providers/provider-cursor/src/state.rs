@@ -36,7 +36,7 @@ pub(crate) struct State {
 pub(crate) fn hash<T: Serialize + ?Sized>(value: &T) -> Result<String> {
     let bytes = serde_json::to_vec(value)
         .map_err(|_| ProviderError::Checkpoint("cannot hash Cursor context".into()))?;
-    Ok(format!("{:x}", sha2::Sha256::digest(&bytes)))
+    Ok(hex::encode(sha2::Sha256::digest(&bytes)))
 }
 
 // Preserve typed Message/Content field order from the original serialization;
@@ -213,10 +213,7 @@ mod tests {
             .put_json_blob(serde_json::json!({"role":"system","content":"rules"}))
             .unwrap();
         assert_eq!(
-            format!(
-                "{:x}",
-                sha2::Sha256::digest(state.blob(&id).unwrap().unwrap())
-            ),
+            hex::encode(sha2::Sha256::digest(state.blob(&id).unwrap().unwrap())),
             "7503473182c40907507eff3c258c9bbb245392d2b44eea3743948fbe85e4b02d"
         );
         assert_eq!(

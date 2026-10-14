@@ -39,8 +39,9 @@ runs:
           *) echo "Unsupported build mode: $BUILD_MODE" >&2; exit 1 ;;
         esac
 
-    - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+    - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master, 2026-10-12
       with:
+        toolchain: 1.95.0
         targets: ${{ inputs.target }}
 
     - name: Use hermetic Cargo home (musl)
@@ -59,7 +60,7 @@ runs:
       if: ${{ runner.os == 'Linux' }}
       uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
       with:
-        version: 0.14.0
+        version: 0.17.0
         use-cache: false
 
     - name: Install musl build tools
@@ -96,6 +97,13 @@ runs:
       with:
         target: ${{ inputs.target }}
 
+    - name: Configure native ARM64 CMake builds
+      if: ${{ inputs.target == 'aarch64-pc-windows-msvc' }}
+      shell: pwsh
+      run: |
+        $toolchain = Join-Path $env:GITHUB_WORKSPACE '.github/scripts/windows-arm64-cmake.cmake'
+        "CMAKE_TOOLCHAIN_FILE_aarch64_pc_windows_msvc=$toolchain" >> $env:GITHUB_ENV
+
     - name: Build bwrap and export digest
       if: ${{ runner.os == 'Linux' }}
       shell: bash
@@ -104,7 +112,7 @@ runs:
         TARGET: ${{ inputs.target }}
       run: |
         set -euo pipefail
-        cargo build --target "${TARGET}" --release --timings --bin bwrap
+        cargo build --locked --target "${TARGET}" --release --timings --bin bwrap
 
         bwrap_path="${CARGO_TARGET_DIR}/${TARGET}/release/bwrap"
         # Codex embeds this digest at build time and verifies the packaged
@@ -132,4 +140,4 @@ runs:
         fi
         STABLE_GIT_COMMIT="$(git rev-parse HEAD)"
         export STABLE_GIT_COMMIT
-        cargo build --target "${TARGET}" --release --timings "${build_args[@]}"
+        cargo build --locked --target "${TARGET}" --release --timings "${build_args[@]}"

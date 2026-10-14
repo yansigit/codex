@@ -20,6 +20,7 @@ provider-claude = ["codex-provider-adapter/provider-claude"]
 provider-antigravity = ["codex-provider-adapter/provider-antigravity"]
 
 [dependencies]
+hex = { workspace = true }
 codex-provider-adapter = { workspace = true, default-features = false }
 reqwest = { workspace = true, features = ["json", "stream"] }
 tokio-util = { workspace = true }

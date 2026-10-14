@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "definitions": {
     "PluginReconcileChangedPlugin": {
-      "description": "Runtime categories affected by this change, not just capabilities currently present. Flags describe declarations before runtime policy filtering. Updates OR the old and new bundle flags; enablement changes and cached reinstalls use the cached bundle; removals retain the old bundle's flags.",
+      "description": "Runtime categories affected by this change, not just capabilities currently present.\nFlags describe declarations before runtime policy filtering. Updates OR the old and new\nbundle flags; enablement changes and cached reinstalls use the cached bundle; removals retain\nthe old bundle's flags.",
       "properties": {
         "hasApps": {
           "type": "boolean"
@@ -32,17 +32,17 @@
       "type": "object"
     }
   },
-  "description": "Bundle and installed-state changes observed by this pass, not a runtime-readiness acknowledgement or a cumulative diff since the client's last request. Other metadata-only changes are not listed.",
+  "description": "Bundle and installed-state changes observed by this pass, not a runtime-readiness\nacknowledgement or a cumulative diff since the client's last request. Other metadata-only\nchanges are not listed.",
   "properties": {
     "changedPlugins": {
-      "description": "Plugins affected by bundle changes, enablement changes, or removals. Installed-state changes compare against the previous cached snapshot, including cached reinstalls. Removal hints survive cache cleanup failures; unchanged plugins are omitted.",
+      "description": "Plugins affected by bundle changes, enablement changes, or removals.\nInstalled-state changes compare against the previous cached snapshot, including\ncached reinstalls. Removal hints survive cache cleanup failures; unchanged plugins are omitted.",
       "items": {
         "$ref": "#/definitions/PluginReconcileChangedPlugin"
       },
       "type": "array"
     },
     "failedMaterializationRemotePluginIds": {
-      "description": "Subset of failures for which the requested bundle could not be materialized. A previously cached version may still be available.",
+      "description": "Subset of failures for which the requested bundle could not be materialized.\nA previously cached version may still be available.",
       "items": {
         "type": "string"
       },

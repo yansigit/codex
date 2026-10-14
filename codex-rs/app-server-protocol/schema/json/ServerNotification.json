@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "definitions": {
     "AbsolutePathBuf": {
-      "description": "A path that is guaranteed to be absolute and normalized (though it is not guaranteed to be canonicalized or exist on the filesystem).\n\nIMPORTANT: When deserializing an `AbsolutePathBuf`, a base path must be set using [AbsolutePathBufGuard::new]. If no base path is set, the deserialization will fail unless the path being deserialized is already absolute.",
+      "description": "A path that is guaranteed to be absolute and normalized (though it is not\nguaranteed to be canonicalized or exist on the filesystem).\n\nIMPORTANT: When deserializing an `AbsolutePathBuf`, a base path must be set\nusing [AbsolutePathBufGuard::new]. If no base path is set, the\ndeserialization will fail unless the path being deserialized is already\nabsolute.",
       "type": "string"
     },
     "AccountLoginCompletedNotification": {
@@ -39,7 +39,7 @@
       "type": "object"
     },
     "AccountRateLimitsUpdatedNotification": {
-      "description": "Sparse rolling rate-limit update.\n\nClients should merge available values into the most recent `account/rateLimits/read` response or refetch that snapshot. Nullable account metadata may be unavailable in a rolling update and does not clear a previously observed value.",
+      "description": "Sparse rolling rate-limit update.\n\nClients should merge available values into the most recent `account/rateLimits/read` response\nor refetch that snapshot. Nullable account metadata may be unavailable in a rolling update and\ndoes not clear a previously observed value.",
       "properties": {
         "rateLimits": {
           "$ref": "#/definitions/RateLimitSnapshot"
@@ -79,14 +79,14 @@
       "properties": {
         "extends": {
           "default": null,
-          "description": "Parent profile identifier from the selected permissions profile's `extends` setting, when present.",
+          "description": "Parent profile identifier from the selected permissions profile's\n`extends` setting, when present.",
           "type": [
             "string",
             "null"
           ]
         },
         "id": {
-          "description": "Identifier from `default_permissions` or the implicit built-in default, such as `:workspace` or a user-defined `[permissions.<id>]` profile.",
+          "description": "Identifier from `default_permissions` or the implicit built-in default,\nsuch as `:workspace` or a user-defined `[permissions.<id>]` profile.",
           "type": "string"
         }
       },
@@ -108,7 +108,7 @@
         },
         "globScanMaxDepth": {
           "format": "uint",
-          "minimum": 1.0,
+          "minimum": 1,
           "type": [
             "integer",
             "null"
@@ -290,7 +290,7 @@
         },
         "isEnabled": {
           "default": true,
-          "description": "Whether this app is enabled in config.toml. Example: ```toml [apps.bad_app] enabled = false ```",
+          "description": "Whether this app is enabled in config.toml.\nExample:\n```toml\n[apps.bad_app]\nenabled = false\n```",
           "type": "boolean"
         },
         "labels": {
@@ -561,7 +561,7 @@
           "type": "string"
         },
         {
-          "description": "[UNSTABLE] FOR OPENAI INTERNAL USE ONLY - DO NOT USE.\n\nChatGPT auth tokens are supplied by an external host app and are only stored in memory. Token refresh must be handled by the external host app.",
+          "description": "[UNSTABLE] FOR OPENAI INTERNAL USE ONLY - DO NOT USE.\n\nChatGPT auth tokens are supplied by an external host app and are only\nstored in memory. Token refresh must be handled by the external host app.",
           "enum": [
             "chatgptAuthTokens"
           ],
@@ -638,12 +638,12 @@
       "properties": {
         "end": {
           "format": "uint",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         },
         "start": {
           "format": "uint",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         }
       },
@@ -682,7 +682,8 @@
               "properties": {
                 "httpStatusCode": {
                   "format": "uint16",
-                  "minimum": 0.0,
+                  "maximum": 65535,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -706,7 +707,8 @@
               "properties": {
                 "httpStatusCode": {
                   "format": "uint16",
-                  "minimum": 0.0,
+                  "maximum": 65535,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -730,7 +732,8 @@
               "properties": {
                 "httpStatusCode": {
                   "format": "uint16",
-                  "minimum": 0.0,
+                  "maximum": 65535,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -754,7 +757,8 @@
               "properties": {
                 "httpStatusCode": {
                   "format": "uint16",
-                  "minimum": 0.0,
+                  "maximum": 65535,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -772,7 +776,7 @@
         },
         {
           "additionalProperties": false,
-          "description": "Returned when `turn/start` or `turn/steer` is submitted while the current active turn cannot accept same-turn steering, for example `/review` or manual `/compact`.",
+          "description": "Returned when `turn/start` or `turn/steer` is submitted while the current active turn\ncannot accept same-turn steering, for example `/review` or manual `/compact`.",
           "properties": {
             "activeTurnNotSteerable": {
               "properties": {
@@ -799,7 +803,7 @@
           ]
         }
       ],
-      "description": "This translation layer make sure that we expose codex error code in camel case.\n\nWhen an upstream HTTP status is available (for example, from the Responses API or a provider), it is forwarded in `httpStatusCode` on the relevant `codexErrorInfo` variant."
+      "description": "This translation layer make sure that we expose codex error code in camel case.\n\nWhen an upstream HTTP status is available (for example, from the Responses API or a provider),\nit is forwarded in `httpStatusCode` on the relevant `codexErrorInfo` variant."
     },
     "CollabAgentState": {
       "properties": {
@@ -980,10 +984,10 @@
       ]
     },
     "CommandExecOutputDeltaNotification": {
-      "description": "Base64-encoded output chunk emitted for a streaming `command/exec` request.\n\nThese notifications are connection-scoped. If the originating connection closes, the server terminates the process.",
+      "description": "Base64-encoded output chunk emitted for a streaming `command/exec` request.\n\nThese notifications are connection-scoped. If the originating connection\ncloses, the server terminates the process.",
       "properties": {
         "capReached": {
-          "description": "`true` on the final streamed chunk for a stream when `outputBytesCap` truncated later output on that stream.",
+          "description": "`true` on the final streamed chunk for a stream when `outputBytesCap`\ntruncated later output on that stream.",
           "type": "boolean"
         },
         "deltaBase64": {
@@ -991,7 +995,7 @@
           "type": "string"
         },
         "processId": {
-          "description": "Client-supplied, connection-scoped `processId` from the original `command/exec` request.",
+          "description": "Client-supplied, connection-scoped `processId` from the original\n`command/exec` request.",
           "type": "string"
         },
         "stream": {
@@ -1744,7 +1748,7 @@
       ]
     },
     "FunctionCallOutputContentItem": {
-      "description": "Responses API compatible content items that can be returned by a tool call. This is a subset of ContentItem with the types we support as function call outputs.",
+      "description": "Responses API compatible content items that can be returned by a tool call.\nThis is a subset of ContentItem with the types we support as function call outputs.",
       "oneOf": [
         {
           "properties": {
@@ -1876,7 +1880,7 @@
         "indices": {
           "items": {
             "format": "uint32",
-            "minimum": 0.0,
+            "minimum": 0,
             "type": "integer"
           },
           "type": [
@@ -1895,7 +1899,7 @@
         },
         "score": {
           "format": "uint32",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         }
       },
@@ -2002,7 +2006,7 @@
       "type": "object"
     },
     "GuardianApprovalReview": {
-      "description": "[UNSTABLE] Temporary approval auto-review payload used by `item/autoApprovalReview/*` notifications. This shape is expected to change soon.",
+      "description": "[UNSTABLE] Temporary approval auto-review payload used by\n`item/autoApprovalReview/*` notifications. This shape is expected to change\nsoon.",
       "properties": {
         "rationale": {
           "type": [
@@ -2171,7 +2175,8 @@
             },
             "port": {
               "format": "uint16",
-              "minimum": 0.0,
+              "maximum": 65535,
+              "minimum": 0,
               "type": "integer"
             },
             "protocol": {
@@ -2591,6 +2596,59 @@
         }
       ]
     },
+    "ImageGenerationItem": {
+      "properties": {
+        "failure": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ImageGenerationFailure"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "id": {
+          "type": "string"
+        },
+        "result": {
+          "type": "string"
+        },
+        "revisedPrompt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "savedPath": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/AbsolutePathBuf"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status": {
+          "type": "string"
+        },
+        "transparentBackground": {
+          "default": null,
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "result",
+        "status"
+      ],
+      "type": "object"
+    },
     "ItemCompletedNotification": {
       "properties": {
         "completedAtMs": {
@@ -2617,7 +2675,7 @@
       "type": "object"
     },
     "ItemGuardianApprovalReviewCompletedNotification": {
-      "description": "[UNSTABLE] Temporary notification payload for approval auto-review. This shape is expected to change soon.",
+      "description": "[UNSTABLE] Temporary notification payload for approval auto-review. This\nshape is expected to change soon.",
       "properties": {
         "action": {
           "$ref": "#/definitions/GuardianApprovalReviewAction"
@@ -2643,7 +2701,7 @@
           "type": "integer"
         },
         "targetItemId": {
-          "description": "Identifier for the reviewed item or tool call when one exists.\n\nIn most cases, one review maps to one target item. The exceptions are - execve reviews, where a single command may contain multiple execve calls to review (only possible when using the shell_zsh_fork feature) - stdin reviews, which refer to the existing parent command item and have a separate approval ID in the action payload - network policy reviews, where there is no target item\n\nA network call is triggered by a CommandExecution item, so having a target_item_id set to the CommandExecution item would be misleading because the review is about the network call, not the command execution. Therefore, target_item_id is set to None for network policy reviews.",
+          "description": "Identifier for the reviewed item or tool call when one exists.\n\nIn most cases, one review maps to one target item. The exceptions are\n- execve reviews, where a single command may contain multiple execve\n  calls to review (only possible when using the shell_zsh_fork feature)\n- stdin reviews, which refer to the existing parent command item and\n  have a separate approval ID in the action payload\n- network policy reviews, where there is no target item\n\nA network call is triggered by a CommandExecution item, so having a\ntarget_item_id set to the CommandExecution item would be misleading\nbecause the review is about the network call, not the command execution.\nTherefore, target_item_id is set to None for network policy reviews.",
           "type": [
             "string",
             "null"
@@ -2669,7 +2727,7 @@
       "type": "object"
     },
     "ItemGuardianApprovalReviewStartedNotification": {
-      "description": "[UNSTABLE] Temporary notification payload for approval auto-review. This shape is expected to change soon.",
+      "description": "[UNSTABLE] Temporary notification payload for approval auto-review. This\nshape is expected to change soon.",
       "properties": {
         "action": {
           "$ref": "#/definitions/GuardianApprovalReviewAction"
@@ -2687,7 +2745,7 @@
           "type": "integer"
         },
         "targetItemId": {
-          "description": "Identifier for the reviewed item or tool call when one exists.\n\nIn most cases, one review maps to one target item. The exceptions are - execve reviews, where a single command may contain multiple execve calls to review (only possible when using the shell_zsh_fork feature) - stdin reviews, which refer to the existing parent command item and have a separate approval ID in the action payload - network policy reviews, where there is no target item\n\nA network call is triggered by a CommandExecution item, so having a target_item_id set to the CommandExecution item would be misleading because the review is about the network call, not the command execution. Therefore, target_item_id is set to None for network policy reviews.",
+          "description": "Identifier for the reviewed item or tool call when one exists.\n\nIn most cases, one review maps to one target item. The exceptions are\n- execve reviews, where a single command may contain multiple execve\n  calls to review (only possible when using the shell_zsh_fork feature)\n- stdin reviews, which refer to the existing parent command item and\n  have a separate approval ID in the action payload\n- network policy reviews, where there is no target item\n\nA network call is triggered by a CommandExecution item, so having a\ntarget_item_id set to the CommandExecution item would be misleading\nbecause the review is about the network call, not the command execution.\nTherefore, target_item_id is set to None for network policy reviews.",
           "type": [
             "string",
             "null"
@@ -2991,12 +3049,12 @@
       "properties": {
         "lineEnd": {
           "format": "uint32",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         },
         "lineStart": {
           "format": "uint32",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         },
         "note": {
@@ -3015,10 +3073,10 @@
       "type": "object"
     },
     "MessagePhase": {
-      "description": "Classifies assistant text as commentary, a partial answer, or a terminal answer.\n\nProviders do not emit this consistently, so callers must treat `None` as \"phase unknown\" and keep compatibility behavior for legacy models.",
+      "description": "Classifies assistant text as commentary, a partial answer, or a terminal answer.\n\nProviders do not emit this consistently, so callers must treat `None` as\n\"phase unknown\" and keep compatibility behavior for legacy models.",
       "oneOf": [
         {
-          "description": "Mid-turn assistant text (for example preamble/progress narration).\n\nAdditional tool calls or assistant output may follow before turn completion.",
+          "description": "Mid-turn assistant text (for example preamble/progress narration).\n\nAdditional tool calls or assistant output may follow before turn\ncompletion.",
           "enum": [
             "commentary"
           ],
@@ -3201,7 +3259,7 @@
       "type": "object"
     },
     "MultiAgentMode": {
-      "description": "Controls the effective multi-agent delegation instructions for a turn. `custom` means the configured mode hint defines the policy instead of a built-in policy.",
+      "description": "Controls the effective multi-agent delegation instructions for a turn. `custom` means the\nconfigured mode hint defines the policy instead of a built-in policy.",
       "oneOf": [
         {
           "enum": [
@@ -3325,7 +3383,7 @@
       "type": "string"
     },
     "PlanDeltaNotification": {
-      "description": "EXPERIMENTAL - proposed plan streaming deltas for plan items. Clients should not assume concatenated deltas match the completed plan item content.",
+      "description": "EXPERIMENTAL - proposed plan streaming deltas for plan items. Clients should\nnot assume concatenated deltas match the completed plan item content.",
       "properties": {
         "delta": {
           "type": "string"
@@ -3388,7 +3446,7 @@
           "type": "string"
         },
         "stderrCapReached": {
-          "description": "Whether stderr reached `outputBytesCap`.\n\nIn streaming mode, stderr is empty and cap state is also reported on the final stderr `process/outputDelta` notification.",
+          "description": "Whether stderr reached `outputBytesCap`.\n\nIn streaming mode, stderr is empty and cap state is also reported on the\nfinal stderr `process/outputDelta` notification.",
           "type": "boolean"
         },
         "stdout": {
@@ -3396,7 +3454,7 @@
           "type": "string"
         },
         "stdoutCapReached": {
-          "description": "Whether stdout reached `outputBytesCap`.\n\nIn streaming mode, stdout is empty and cap state is also reported on the final stdout `process/outputDelta` notification.",
+          "description": "Whether stdout reached `outputBytesCap`.\n\nIn streaming mode, stdout is empty and cap state is also reported on the\nfinal stdout `process/outputDelta` notification.",
           "type": "boolean"
         }
       },
@@ -3414,7 +3472,7 @@
       "description": "Base64-encoded output chunk emitted for a streaming `process/spawn` request.",
       "properties": {
         "capReached": {
-          "description": "True on the final streamed chunk for this stream when output was truncated by `outputBytesCap`.",
+          "description": "True on the final streamed chunk for this stream when output was\ntruncated by `outputBytesCap`.",
           "type": "boolean"
         },
         "deltaBase64": {
@@ -3494,7 +3552,7 @@
         },
         "revision": {
           "format": "uint64",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         }
       },
@@ -3646,7 +3704,7 @@
       "type": "string"
     },
     "ReasoningSummary": {
-      "description": "A summary of the reasoning performed by the model. This can be useful for debugging and understanding the model's reasoning process. See https://platform.openai.com/docs/guides/reasoning?api-mode=responses#reasoning-summaries",
+      "description": "A summary of the reasoning performed by the model. This can be useful for\ndebugging and understanding the model's reasoning process.\nSee https://platform.openai.com/docs/guides/reasoning?api-mode=responses#reasoning-summaries",
       "oneOf": [
         {
           "enum": [
@@ -4000,7 +4058,25 @@
       "type": "object"
     },
     "SkillsChangedNotification": {
-      "description": "Notification emitted when watched local skill files change.\n\nTreat this as an invalidation signal and re-run `skills/list` with the client's current parameters when refreshed skill metadata is needed.",
+      "description": "Notification emitted when watched local skill files change.\n\nTreat this as an invalidation signal and re-run `skills/list` with the\nclient's current parameters when refreshed skill metadata is needed.",
+      "type": "object"
+    },
+    "SleepItem": {
+      "description": "Display item emitted by the interruptible `clock.sleep` tool.",
+      "properties": {
+        "durationMs": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "durationMs",
+        "id"
+      ],
       "type": "object"
     },
     "SpendControlLimitSnapshot": {
@@ -4189,13 +4265,13 @@
         "column": {
           "description": "1-based column number (in Unicode scalar values).",
           "format": "uint",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         },
         "line": {
           "description": "1-based line number.",
           "format": "uint",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         }
       },
@@ -4289,7 +4365,7 @@
           "type": "string"
         },
         "model": {
-          "description": "Current configured model when loaded, otherwise the latest persisted model. Null when unavailable. This is not per-turn execution telemetry.",
+          "description": "Current configured model when loaded, otherwise the latest persisted model.\nNull when unavailable. This is not per-turn execution telemetry.",
           "type": [
             "string",
             "null"
@@ -4307,7 +4383,7 @@
           ]
         },
         "originator": {
-          "description": "Originator recorded when the thread was created, independent of its current client or executor. Null when the recorded originator is unavailable.",
+          "description": "Originator recorded when the thread was created, independent of its current client or executor.\nNull when the recorded originator is unavailable.",
           "type": [
             "string",
             "null"
@@ -4347,7 +4423,7 @@
               "type": "null"
             }
           ],
-          "description": "Current configured reasoning effort when loaded, otherwise the latest persisted effort. Null when unset or unavailable. This is not per-turn execution telemetry."
+          "description": "Current configured reasoning effort when loaded, otherwise the latest persisted effort.\nNull when unset or unavailable. This is not per-turn execution telemetry."
         },
         "recencyAt": {
           "description": "Unix timestamp (in seconds) used for thread recency ordering.",
@@ -4410,7 +4486,7 @@
           "description": "Optional analytics source classification for this thread."
         },
         "turns": {
-          "description": "Only populated on `thread/resume`, `thread/fork`, and `thread/read` (when `includeTurns` is true) responses. For all other responses and notifications returning a Thread, the turns field will be an empty list.",
+          "description": "Only populated on `thread/resume`, `thread/fork`, and `thread/read`\n(when `includeTurns` is true) responses.\nFor all other responses and notifications returning a Thread,\nthe turns field will be an empty list.",
           "items": {
             "$ref": "#/definitions/Turn"
           },
@@ -4805,7 +4881,7 @@
           "type": "object"
         },
         {
-          "description": "EXPERIMENTAL - proposed plan item content. The completed plan item is authoritative and may not match the concatenation of `PlanDelta` text.",
+          "description": "EXPERIMENTAL - proposed plan item content. The completed plan item is\nauthoritative and may not match the concatenation of `PlanDelta` text.",
           "properties": {
             "id": {
               "type": "string"
@@ -4877,7 +4953,7 @@
               "type": "string"
             },
             "commandActions": {
-              "description": "A best-effort parsing of the command to understand the action(s) it will perform. This returns a list of CommandAction objects because a single shell command may be composed of many commands piped together.",
+              "description": "A best-effort parsing of the command to understand the action(s) it will perform.\nThis returns a list of CommandAction objects because a single shell command may\nbe composed of many commands piped together.",
               "items": {
                 "$ref": "#/definitions/CommandAction"
               },
@@ -5194,7 +5270,7 @@
               "description": "Reasoning effort requested for the spawned agent, when applicable."
             },
             "receiverThreadIds": {
-              "description": "Thread ID of the receiving agent, when applicable. In case of spawn operation, this corresponds to the newly spawned agent.",
+              "description": "Thread ID of the receiving agent, when applicable. In case of spawn operation,\nthis corresponds to the newly spawned agent.",
               "items": {
                 "type": "string"
               },
@@ -5291,32 +5367,12 @@
           "type": "object"
         },
         {
+          "allOf": [
+            {
+              "$ref": "#/definitions/WebSearchItem"
+            }
+          ],
           "properties": {
-            "action": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/WebSearchAction"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "id": {
-              "type": "string"
-            },
-            "query": {
-              "type": "string"
-            },
-            "results": {
-              "default": null,
-              "description": "Structured search results returned out-of-band by standalone web search.\n\nThese stay as opaque JSON at the extension/app-server boundary so new result fields and result types can pass through without a Codex release.",
-              "items": true,
-              "type": [
-                "array",
-                "null"
-              ]
-            },
             "type": {
               "enum": [
                 "webSearch"
@@ -5326,8 +5382,6 @@
             }
           },
           "required": [
-            "id",
-            "query",
             "type"
           ],
           "title": "WebSearchThreadItem",
@@ -5358,16 +5412,12 @@
           "type": "object"
         },
         {
-          "description": "Display item emitted by the interruptible `clock.sleep` tool.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/SleepItem"
+            }
+          ],
           "properties": {
-            "durationMs": {
-              "format": "uint64",
-              "minimum": 0.0,
-              "type": "integer"
-            },
-            "id": {
-              "type": "string"
-            },
             "type": {
               "enum": [
                 "sleep"
@@ -5377,58 +5427,18 @@
             }
           },
           "required": [
-            "durationMs",
-            "id",
             "type"
           ],
           "title": "SleepThreadItem",
           "type": "object"
         },
         {
+          "allOf": [
+            {
+              "$ref": "#/definitions/ImageGenerationItem"
+            }
+          ],
           "properties": {
-            "failure": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/ImageGenerationFailure"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null
-            },
-            "id": {
-              "type": "string"
-            },
-            "result": {
-              "type": "string"
-            },
-            "revisedPrompt": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "savedPath": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/AbsolutePathBuf"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "status": {
-              "type": "string"
-            },
-            "transparentBackground": {
-              "default": null,
-              "type": [
-                "boolean",
-                "null"
-              ]
-            },
             "type": {
               "enum": [
                 "imageGeneration"
@@ -5438,9 +5448,6 @@
             }
           },
           "required": [
-            "id",
-            "result",
-            "status",
             "type"
           ],
           "title": "ImageGenerationThreadItem",
@@ -5647,7 +5654,7 @@
       "type": "object"
     },
     "ThreadReadState": {
-      "description": "The first unread position in a durable local thread. A null position means read. The opaque revision guards edits against activity or marks the caller has not seen.",
+      "description": "The first unread position in a durable local thread. A null position means read.\nThe opaque revision guards edits against activity or marks the caller has not seen.",
       "properties": {
         "firstUnread": {
           "anyOf": [
@@ -5697,17 +5704,18 @@
         },
         "numChannels": {
           "format": "uint16",
-          "minimum": 0.0,
+          "maximum": 65535,
+          "minimum": 0,
           "type": "integer"
         },
         "sampleRate": {
           "format": "uint32",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         },
         "samplesPerChannel": {
           "format": "uint32",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
@@ -5760,7 +5768,7 @@
           "properties": {
             "index": {
               "format": "uint32",
-              "minimum": 0.0,
+              "minimum": 0,
               "type": "integer"
             },
             "type": {
@@ -5859,13 +5867,13 @@
         },
         {
           "properties": {
-            "item_id": {
+            "itemId": {
               "type": "string"
             },
             "presentation": {
               "$ref": "#/definitions/ThreadRealtimeBemItemPresentation"
             },
-            "turn_id": {
+            "turnId": {
               "type": "string"
             },
             "type": {
@@ -5877,9 +5885,9 @@
             }
           },
           "required": [
-            "item_id",
+            "itemId",
             "presentation",
-            "turn_id",
+            "turnId",
             "type"
           ],
           "title": "BemItemPromotedThreadRealtimeItem",
@@ -6048,7 +6056,7 @@
       "type": "object"
     },
     "ThreadRealtimeTranscriptDeltaNotification": {
-      "description": "EXPERIMENTAL - flat transcript delta emitted whenever realtime transcript text changes.",
+      "description": "EXPERIMENTAL - flat transcript delta emitted whenever realtime\ntranscript text changes.",
       "properties": {
         "delta": {
           "description": "Live transcript delta from the realtime event.",
@@ -6069,7 +6077,7 @@
       "type": "object"
     },
     "ThreadRealtimeTranscriptDoneNotification": {
-      "description": "EXPERIMENTAL - final transcript text emitted when realtime completes a transcript part.",
+      "description": "EXPERIMENTAL - final transcript text emitted when realtime completes\na transcript part.",
       "properties": {
         "role": {
           "type": "string"
@@ -6545,7 +6553,7 @@
           "description": "Describes how much of `items` has been loaded for this turn."
         },
         "rootTurnId": {
-          "description": "ID of the first turn in the chain of work that led to this turn. Pass this as `rootTurnId` when starting work on behalf of this turn. May be null in older history or a `review/start` response.",
+          "description": "ID of the first turn in the chain of work that led to this turn.\nPass this as `rootTurnId` when starting work on behalf of this turn.\nMay be null in older history or a `review/start` response.",
           "type": [
             "string",
             "null"
@@ -6586,7 +6594,7 @@
       "type": "object"
     },
     "TurnDiffUpdatedNotification": {
-      "description": "Notification that the turn-level unified diff has changed. Contains the latest aggregated diff across all file changes in the turn.",
+      "description": "Notification that the turn-level unified diff has changed.\nContains the latest aggregated diff across all file changes in the turn.",
       "properties": {
         "diff": {
           "type": "string"
@@ -7086,6 +7094,40 @@
         }
       ]
     },
+    "WebSearchItem": {
+      "properties": {
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/WebSearchAction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "query": {
+          "type": "string"
+        },
+        "results": {
+          "default": null,
+          "description": "Structured search results returned out-of-band by standalone web search.\n\nThese stay as opaque JSON at the extension/app-server boundary so new\nresult fields and result types can pass through without a Codex release.",
+          "items": true,
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "query"
+      ],
+      "type": "object"
+    },
     "WindowsSandboxSetupCompletedNotification": {
       "properties": {
         "error": {
@@ -7118,7 +7160,7 @@
       "properties": {
         "extraCount": {
           "format": "uint",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         },
         "failedScan": {

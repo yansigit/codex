@@ -139,7 +139,10 @@ pub(crate) fn server_version_notice_key(
         }
         None => hash_identity_part(&mut hasher, b"embedded:", b""),
     }
-    Some(format!("{:x}:{client}-{server}", hasher.finalize()))
+    Some(format!(
+        "{}:{client}-{server}",
+        hex::encode(hasher.finalize())
+    ))
 }
 
 pub(crate) fn pending_server_version_notice(

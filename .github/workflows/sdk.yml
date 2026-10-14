@@ -11,7 +11,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -28,7 +28,7 @@ jobs:
             python:3.12-slim \
             sh -euxc '
               python -m venv /tmp/build
-              /tmp/build/bin/python -m pip install uv==0.11.3
+              /tmp/build/bin/python -m pip install uv==0.13.0
               /tmp/build/bin/uv build --wheel --out-dir /tmp/dist
               python -m venv /tmp/installed
               /tmp/build/bin/uv pip install --python /tmp/installed/bin/python /tmp/dist/*.whl
@@ -45,7 +45,7 @@ jobs:
       deployment: false
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -57,14 +57,14 @@ jobs:
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends pkg-config libcap-dev
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@a8198c4bff370c8506180b035930dea56dbd5288 # v5
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           run_install: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 22
+          node-version: 26.11.1
           cache: pnpm
 
       - name: Prepare Bazel CI
@@ -136,9 +136,9 @@ jobs:
         run: pnpm -r --filter ./sdk/typescript run test
 
       - name: Install uv
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
-          version: "0.11.3"
+          version: "0.13.0"
 
       - name: Test Python SDK against the same CLI
         working-directory: sdk/python
@@ -151,7 +151,7 @@ jobs:
       - name: Save bazel repository cache
         if: always() && !cancelled() && steps.build_bazel.outcome == 'success' && steps.setup_bazel.outputs.repository-cache-hit != 'true'
         continue-on-error: true
-        uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ steps.setup_bazel.outputs.repository-cache-path }}
           key: ${{ steps.setup_bazel.outputs.repository-cache-key }}

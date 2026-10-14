@@ -488,7 +488,7 @@ pub struct AppToolConfig {
 
 /// Tool settings for a single app.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default, JsonSchema)]
-#[schemars(deny_unknown_fields)]
+// Flattened map entries are valid dynamic keys, validated by their value schema.
 pub struct AppToolsConfig {
     /// Per-tool overrides keyed by tool name (for example `repos/list`).
     #[serde(default, flatten)]
@@ -510,7 +510,7 @@ pub struct AppLinkConfig {
 
 /// Account settings for a single app.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default, JsonSchema)]
-#[schemars(deny_unknown_fields)]
+// Flattened map entries are valid dynamic keys, validated by their value schema.
 pub struct AppLinksConfig {
     /// Per-account approval settings keyed by link ID.
     #[serde(default, flatten)]
@@ -562,7 +562,7 @@ pub struct AppConfig {
 
 /// App/connector settings loaded from `config.toml`.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default, JsonSchema)]
-#[schemars(deny_unknown_fields)]
+// Flattened map entries are valid dynamic keys, validated by their value schema.
 pub struct AppsConfigToml {
     /// Default settings for all apps.
     #[serde(default, rename = "_default", skip_serializing_if = "Option::is_none")]
@@ -812,7 +812,7 @@ pub struct TuiNotificationSettings {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default, JsonSchema)]
-#[schemars(deny_unknown_fields)]
+// Flattened map entries are valid dynamic keys, validated by their value schema.
 pub struct ModelAvailabilityNuxConfig {
     /// Number of times a startup availability NUX has been shown per model slug.
     #[serde(default, flatten)]
@@ -1051,7 +1051,7 @@ pub struct PluginsDefaultConfig {
 
 /// Plugin activation and capability settings loaded from configuration layers.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default, JsonSchema)]
-#[schemars(deny_unknown_fields)]
+// Flattened map entries are valid dynamic keys, validated by their value schema.
 pub struct PluginsConfigToml {
     /// Defaults for installed plugin activation. Omission preserves source enablement.
     /// Explicit plugin enablement settings override this default, but cannot enable

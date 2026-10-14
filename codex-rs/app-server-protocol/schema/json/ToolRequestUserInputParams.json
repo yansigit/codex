@@ -61,7 +61,7 @@
       "default": null,
       "description": "@deprecated Use `isBlocking` to decide whether the request should block.",
       "format": "uint64",
-      "minimum": 0.0,
+      "minimum": 0,
       "type": [
         "integer",
         "null"

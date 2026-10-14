@@ -1,6 +1,11 @@
 name: Native providers
 
 on:
+  workflow_call:
+    inputs:
+      release_validation:
+        type: boolean
+        default: true
   pull_request:
     paths:
       - "codex-rs/**"
@@ -13,6 +18,7 @@ on:
       - "docs/native-providers/**"
       - ".github/workflows/native-providers.yml"
   push:
+    branches: [main]
     paths:
       - "codex-rs/**"
       - "scripts/native_provider_*.py"
@@ -41,16 +47,18 @@ jobs:
     name: Linux architecture, tests, and features
     if: github.event_name != 'schedule'
     runs-on: ubuntu-24.04
+    timeout-minutes: 360
     env:
       CARGO_BUILD_JOBS: "2"
       CARGO_INCREMENTAL: "0"
       CARGO_PROFILE_DEV_DEBUG: "0"
       CARGO_PROFILE_TEST_DEBUG: "0"
+      RUST_MIN_STACK: "33554432"
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master, 2026-10-12
         with:
           toolchain: 1.95.0
           components: clippy, rustfmt
@@ -58,6 +66,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y clang cmake libclang-dev libssl-dev pkg-config protobuf-compiler ripgrep
+      - name: Verify pinned V8 archive and bindings
+        uses: ./.github/actions/setup-rusty-v8
+        with:
+          target: x86_64-unknown-linux-gnu
       - name: Run focused native-provider checks and CLI build
         run: >-
           python3 scripts/native_provider_checks.py
@@ -68,9 +80,28 @@ jobs:
         run: |
           python3 -m unittest discover -s scripts/install -p "test_install_sh.py"
           python3 -m unittest discover -s scripts/codex_package -p "test_*.py"
+      - name: Test native Chat transport and lifecycle without credentials
+        working-directory: codex-rs
+        run: cargo test --locked -p codex-http-client -p codex-chatgpt-chat --lib
+      - name: Check dependency migrations and public schemas
+        working-directory: codex-rs
+        run: >-
+          cargo test --locked --lib
+          -p codex-protocol -p codex-config -p codex-hooks -p codex-app-server-protocol
+          -p codex-keyring-store -p codex-agent-identity -p codex-cloud-config
+          -p codex-websocket-auth -p codex-core-plugins -p codex-shell-command
+          -p codex-utils-cargo-bin
+      - name: Check terminal rendering and state snapshots
+        working-directory: codex-rs
+        run: cargo test --locked -p codex-tui --lib
+      - name: Check Code Mode execution and bundled ICU data
+        working-directory: codex-rs
+        run: cargo test --locked -p codex-code-mode-runtime --all-targets
+      - name: Verify checks did not rewrite tracked source or dependency pins
+        run: git diff --exit-code
       - name: Upload stage logs and summary
         if: always()
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: native-provider-ci-${{ github.run_id }}
           path: /tmp/native-provider-checks/
@@ -80,8 +111,9 @@ jobs:
   upstream-merge-probe:
     name: Upstream merge drift probe
     if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'schedule' && github.event.repository.default_branch == 'main')
+      inputs.release_validation != true &&
+      (github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'schedule' && github.event.repository.default_branch == 'main'))
     runs-on: ubuntu-24.04
     env:
       CARGO_BUILD_JOBS: "2"
@@ -89,11 +121,11 @@ jobs:
       CARGO_PROFILE_DEV_DEBUG: "0"
       CARGO_PROFILE_TEST_DEBUG: "0"
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master, 2026-10-12
         with:
           toolchain: 1.95.0
           components: clippy, rustfmt
@@ -111,7 +143,7 @@ jobs:
           --output-dir /tmp/native-provider-upstream-probe
       - name: Upload hashes, logs, and conflict lists
         if: always()
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: native-provider-upstream-probe-${{ github.run_id }}
           path: /tmp/native-provider-upstream-probe/

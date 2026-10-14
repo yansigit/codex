@@ -1,10 +1,3 @@
-[env]
-# Debug tests for `codex-app-server --test all` and `codex-tui --lib` overflow the
-# 8 MiB thread stack. They pass at 64 MiB. Cargo applies this to `cargo test`.
-# cargo-nextest 0.9.103 does not read this table; `just test` and CI export the
-# same value before invoking nextest. An already-set RUST_MIN_STACK still wins.
-RUST_MIN_STACK = { value = "67108864", force = false }
-
 [target.'cfg(all(windows, target_env = "msvc"))']
 rustflags = ["-C", "link-arg=/STACK:8388608", "-C", "target-feature=+crt-static"]
 

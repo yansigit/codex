@@ -754,7 +754,7 @@ pub struct GoalsToml {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Eq, JsonSchema)]
-#[schemars(deny_unknown_fields)]
+// Flattened map entries are valid dynamic keys, validated by their value schema.
 pub struct AgentsToml {
     /// Whether multi-agent tools are enabled. Defaults to true.
     /// An enabled `features.multi_agent_v2` setting takes precedence.

@@ -40,6 +40,7 @@ const MAX_KEY_CHORD_STROKES: usize = 2;
 /// bindings remain alternatives; their entries do not form a chord together.
 #[derive(Serialize, Debug, Clone, PartialEq, Eq, JsonSchema)]
 #[serde(transparent)]
+#[schemars(inline)]
 pub struct KeybindingSpec(#[schemars(with = "String")] pub String);
 
 impl KeybindingSpec {

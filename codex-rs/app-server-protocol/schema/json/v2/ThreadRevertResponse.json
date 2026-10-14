@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "definitions": {
     "AbsolutePathBuf": {
-      "description": "A path that is guaranteed to be absolute and normalized (though it is not guaranteed to be canonicalized or exist on the filesystem).\n\nIMPORTANT: When deserializing an `AbsolutePathBuf`, a base path must be set using [AbsolutePathBufGuard::new]. If no base path is set, the deserialization will fail unless the path being deserialized is already absolute.",
+      "description": "A path that is guaranteed to be absolute and normalized (though it is not\nguaranteed to be canonicalized or exist on the filesystem).\n\nIMPORTANT: When deserializing an `AbsolutePathBuf`, a base path must be set\nusing [AbsolutePathBufGuard::new]. If no base path is set, the\ndeserialization will fail unless the path being deserialized is already\nabsolute.",
       "type": "string"
     },
     "AgentMessageDelivery": {
@@ -39,12 +39,12 @@
       "properties": {
         "end": {
           "format": "uint",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         },
         "start": {
           "format": "uint",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         }
       },
@@ -83,7 +83,8 @@
               "properties": {
                 "httpStatusCode": {
                   "format": "uint16",
-                  "minimum": 0.0,
+                  "maximum": 65535,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -107,7 +108,8 @@
               "properties": {
                 "httpStatusCode": {
                   "format": "uint16",
-                  "minimum": 0.0,
+                  "maximum": 65535,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -131,7 +133,8 @@
               "properties": {
                 "httpStatusCode": {
                   "format": "uint16",
-                  "minimum": 0.0,
+                  "maximum": 65535,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -155,7 +158,8 @@
               "properties": {
                 "httpStatusCode": {
                   "format": "uint16",
-                  "minimum": 0.0,
+                  "maximum": 65535,
+                  "minimum": 0,
                   "type": [
                     "integer",
                     "null"
@@ -173,7 +177,7 @@
         },
         {
           "additionalProperties": false,
-          "description": "Returned when `turn/start` or `turn/steer` is submitted while the current active turn cannot accept same-turn steering, for example `/review` or manual `/compact`.",
+          "description": "Returned when `turn/start` or `turn/steer` is submitted while the current active turn\ncannot accept same-turn steering, for example `/review` or manual `/compact`.",
           "properties": {
             "activeTurnNotSteerable": {
               "properties": {
@@ -200,7 +204,7 @@
           ]
         }
       ],
-      "description": "This translation layer make sure that we expose codex error code in camel case.\n\nWhen an upstream HTTP status is available (for example, from the Responses API or a provider), it is forwarded in `httpStatusCode` on the relevant `codexErrorInfo` variant."
+      "description": "This translation layer make sure that we expose codex error code in camel case.\n\nWhen an upstream HTTP status is available (for example, from the Responses API or a provider),\nit is forwarded in `httpStatusCode` on the relevant `codexErrorInfo` variant."
     },
     "CollabAgentState": {
       "properties": {
@@ -487,7 +491,7 @@
       ]
     },
     "FunctionCallOutputContentItem": {
-      "description": "Responses API compatible content items that can be returned by a tool call. This is a subset of ContentItem with the types we support as function call outputs.",
+      "description": "Responses API compatible content items that can be returned by a tool call.\nThis is a subset of ContentItem with the types we support as function call outputs.",
       "oneOf": [
         {
           "properties": {
@@ -681,6 +685,59 @@
         }
       ]
     },
+    "ImageGenerationItem": {
+      "properties": {
+        "failure": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ImageGenerationFailure"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "id": {
+          "type": "string"
+        },
+        "result": {
+          "type": "string"
+        },
+        "revisedPrompt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "savedPath": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/AbsolutePathBuf"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status": {
+          "type": "string"
+        },
+        "transparentBackground": {
+          "default": null,
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "result",
+        "status"
+      ],
+      "type": "object"
+    },
     "LegacyAppPathString": {
       "type": "string"
     },
@@ -800,12 +857,12 @@
       "properties": {
         "lineEnd": {
           "format": "uint32",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         },
         "lineStart": {
           "format": "uint32",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         },
         "note": {
@@ -824,10 +881,10 @@
       "type": "object"
     },
     "MessagePhase": {
-      "description": "Classifies assistant text as commentary, a partial answer, or a terminal answer.\n\nProviders do not emit this consistently, so callers must treat `None` as \"phase unknown\" and keep compatibility behavior for legacy models.",
+      "description": "Classifies assistant text as commentary, a partial answer, or a terminal answer.\n\nProviders do not emit this consistently, so callers must treat `None` as\n\"phase unknown\" and keep compatibility behavior for legacy models.",
       "oneOf": [
         {
-          "description": "Mid-turn assistant text (for example preamble/progress narration).\n\nAdditional tool calls or assistant output may follow before turn completion.",
+          "description": "Mid-turn assistant text (for example preamble/progress narration).\n\nAdditional tool calls or assistant output may follow before turn\ncompletion.",
           "enum": [
             "commentary"
           ],
@@ -1016,6 +1073,24 @@
         }
       ]
     },
+    "SleepItem": {
+      "description": "Display item emitted by the interruptible `clock.sleep` tool.",
+      "properties": {
+        "durationMs": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "durationMs",
+        "id"
+      ],
+      "type": "object"
+    },
     "SubAgentActivityKind": {
       "enum": [
         "started",
@@ -1193,7 +1268,7 @@
           "type": "string"
         },
         "model": {
-          "description": "Current configured model when loaded, otherwise the latest persisted model. Null when unavailable. This is not per-turn execution telemetry.",
+          "description": "Current configured model when loaded, otherwise the latest persisted model.\nNull when unavailable. This is not per-turn execution telemetry.",
           "type": [
             "string",
             "null"
@@ -1211,7 +1286,7 @@
           ]
         },
         "originator": {
-          "description": "Originator recorded when the thread was created, independent of its current client or executor. Null when the recorded originator is unavailable.",
+          "description": "Originator recorded when the thread was created, independent of its current client or executor.\nNull when the recorded originator is unavailable.",
           "type": [
             "string",
             "null"
@@ -1251,7 +1326,7 @@
               "type": "null"
             }
           ],
-          "description": "Current configured reasoning effort when loaded, otherwise the latest persisted effort. Null when unset or unavailable. This is not per-turn execution telemetry."
+          "description": "Current configured reasoning effort when loaded, otherwise the latest persisted effort.\nNull when unset or unavailable. This is not per-turn execution telemetry."
         },
         "recencyAt": {
           "description": "Unix timestamp (in seconds) used for thread recency ordering.",
@@ -1314,7 +1389,7 @@
           "description": "Optional analytics source classification for this thread."
         },
         "turns": {
-          "description": "Only populated on `thread/resume`, `thread/fork`, and `thread/read` (when `includeTurns` is true) responses. For all other responses and notifications returning a Thread, the turns field will be an empty list.",
+          "description": "Only populated on `thread/resume`, `thread/fork`, and `thread/read`\n(when `includeTurns` is true) responses.\nFor all other responses and notifications returning a Thread,\nthe turns field will be an empty list.",
           "items": {
             "$ref": "#/definitions/Turn"
           },
@@ -1551,7 +1626,7 @@
           "type": "object"
         },
         {
-          "description": "EXPERIMENTAL - proposed plan item content. The completed plan item is authoritative and may not match the concatenation of `PlanDelta` text.",
+          "description": "EXPERIMENTAL - proposed plan item content. The completed plan item is\nauthoritative and may not match the concatenation of `PlanDelta` text.",
           "properties": {
             "id": {
               "type": "string"
@@ -1623,7 +1698,7 @@
               "type": "string"
             },
             "commandActions": {
-              "description": "A best-effort parsing of the command to understand the action(s) it will perform. This returns a list of CommandAction objects because a single shell command may be composed of many commands piped together.",
+              "description": "A best-effort parsing of the command to understand the action(s) it will perform.\nThis returns a list of CommandAction objects because a single shell command may\nbe composed of many commands piped together.",
               "items": {
                 "$ref": "#/definitions/CommandAction"
               },
@@ -1940,7 +2015,7 @@
               "description": "Reasoning effort requested for the spawned agent, when applicable."
             },
             "receiverThreadIds": {
-              "description": "Thread ID of the receiving agent, when applicable. In case of spawn operation, this corresponds to the newly spawned agent.",
+              "description": "Thread ID of the receiving agent, when applicable. In case of spawn operation,\nthis corresponds to the newly spawned agent.",
               "items": {
                 "type": "string"
               },
@@ -2037,32 +2112,12 @@
           "type": "object"
         },
         {
+          "allOf": [
+            {
+              "$ref": "#/definitions/WebSearchItem"
+            }
+          ],
           "properties": {
-            "action": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/WebSearchAction"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "id": {
-              "type": "string"
-            },
-            "query": {
-              "type": "string"
-            },
-            "results": {
-              "default": null,
-              "description": "Structured search results returned out-of-band by standalone web search.\n\nThese stay as opaque JSON at the extension/app-server boundary so new result fields and result types can pass through without a Codex release.",
-              "items": true,
-              "type": [
-                "array",
-                "null"
-              ]
-            },
             "type": {
               "enum": [
                 "webSearch"
@@ -2072,8 +2127,6 @@
             }
           },
           "required": [
-            "id",
-            "query",
             "type"
           ],
           "title": "WebSearchThreadItem",
@@ -2104,16 +2157,12 @@
           "type": "object"
         },
         {
-          "description": "Display item emitted by the interruptible `clock.sleep` tool.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/SleepItem"
+            }
+          ],
           "properties": {
-            "durationMs": {
-              "format": "uint64",
-              "minimum": 0.0,
-              "type": "integer"
-            },
-            "id": {
-              "type": "string"
-            },
             "type": {
               "enum": [
                 "sleep"
@@ -2123,58 +2172,18 @@
             }
           },
           "required": [
-            "durationMs",
-            "id",
             "type"
           ],
           "title": "SleepThreadItem",
           "type": "object"
         },
         {
+          "allOf": [
+            {
+              "$ref": "#/definitions/ImageGenerationItem"
+            }
+          ],
           "properties": {
-            "failure": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/ImageGenerationFailure"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null
-            },
-            "id": {
-              "type": "string"
-            },
-            "result": {
-              "type": "string"
-            },
-            "revisedPrompt": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "savedPath": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/AbsolutePathBuf"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "status": {
-              "type": "string"
-            },
-            "transparentBackground": {
-              "default": null,
-              "type": [
-                "boolean",
-                "null"
-              ]
-            },
             "type": {
               "enum": [
                 "imageGeneration"
@@ -2184,9 +2193,6 @@
             }
           },
           "required": [
-            "id",
-            "result",
-            "status",
             "type"
           ],
           "title": "ImageGenerationThreadItem",
@@ -2438,7 +2444,7 @@
           "description": "Describes how much of `items` has been loaded for this turn."
         },
         "rootTurnId": {
-          "description": "ID of the first turn in the chain of work that led to this turn. Pass this as `rootTurnId` when starting work on behalf of this turn. May be null in older history or a `review/start` response.",
+          "description": "ID of the first turn in the chain of work that led to this turn.\nPass this as `rootTurnId` when starting work on behalf of this turn.\nMay be null in older history or a `review/start` response.",
           "type": [
             "string",
             "null"
@@ -2841,11 +2847,45 @@
           "type": "object"
         }
       ]
+    },
+    "WebSearchItem": {
+      "properties": {
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/WebSearchAction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "query": {
+          "type": "string"
+        },
+        "results": {
+          "default": null,
+          "description": "Structured search results returned out-of-band by standalone web search.\n\nThese stay as opaque JSON at the extension/app-server boundary so new\nresult fields and result types can pass through without a Codex release.",
+          "items": true,
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "query"
+      ],
+      "type": "object"
     }
   },
   "properties": {
     "itemsBackwardsCursor": {
-      "description": "Opaque cursor for hydrating paginated items backwards.\n\nPass this as `cursor` to `thread/items/list` with `sortDirection: \"desc\"`. The first page includes the item identified by the cursor.",
+      "description": "Opaque cursor for hydrating paginated items backwards.\n\nPass this as `cursor` to `thread/items/list` with\n`sortDirection: \"desc\"`. The first page includes the item identified by the cursor.",
       "type": [
         "string",
         "null"
@@ -2857,10 +2897,10 @@
           "$ref": "#/definitions/Thread"
         }
       ],
-      "description": "Updated loaded thread metadata. `turns` is always empty; hydrate retained history through `thread/turns/list`."
+      "description": "Updated loaded thread metadata. `turns` is always empty; hydrate retained history through\n`thread/turns/list`."
     },
     "turnsBackwardsCursor": {
-      "description": "Opaque cursor for hydrating paginated turns backwards.\n\nPass this as `cursor` to `thread/turns/list` with `sortDirection: \"desc\"`. The first page includes the turn identified by the cursor.",
+      "description": "Opaque cursor for hydrating paginated turns backwards.\n\nPass this as `cursor` to `thread/turns/list` with\n`sortDirection: \"desc\"`. The first page includes the turn identified by the cursor.",
       "type": [
         "string",
         "null"

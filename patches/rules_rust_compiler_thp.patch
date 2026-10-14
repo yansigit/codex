@@ -1,7 +1,7 @@
 diff --git a/rust/private/rustc.bzl b/rust/private/rustc.bzl
 --- a/rust/private/rustc.bzl
 +++ b/rust/private/rustc.bzl
-@@ -1203,6 +1203,15 @@
+@@ -1319,6 +1319,15 @@
              expand_directories = False,
          )
  
@@ -20,7 +20,7 @@ diff --git a/rust/private/rustc.bzl b/rust/private/rustc.bzl
 diff --git a/util/process_wrapper/options.rs b/util/process_wrapper/options.rs
 --- a/util/process_wrapper/options.rs
 +++ b/util/process_wrapper/options.rs
-@@ -69,6 +69,12 @@
+@@ -74,6 +74,12 @@
      let mut rustc_output_format_raw = None;
      let mut flags = Flags::new();
      let mut require_explicit_unstable_features = None;
@@ -33,7 +33,7 @@ diff --git a/util/process_wrapper/options.rs b/util/process_wrapper/options.rs
      flags.define_repeated_flag("--subst", "", &mut subst_mapping_raw);
      flags.define_flag("--stable-status-file", "", &mut stable_status_file_raw);
      flags.define_flag("--volatile-status-file", "", &mut volatile_status_file_raw);
-@@ -260,7 +266,7 @@
+@@ -277,7 +283,7 @@
  
      // Prepare the environment variables, unifying those read from files with the ones
      // of the current process.
@@ -42,7 +42,7 @@ diff --git a/util/process_wrapper/options.rs b/util/process_wrapper/options.rs
          environment_file_block,
          &stable_stamp_mappings,
          &volatile_stamp_mappings,
-@@ -286,6 +292,10 @@
+@@ -303,6 +309,10 @@
          )
      })?;
  
@@ -53,7 +53,7 @@ diff --git a/util/process_wrapper/options.rs b/util/process_wrapper/options.rs
      Ok(Options {
          executable: exec_path.to_owned(),
          child_arguments: args.to_vec(),
-@@ -298,6 +308,47 @@
+@@ -317,6 +327,47 @@
          output_file,
          rustc_output_format,
      })

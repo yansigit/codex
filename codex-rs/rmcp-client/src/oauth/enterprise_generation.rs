@@ -41,7 +41,7 @@ impl EnterpriseOAuthGenerationFile {
             EnterpriseOAuthGenerationKind::LoginAttempt => "enterprise-generation",
             EnterpriseOAuthGenerationKind::Credential => "enterprise-credential-version",
         };
-        let name = format!("{:x}.{suffix}", Sha256::digest(key.as_bytes()));
+        let name = format!("{}.{suffix}", hex::encode(Sha256::digest(key.as_bytes())));
         let path = find_codex_home()?.join("mcp-oauth-locks").join(name);
         let mut options = OpenOptions::new();
         options.read(true).write(true).create(true).truncate(false);

@@ -109,5 +109,5 @@ fn sha1_hex(value: &str) -> String {
     let mut hasher = Sha1::new();
     hasher.update(value.as_bytes());
     let sha1 = hasher.finalize();
-    format!("{sha1:x}")
+    hex::encode(sha1)
 }

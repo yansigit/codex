@@ -3,7 +3,7 @@
   "properties": {
     "extraCount": {
       "format": "uint",
-      "minimum": 0.0,
+      "minimum": 0,
       "type": "integer"
     },
     "failedScan": {

@@ -4,7 +4,7 @@ mod openai;
 use super::destination::CredentialDestination;
 use rama_http::HeaderMap;
 use rama_http::HeaderValue;
-use rand::Rng as _;
+use rand::RngExt as _;
 use std::collections::HashMap;
 use url::Url;
 

@@ -375,7 +375,7 @@ impl CredentialBuilderApi for FileKeyring {
         _service: &str,
         user: &str,
     ) -> keyring::Result<Box<Credential>> {
-        let name = format!("{:x}", Sha256::digest(user.as_bytes()));
+        let name = hex::encode(Sha256::digest(user.as_bytes()));
         Ok(Box::new(FileCredential(self.0.join(name))))
     }
 

@@ -204,7 +204,7 @@
     },
     "McpElicitationSchema": {
       "additionalProperties": false,
-      "description": "Typed form schema for MCP `elicitation/create` requests.\n\nThis matches the `requestedSchema` shape from the MCP 2025-11-25 `ElicitRequestFormParams` schema.",
+      "description": "Typed form schema for MCP `elicitation/create` requests.\n\nThis matches the `requestedSchema` shape from the MCP 2025-11-25\n`ElicitRequestFormParams` schema.",
       "properties": {
         "$schema": {
           "type": [
@@ -283,7 +283,7 @@
         },
         "maxLength": {
           "format": "uint32",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
@@ -291,7 +291,7 @@
         },
         "minLength": {
           "format": "uint32",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
@@ -356,7 +356,7 @@
         },
         "maxItems": {
           "format": "uint64",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
@@ -364,7 +364,7 @@
         },
         "minItems": {
           "format": "uint64",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
@@ -465,7 +465,7 @@
         },
         "maxItems": {
           "format": "uint64",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
@@ -473,7 +473,7 @@
         },
         "minItems": {
           "format": "uint64",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
@@ -635,7 +635,7 @@
       "type": "string"
     },
     "turnId": {
-      "description": "Active Codex turn when this elicitation was observed, if app-server could correlate one.\n\nThis is nullable because MCP models elicitation as a standalone server-to-client request identified by the MCP server request id. It may be triggered during a turn, but turn context is app-server correlation rather than part of the protocol identity of the elicitation itself.",
+      "description": "Active Codex turn when this elicitation was observed, if app-server could correlate one.\n\nThis is nullable because MCP models elicitation as a standalone server-to-client request\nidentified by the MCP server request id. It may be triggered during a turn, but turn\ncontext is app-server correlation rather than part of the protocol identity of the\nelicitation itself.",
       "type": [
         "string",
         "null"

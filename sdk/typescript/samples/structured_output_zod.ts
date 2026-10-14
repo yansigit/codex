@@ -3,7 +3,6 @@
 import { Codex } from "@yansigit/nyacode-sdk";
 import { codexPathOverride } from "./helpers.ts";
 import z from "zod";
-import zodToJsonSchema from "zod-to-json-schema";
 
 const codex = new Codex({ codexPathOverride: codexPathOverride() });
 const thread = codex.startThread();
@@ -14,6 +13,6 @@ const schema = z.object({
 });
 
 const turn = await thread.run("Summarize repository status", {
-  outputSchema: zodToJsonSchema(schema, { target: "openAi" }),
+  outputSchema: z.toJSONSchema(schema, { target: "draft-07" }),
 });
 console.log(turn.finalResponse);
