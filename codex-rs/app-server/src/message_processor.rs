@@ -1522,6 +1522,12 @@ impl MessageProcessor {
             ClientRequest::ThreadMemoryModeSet { params, .. } => {
                 self.thread_processor.thread_memory_mode_set(params).await
             }
+            ClientRequest::MemoryMaintenance { params, .. } => {
+                self.thread_processor.memory_maintenance(params).await
+            }
+            ClientRequest::MemoryInspect { params, .. } => {
+                self.thread_processor.memory_inspect(params).await
+            }
             ClientRequest::MemoryStatus { params, .. } => {
                 self.thread_processor.memory_status(params).await
             }
@@ -1786,6 +1792,19 @@ impl MessageProcessor {
             }
             ClientRequest::ReviewStart { params, .. } => {
                 self.turn_processor.review_start(&request_id, params).await
+            }
+            ClientRequest::McpServerOauthDisconnect { params, .. } => {
+                Box::pin(self.mcp_processor.mcp_server_oauth_disconnect(params)).await
+            }
+            ClientRequest::HostToolInventory { params, .. } => {
+                let (_, _) = self.mcp_processor.load_thread(&params.thread_id).await?;
+                let inventory = codex_extension_api::host_tool_inventory(&params.thread_id)
+                    .map(serde_json::from_value)
+                    .transpose()
+                    .map_err(|_| internal_error("invalid host inventory"))?;
+                Ok(Some(
+                    codex_app_server_protocol::HostToolInventoryResponse { inventory }.into(),
+                ))
             }
             ClientRequest::McpServerOauthLogin { params, .. } => {
                 // Keep MCP discovery's large future from inflating every request.

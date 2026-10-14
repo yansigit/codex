@@ -92,3 +92,147 @@ pub fn start_memories_startup_task(
         });
     }
 }
+
+#[derive(Clone, Default, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HostMemoryStatus {
+    pub active: bool,
+    pub phase: String,
+    pub stop_requested: bool,
+    pub force_stop: bool,
+    pub tokens_used: i64,
+    pub child_thread_id: Option<String>,
+    pub error: Option<String>,
+}
+static HOST_JOB: std::sync::Mutex<Option<HostMemoryStatus>> = std::sync::Mutex::new(None);
+pub fn host_status() -> HostMemoryStatus {
+    HOST_JOB
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
+        .unwrap_or_default()
+}
+fn host_update(f: impl FnOnce(&mut HostMemoryStatus)) {
+    if let Some(state) = HOST_JOB.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
+        f(state);
+    }
+}
+pub fn host_stop(force: bool) -> HostMemoryStatus {
+    host_update(|s| {
+        s.stop_requested = true;
+        s.force_stop |= force;
+    });
+    host_status()
+}
+pub(crate) fn host_tokens(tokens: i64) {
+    host_update(|s| s.tokens_used = s.tokens_used.saturating_add(tokens.max(0)));
+}
+pub(crate) fn host_error(reason: &str) {
+    host_update(|s| s.error = Some(reason.to_string()));
+}
+pub(crate) fn host_child(id: Option<ThreadId>) {
+    host_update(|s| s.child_thread_id = id.map(|v| v.to_string()));
+}
+pub(crate) async fn host_force_stop_requested() {
+    loop {
+        if host_status().force_stop {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+}
+
+pub fn start_host_memory_task(
+    thread_manager: Arc<ThreadManager>,
+    auth_manager: Arc<AuthManager>,
+    thread_id: ThreadId,
+    thread: Arc<CodexThread>,
+    config: Arc<Config>,
+    permission: PermissionProfile,
+    source: SessionSource,
+    store: codex_state::MemoryStore,
+) -> Result<(), String> {
+    if !codex_extension_api::host_memory_admitted()
+        || !config.ephemeral
+        || source.is_non_root_agent()
+    {
+        return Err("host memory maintenance requires an admitted ephemeral root".to_string());
+    }
+    {
+        let mut job = HOST_JOB.lock().unwrap_or_else(|e| e.into_inner());
+        if job.as_ref().is_some_and(|s| s.active) {
+            return Err("memory maintenance is already active".to_string());
+        }
+        *job = Some(HostMemoryStatus {
+            active: true,
+            phase: "preparing".to_string(),
+            ..Default::default()
+        });
+    }
+    let mut config = config.as_ref().clone();
+    config.memories.dual_write = false;
+    config.memories.max_rollouts_per_startup = 1;
+    config.memories.extract_model = config.model.clone();
+    config.memories.consolidation_model = config.model.clone();
+    let config = Arc::new(config);
+    let context = Arc::new(
+        MemoryStartupContext::new(
+            thread_manager,
+            Arc::clone(&auth_manager),
+            thread_id,
+            thread,
+            &config,
+            source,
+        )
+        .with_host_store(store),
+    );
+    tokio::spawn(async move {
+        // A panic with a live internal child leaves admission occupied.
+        struct Settled;
+        impl Drop for Settled {
+            fn drop(&mut self) {
+                host_update(|s| {
+                    s.active = s.child_thread_id.is_some();
+                    s.phase = if s.active {
+                        "recovering"
+                    } else if s.error.is_some() {
+                        "failed"
+                    } else if s.stop_requested {
+                        "paused"
+                    } else {
+                        "complete"
+                    }
+                    .to_string();
+                });
+            }
+        }
+        let _settled = Settled;
+        if context.memory_store().await.is_none() {
+            host_error("native memory state unavailable");
+            return;
+        }
+        let root = config
+            .codex_home
+            .join(config.memories.version.directory_name());
+        if ensure_layout(&root).await.is_err() {
+            host_error("native memory layout unavailable");
+            return;
+        }
+        phase1::prune(&context, &config).await;
+        if host_status().stop_requested {
+            return;
+        }
+        if !guard::rate_limits_ok(&auth_manager, &config).await {
+            host_error("provider rate limit prevents maintenance");
+            return;
+        }
+        host_update(|s| s.phase = "extracting".to_string());
+        phase1::run(Arc::clone(&context), Arc::clone(&config)).await;
+        if host_status().stop_requested {
+            return;
+        }
+        host_update(|s| s.phase = "consolidating".to_string());
+        phase2::run(context, config, permission).await;
+    });
+    Ok(())
+}

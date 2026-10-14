@@ -403,6 +403,12 @@ impl HostSkillsService {
     }
 
     fn extra_roots(&self) -> Vec<AbsolutePathBuf> {
+        if codex_extension_api::host_tool_policy_enabled() {
+            return codex_extension_api::host_skill_roots()
+                .into_iter()
+                .filter_map(|path| AbsolutePathBuf::from_absolute_path_checked(path).ok())
+                .collect();
+        }
         match self.extra_roots.read() {
             Ok(roots) => roots.clone(),
             Err(err) => err.into_inner().clone(),

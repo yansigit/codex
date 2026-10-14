@@ -1315,13 +1315,13 @@ impl RmcpClient {
         let (transport, oauth_runtime) = match pending_transport {
             PendingTransport::InProcess { transport } => (
                 client_service
-                    .serve_with_lifecycle(transport, lifecycle)
+                    .serve_with_lifecycle(capture_event_notifications(transport), lifecycle)
                     .boxed(),
                 None,
             ),
             PendingTransport::Stdio { transport } => (
                 client_service
-                    .serve_with_lifecycle(*transport, lifecycle)
+                    .serve_with_lifecycle(capture_event_notifications(*transport), lifecycle)
                     .boxed(),
                 None,
             ),
@@ -1336,13 +1336,13 @@ impl RmcpClient {
                 oauth_runtime,
             } => (
                 client_service
-                    .serve_with_lifecycle(transport, lifecycle)
+                    .serve_with_lifecycle(capture_event_notifications(transport), lifecycle)
                     .boxed(),
                 Some(oauth_runtime),
             ),
             PendingTransport::StreamableHttpWithAccessTokenOnly { transport } => (
                 client_service
-                    .serve_with_lifecycle(transport, lifecycle)
+                    .serve_with_lifecycle(capture_event_notifications(transport), lifecycle)
                     .boxed(),
                 None,
             ),
@@ -1619,6 +1619,7 @@ async fn create_oauth_transport_and_runtime(
     initialize_deadline: Arc<StdMutex<Option<Instant>>>,
     oauth_config: Option<&McpServerOAuthConfig>,
 ) -> Result<PendingTransport> {
+    crate::host_privacy::register_tokens(&initial_tokens);
     OAuthClientCredentials::resolve(oauth_config)?
         .validate_stored_client_id(&initial_tokens.client_id)?;
     let oauth_http_client = Arc::new(OAuthHttpClientAdapter::new_with_redirect_mode(

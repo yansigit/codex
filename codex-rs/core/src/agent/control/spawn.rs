@@ -731,7 +731,11 @@ impl LocalAgentControl {
         } else {
             (None, None)
         };
-        let reservation_max_threads = if spawn_uses_v2_residency {
+        let reservation_max_threads = if codex_extension_api::host_tool_policy_enabled() {
+            // V2 residency can evict idle children. The host ceiling also bounds
+            // durable child relationships, so eviction cannot admit another helper.
+            Some(agent_max_threads.unwrap_or(1).min(1))
+        } else if spawn_uses_v2_residency {
             None
         } else {
             agent_max_threads

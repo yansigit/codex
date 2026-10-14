@@ -82,6 +82,9 @@ pub async fn run(context: Arc<MemoryStartupContext>, config: Arc<Config>) {
 
     // 4. Metrics and logs.
     let counts = aggregate_stats(outcomes);
+    if counts.failed > 0 {
+        crate::start::host_error("native extraction failed");
+    }
     emit_metrics(&stage_one_context, &counts);
     info!(
         "memory stage-1 extraction complete: {} job(s) claimed, {} succeeded ({} with output, {} no output), {} failed",
@@ -312,9 +315,18 @@ mod job {
         prompt.output_schema = Some(output_schema(config.memories.version));
         prompt.output_schema_strict = true;
 
-        let (result, token_usage) = context
-            .stream_stage_one_prompt(config, &prompt, stage_one_context)
-            .await?;
+        let request = context.stream_stage_one_prompt(config, &prompt, stage_one_context);
+        let (result, token_usage) = if codex_extension_api::host_memory_admitted() {
+            tokio::select! {
+                result = request => result?,
+                _ = crate::start::host_force_stop_requested() => return Err(anyhow::anyhow!("host stopped memory extraction")),
+            }
+        } else {
+            request.await?
+        };
+        if let Some(usage) = &token_usage {
+            crate::start::host_tokens(usage.total_tokens);
+        }
 
         let output = StageOneOutput::parse(&result, config.memories.version)?;
 

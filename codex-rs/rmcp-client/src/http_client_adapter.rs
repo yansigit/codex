@@ -148,6 +148,9 @@ impl StreamableHttpClient for StreamableHttpClientAdapter {
         auth_token: Option<String>,
         custom_headers: HashMap<HeaderName, HeaderValue>,
     ) -> std::result::Result<StreamableHttpPostResponse, StreamableHttpError<Self::Error>> {
+        if let Some(token) = &auth_token {
+            crate::host_privacy::register(token);
+        }
         let (mcp_method, mcp_request_id) = client_jsonrpc_message_fields(&message);
         let has_session_id = session_id.is_some();
         let mut headers = self.default_headers.clone();
@@ -219,9 +222,21 @@ impl StreamableHttpClient for StreamableHttpClientAdapter {
             None
         };
 
-        let body = serde_json::to_value(&message).map_err(StreamableHttpError::Deserialize)?;
+        let body = serde_json::to_value(&message).map_err(|error| {
+            StreamableHttpError::Deserialize(if crate::host_privacy::enabled() {
+                <serde_json::Error as serde::de::Error>::custom("MCP response is malformed")
+            } else {
+                error
+            })
+        })?;
         let request_span = crate::trace_context::request_span(&body);
-        let body = serde_json::to_vec(&body).map_err(StreamableHttpError::Deserialize)?;
+        let body = serde_json::to_vec(&body).map_err(|error| {
+            StreamableHttpError::Deserialize(if crate::host_privacy::enabled() {
+                <serde_json::Error as serde::de::Error>::custom("MCP response is malformed")
+            } else {
+                error
+            })
+        })?;
         let has_authorization_header = headers.contains_key(AUTHORIZATION);
         if let JsonRpcMessage::Notification(notification) = &message
             && let ClientNotification::CancelledNotification(cancelled) = &notification.notification
@@ -359,7 +374,11 @@ impl StreamableHttpClient for StreamableHttpClientAdapter {
                 format!(
                     "HTTP {}: {}",
                     response.status,
-                    body_preview(String::from_utf8_lossy(&body).to_string())
+                    if crate::host_privacy::enabled() {
+                        "MCP error body withheld".to_owned()
+                    } else {
+                        body_preview(String::from_utf8_lossy(&body).to_string())
+                    }
                 )
                 .into(),
             ));
@@ -380,8 +399,18 @@ impl StreamableHttpClient for StreamableHttpClientAdapter {
                             continue;
                         }
 
-                        let response = serde_json::from_slice(data.as_bytes())
-                            .map_err(StreamableHttpError::Deserialize)?;
+                        let response =
+                            serde_json::from_slice(data.as_bytes()).map_err(|error| {
+                                StreamableHttpError::Deserialize(
+                                    if crate::host_privacy::enabled() {
+                                        <serde_json::Error as serde::de::Error>::custom(
+                                            "MCP response is malformed",
+                                        )
+                                    } else {
+                                        error
+                                    },
+                                )
+                            })?;
                         let response = legacy_discovery_fallback_response(
                             &message, response, /*allow_uncorrelated_http_rejection*/ false,
                         );
@@ -430,8 +459,13 @@ impl StreamableHttpClient for StreamableHttpClientAdapter {
             }
             Some(content_type) if content_type.starts_with(JSON_MIME_TYPE) => {
                 let body = collect_body(&mut body_stream, maximum_response_bytes).await?;
-                let response_message =
-                    serde_json::from_slice(&body).map_err(StreamableHttpError::Deserialize)?;
+                let response_message = serde_json::from_slice(&body).map_err(|error| {
+                    StreamableHttpError::Deserialize(if crate::host_privacy::enabled() {
+                        <serde_json::Error as serde::de::Error>::custom("MCP response is malformed")
+                    } else {
+                        error
+                    })
+                })?;
                 Ok(StreamableHttpPostResponse::Json(
                     legacy_discovery_fallback_response(
                         &message,
@@ -446,7 +480,11 @@ impl StreamableHttpClient for StreamableHttpClientAdapter {
                 let content_type = content_type.unwrap_or_else(|| "missing-content-type".into());
                 Err(StreamableHttpError::UnexpectedContentType(Some(format!(
                     "{content_type}; body: {}",
-                    body_preview(String::from_utf8_lossy(&body).to_string())
+                    if crate::host_privacy::enabled() {
+                        "MCP error body withheld".to_owned()
+                    } else {
+                        body_preview(String::from_utf8_lossy(&body).to_string())
+                    }
                 ))))
             }
         }

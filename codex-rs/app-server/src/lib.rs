@@ -510,6 +510,8 @@ pub async fn run_main_with_transport_options(
 ) -> IoResult<AppServerExit> {
     #[cfg(target_os = "windows")]
     let _registered_core = codex_windows_sandbox::registered_core_requested();
+    codex_extension_api::load_host_tool_policy()?;
+    codex_rmcp_client::host_privacy::load()?;
     let managed_daemon = matches!(&transport, AppServerTransport::UnixSocket { .. })
         && runtime_options.managed_daemon;
     #[cfg(unix)]

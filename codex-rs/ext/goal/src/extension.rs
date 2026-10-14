@@ -462,13 +462,13 @@ where
             let Some(runtime) = goal_runtime_handle(thread_store) else {
                 return;
             };
+            if let Some(root_accounting_state) = runtime.root_accounting_state() {
+                root_accounting_state.record_descendant_token_usage(&token_usage.last_token_usage);
+            }
             if !runtime.is_enabled() {
                 return;
             }
 
-            if let Some(root_accounting_state) = runtime.root_accounting_state() {
-                root_accounting_state.record_descendant_token_usage(&token_usage.last_token_usage);
-            }
             let _ = runtime
                 .accounting_state()
                 .record_token_usage(turn_store.level_id(), &token_usage.total_token_usage);

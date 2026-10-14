@@ -78,6 +78,7 @@ impl StageOneRequestContext {
 }
 
 pub(crate) struct MemoryStartupContext {
+    host_store: Option<MemoryStore>,
     version: MemoryVersion,
     thread_id: ThreadId,
     thread: Arc<CodexThread>,
@@ -199,6 +200,7 @@ impl MemoryStartupContext {
         );
 
         Self {
+            host_store: None,
             version: config.memories.version,
             thread_id,
             thread,
@@ -243,7 +245,14 @@ impl MemoryStartupContext {
         );
     }
 
+    pub(crate) fn with_host_store(mut self, store: MemoryStore) -> Self {
+        self.host_store = Some(store);
+        self
+    }
     pub(crate) async fn memory_store(&self) -> Option<MemoryStore> {
+        if let Some(store) = &self.host_store {
+            return Some(store.clone());
+        }
         match self
             .thread
             .state_db()?
@@ -414,6 +423,7 @@ impl MemoryStartupContext {
             })
             .await?;
 
+        crate::start::host_child(Some(thread_id));
         let agent = SpawnedConsolidationAgent { thread_id, thread };
         let submit_result = match agent
             .thread
@@ -455,6 +465,7 @@ impl MemoryStartupContext {
             })??;
 
         self.thread_manager.remove_thread(&thread_id).await;
+        crate::start::host_child(None);
 
         Ok(())
     }

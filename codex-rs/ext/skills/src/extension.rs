@@ -280,6 +280,7 @@ where
             thread_store,
             /*executor_query*/ None,
             /*selected_plugins*/ None,
+            None,
         )
     }
 
@@ -314,6 +315,7 @@ where
             thread_store,
             executor_query,
             step_store.get::<SelectedPluginSnapshot>(),
+            step_store.get::<HostSkillsSnapshot>(),
         )
     }
 }
@@ -559,6 +561,7 @@ impl<C> SkillsExtension<C> {
         thread_store: &ExtensionData,
         executor_query: Option<SkillListQuery>,
         selected_plugins: Option<Arc<SelectedPluginSnapshot>>,
+        host_snapshot: Option<Arc<HostSkillsSnapshot>>,
     ) -> Vec<Arc<dyn for<'call> ToolExecutor<ToolCall<'call>>>> {
         skill_tools(
             self.providers.clone(),
@@ -566,6 +569,7 @@ impl<C> SkillsExtension<C> {
             thread_store,
             executor_query,
             selected_plugins,
+            host_snapshot,
         )
     }
 

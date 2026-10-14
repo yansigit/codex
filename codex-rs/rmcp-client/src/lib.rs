@@ -102,3 +102,100 @@ pub use stdio_server_launcher::ExecutorStdioServerLauncher;
 pub use stdio_server_launcher::LocalStdioServerLauncher;
 pub use stdio_server_launcher::StdioServerLauncher;
 pub use user_verification::UserVerificationReason;
+
+pub use perform_oauth_login::disconnect_oauth;
+
+pub mod host_privacy {
+    use oauth2::TokenResponse;
+    use serde::Serialize;
+    use serde_json::Value;
+    use std::sync::{OnceLock, RwLock};
+    struct Secrets {
+        values: Vec<String>,
+        saturated: bool,
+    }
+    static HOST: OnceLock<RwLock<Secrets>> = OnceLock::new();
+    pub fn enabled() -> bool {
+        HOST.get().is_some()
+    }
+    pub fn load() -> std::io::Result<()> {
+        let values: Vec<String> = match std::env::var_os("CODEX_HOST_SECRET_REDACTIONS") {
+            None => Vec::new(),
+            Some(path) => {
+                let bytes = std::fs::read(path)?;
+                if bytes.len() > 2 * 1024 * 1024 {
+                    return Err(std::io::Error::other(
+                        "host credential inventory exceeds limit",
+                    ));
+                }
+                serde_json::from_slice(&bytes)
+                    .map_err(|_| std::io::Error::other("invalid host credential inventory"))?
+            }
+        };
+        if values.len() > 1024 || values.iter().any(|v| v.is_empty() || v.len() > 10000) {
+            return Err(std::io::Error::other("invalid host credential inventory"));
+        }
+        HOST.set(RwLock::new(Secrets {
+            values: Vec::new(),
+            saturated: false,
+        }))
+        .map_err(|_| std::io::Error::other("host credential inventory already captured"))?;
+        for value in values {
+            register(&value);
+        }
+        Ok(())
+    }
+    pub fn register(value: &str) {
+        let Some(host) = HOST.get() else {
+            return;
+        };
+        if value.is_empty() {
+            return;
+        }
+        let mut host = host
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if host.values.iter().any(|v| v == value) {
+            return;
+        }
+        if host.values.len() >= 4096 || value.len() > 10000 {
+            host.saturated = true;
+            return;
+        }
+        host.values.push(value.to_owned());
+    }
+    pub fn register_tokens(tokens: &crate::StoredOAuthTokens) {
+        register(tokens.token_response.0.access_token().secret());
+        if let Some(refresh) = tokens.token_response.0.refresh_token() {
+            register(refresh.secret());
+        }
+    }
+    pub fn contains<T: Serialize>(value: &T) -> bool {
+        let Some(host) = HOST.get() else {
+            return false;
+        };
+        let host = host
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if host.saturated {
+            return true;
+        }
+        if host.values.is_empty() {
+            return false;
+        }
+        let Ok(value) = serde_json::to_value(value) else {
+            return true;
+        };
+        fn visit(value: &Value, secrets: &[String]) -> bool {
+            match value {
+                Value::String(text) => secrets.iter().any(|s| text.contains(s)),
+                Value::Array(items) => items.iter().any(|v| visit(v, secrets)),
+                Value::Object(items) => items
+                    .iter()
+                    .any(|(k, v)| secrets.iter().any(|s| k.contains(s)) || visit(v, secrets)),
+                _ => false,
+            }
+        }
+        visit(&value, &host.values)
+    }
+}

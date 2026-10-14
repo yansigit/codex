@@ -2103,6 +2103,59 @@ impl ThreadManagerState {
         } = options;
         let inherited_environments = captured_environments.or(inherited_environments);
         let session_source = session_source.unwrap_or_else(|| self.session_source.clone());
+        let host_parent = parent_thread_id
+            .or_else(|| initial_history.get_resumed_parent_thread_id())
+            .or_else(|| session_source.parent_thread_id());
+        let mut host_child_cwd = None;
+        if codex_extension_api::host_tool_policy_enabled() {
+            config.agent_max_threads = Some(config.agent_max_threads.unwrap_or(1).min(1));
+            config.agent_max_depth = config.agent_max_depth.min(1);
+            config.multi_agent_v2.max_concurrent_threads_per_session = config
+                .multi_agent_v2
+                .max_concurrent_threads_per_session
+                .min(2);
+            if let Some(parent_id) = host_parent {
+                let parent = self.get_thread(parent_id).await?.config_snapshot().await;
+                if parent.session_source.is_non_root_agent()
+                    || crate::agent::next_thread_spawn_depth(&parent.session_source) > 1
+                {
+                    return Err(CodexErr::InvalidRequest(
+                        "host subagent nesting limit reached".to_string(),
+                    ));
+                }
+                if config.model_provider_id != parent.model_provider_id
+                    || config.model.as_deref() != Some(parent.model.as_str())
+                {
+                    return Err(CodexErr::InvalidRequest(
+                        "host subagents must inherit the root provider and model".to_string(),
+                    ));
+                }
+                config
+                    .features
+                    .disable(codex_features::Feature::Goals)
+                    .map_err(|error| {
+                        CodexErr::InvalidRequest(format!(
+                            "host helper goals must be disabled: {error}"
+                        ))
+                    })?;
+                host_child_cwd = Some(parent.cwd().join(".shinyabi-helper"));
+            } else if session_source.is_non_root_agent()
+                && !(codex_extension_api::host_memory_admitted()
+                    && matches!(
+                        session_source,
+                        SessionSource::Internal(InternalSessionSource::MemoryConsolidation)
+                    ))
+            {
+                return Err(CodexErr::InvalidRequest(
+                    "host child requires a live owning parent".to_string(),
+                ));
+            }
+        }
+        codex_extension_api::apply_host_tool_policy(
+            &mut thread_extension_init,
+            host_parent.is_some() || session_source.is_non_root_agent(),
+        );
+
         // Older callers and saved reviewers identify isolation through their source.
         // New internal callers supply an explicit runtime policy before startup.
         let isolation = thread_extension_init
@@ -2116,7 +2169,7 @@ impl ThreadManagerState {
                 }
             });
         thread_extension_init.insert(isolation);
-        let environment_requests = environment_requests
+        let mut environment_requests = environment_requests
             .or_else(|| {
                 let SessionSource::SubAgent(SubAgentSource::ThreadSpawn { .. }) = &session_source
                 else {
@@ -2137,6 +2190,13 @@ impl ThreadManagerState {
                     &config.workspace_roots,
                 )
             });
+        if let Some(cwd) = host_child_cwd {
+            config.cwd = cwd.clone();
+            for environment in &mut environment_requests {
+                environment.cwd = cwd.clone().into();
+                environment.workspace_roots = vec![cwd.clone().into()];
+            }
+        }
         let is_resumed_thread = matches!(&initial_history, InitialHistory::Resumed(_));
         if reserved_thread_id.is_some() && matches!(&initial_history, InitialHistory::Resumed(_)) {
             return Err(CodexErr::InvalidRequest(

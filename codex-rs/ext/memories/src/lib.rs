@@ -23,3 +23,7 @@ pub(crate) const SEARCH_TOOL_NAME: &str = "search";
 
 #[cfg(test)]
 mod tests;
+
+// Typed host inspection reuses the same path validation as native tools.
+pub use backend::*;
+pub use local::LocalMemoriesBackend;

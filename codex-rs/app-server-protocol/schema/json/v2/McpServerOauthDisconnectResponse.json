@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+    "removed": {
+      "type": "boolean"
+    },
+    "revocation": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "removed",
+    "revocation"
+  ],
+  "title": "McpServerOauthDisconnectResponse",
+  "type": "object"
+}

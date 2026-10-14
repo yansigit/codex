@@ -703,7 +703,11 @@ impl TurnRequestProcessor {
 
         if turn_has_input && started {
             let config_snapshot = thread.config_snapshot().await;
-            if config_snapshot.is_primary_environment_configured() {
+            // Shinyabi admits generation explicitly. Enabling native memory reads
+            // must never create an invisible startup maintenance job.
+            if config_snapshot.is_primary_environment_configured()
+                && !codex_extension_api::host_tool_policy_enabled()
+            {
                 codex_memories_write::start_memories_startup_task(
                     Arc::clone(&self.thread_manager),
                     Arc::clone(&self.auth_manager),

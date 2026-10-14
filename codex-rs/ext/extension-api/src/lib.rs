@@ -10,6 +10,10 @@ mod user_instructions;
 pub use session_isolation::IsolatedSessionExtensions;
 pub use session_isolation::SessionIsolation;
 pub use tool_policy::ToolPolicy;
+pub use tool_policy::apply_host_tool_policy;
+pub use tool_policy::host_memory_admitted;
+pub use tool_policy::host_tool_policy_enabled;
+pub use tool_policy::load_host_tool_policy;
 
 pub use capabilities::ConversationHistorySnapshot;
 pub use capabilities::ExtensionEventSink;
@@ -122,3 +126,9 @@ pub use model_request::ModelResponseError;
 pub use model_request::ModelResponseInterceptor;
 pub use model_request::ModelResponseStream;
 pub use model_request::ResponseEvent;
+
+pub use tool_policy::{host_tool_inventory, record_host_tool_inventory};
+
+pub use tool_policy::{host_mcp_servers, host_skill_roots};
+
+pub use tool_policy::host_mcp_resource_allowed;

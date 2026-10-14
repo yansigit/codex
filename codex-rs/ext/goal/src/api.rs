@@ -150,6 +150,19 @@ impl GoalService {
         request: GoalSetRequest<'_>,
         record_user_instruction: impl Future<Output = Result<(), GoalServiceError>> + Send,
     ) -> Result<GoalSetOutcome, GoalServiceError> {
+        self.set_thread_goal_conditional(state_db, request, record_user_instruction, None)
+            .await
+    }
+
+    /// Host activation uses a compare-and-set under the native mutation permit.
+    /// A completed first turn must never be reactivated by a delayed activation.
+    pub async fn set_thread_goal_conditional(
+        &self,
+        state_db: &codex_state::StateRuntime,
+        request: GoalSetRequest<'_>,
+        record_user_instruction: impl Future<Output = Result<(), GoalServiceError>> + Send,
+        expected_status: Option<ThreadGoalStatus>,
+    ) -> Result<GoalSetOutcome, GoalServiceError> {
         let GoalSetRequest {
             thread_id,
             objective,
@@ -202,6 +215,15 @@ impl GoalService {
             .map_err(|err| {
                 GoalServiceError::Internal(format!("failed to read thread goal: {err}"))
             })?;
+        if let Some(expected) = expected_status {
+            if existing_goal.as_ref().map(|goal| goal.status)
+                != Some(state_status_from_protocol(expected))
+            {
+                return Err(GoalServiceError::InvalidRequest(
+                    "host goal activation superseded".to_string(),
+                ));
+            }
+        }
         if objective.is_none() && existing_goal.is_none() {
             return Err(GoalServiceError::InvalidRequest(format!(
                 "cannot update goal for thread {thread_id}: no goal exists"

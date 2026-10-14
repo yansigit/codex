@@ -43,7 +43,11 @@ pub use list_mcp_resources::ListMcpResourcesHandler;
 pub use read_mcp_resource::ReadMcpResourceHandler;
 
 fn model_can_access_mcp_server(turn: &TurnContext, server: &str) -> bool {
-    turn.config.orchestrator_mcp_enabled || server != CODEX_APPS_MCP_SERVER_NAME
+    (turn.config.orchestrator_mcp_enabled || server != CODEX_APPS_MCP_SERVER_NAME)
+        && codex_extension_api::host_mcp_resource_allowed(
+            server,
+            turn.session_source.is_non_root_agent(),
+        )
 }
 
 fn ensure_model_can_access_mcp_server(
@@ -54,7 +58,7 @@ fn ensure_model_can_access_mcp_server(
         Ok(())
     } else {
         Err(FunctionCallError::RespondToModel(format!(
-            "MCP server '{server}' is disabled by `orchestrator.mcp.enabled`"
+            "MCP resource access to '{server}' is not permitted for this thread"
         )))
     }
 }

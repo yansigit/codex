@@ -2009,6 +2009,54 @@
             },
             "method": {
               "enum": [
+                "mcpServer/oauth/disconnect"
+              ],
+              "title": "McpServer/oauth/disconnectRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/McpServerOauthDisconnectParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "McpServer/oauth/disconnectRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
+                "host/toolInventory/read"
+              ],
+              "title": "Host/toolInventory/readRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/HostToolInventoryParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Host/toolInventory/readRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
                 "mcpServer/oauth/login"
               ],
               "title": "McpServer/oauth/loginRequestMethod",
@@ -13903,6 +13951,101 @@
         "title": "HooksListResponse",
         "type": "object"
       },
+      "HostRegisteredTool": {
+        "properties": {
+          "exposure": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "exposure",
+          "name"
+        ],
+        "type": "object"
+      },
+      "HostToolIdentity": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "HostToolInventory": {
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "tools": {
+            "items": {
+              "$ref": "#/definitions/v2/HostRegisteredTool"
+            },
+            "type": "array"
+          },
+          "turnId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "model",
+          "provider",
+          "tools",
+          "turnId"
+        ],
+        "type": "object"
+      },
+      "HostToolInventoryParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false,
+        "properties": {
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "threadId"
+        ],
+        "title": "HostToolInventoryParams",
+        "type": "object"
+      },
+      "HostToolInventoryResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "inventory": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/v2/HostToolInventory"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "HostToolInventoryResponse",
+        "type": "object"
+      },
       "ImageDetail": {
         "enum": [
           "auto",
@@ -15173,6 +15316,37 @@
         ],
         "type": "string"
       },
+      "McpServerOauthDisconnectParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "McpServerOauthDisconnectParams",
+        "type": "object"
+      },
+      "McpServerOauthDisconnectResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "removed": {
+            "type": "boolean"
+          },
+          "revocation": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "removed",
+          "revocation"
+        ],
+        "title": "McpServerOauthDisconnectResponse",
+        "type": "object"
+      },
       "McpServerOauthLoginCompletedNotification": {
         "$schema": "http://json-schema.org/draft-07/schema#",
         "properties": {
@@ -15352,6 +15526,13 @@
                 "type": "null"
               }
             ]
+          },
+          "toolIdentities": {
+            "additionalProperties": {
+              "$ref": "#/definitions/v2/HostToolIdentity"
+            },
+            "description": "Native normalized identities keyed by raw MCP tool name.",
+            "type": "object"
           },
           "tools": {
             "additionalProperties": {
@@ -15607,6 +15788,51 @@
           "path"
         ],
         "type": "object"
+      },
+      "MemoryInspectEntry": {
+        "properties": {
+          "content": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "directory": {
+            "type": "boolean"
+          },
+          "line": {
+            "format": "uint32",
+            "minimum": 0.0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "directory",
+          "path"
+        ],
+        "type": "object"
+      },
+      "MemoryInspectOperation": {
+        "enum": [
+          "list",
+          "read",
+          "search"
+        ],
+        "type": "string"
+      },
+      "MemoryMaintenanceOperation": {
+        "enum": [
+          "start",
+          "status",
+          "stop"
+        ],
+        "type": "string"
       },
       "MergeStrategy": {
         "enum": [

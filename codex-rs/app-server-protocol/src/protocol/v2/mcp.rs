@@ -88,6 +88,9 @@ pub struct McpServerStatus {
     /// Capabilities advertised by the initialized MCP server; null when unavailable.
     pub server_capabilities: Option<serde_json::Value>,
     pub tools: std::collections::HashMap<String, McpTool>,
+    /// Native normalized identities keyed by raw MCP tool name.
+    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
+    pub tool_identities: std::collections::HashMap<String, HostToolIdentity>,
     /// Tool discovery failed and no catalog was returned.
     /// Null when a catalog is returned, including cached or empty catalogs.
     pub tools_error: Option<String>,
@@ -926,4 +929,55 @@ impl From<rmcp::model::ElicitResult> for McpServerElicitationRequestResponse {
             meta: None,
         }
     }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[ts(export_to = "v2/")]
+pub struct McpServerOauthDisconnectParams {
+    pub name: String,
+}
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct McpServerOauthDisconnectResponse {
+    pub removed: bool,
+    pub revocation: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[ts(export_to = "v2/")]
+pub struct HostToolInventoryParams {
+    pub thread_id: String,
+}
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct HostToolIdentity {
+    pub namespace: Option<String>,
+    pub name: String,
+}
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct HostRegisteredTool {
+    pub namespace: Option<String>,
+    pub name: String,
+    pub exposure: String,
+}
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct HostToolInventory {
+    pub turn_id: String,
+    pub provider: String,
+    pub model: String,
+    pub tools: Vec<HostRegisteredTool>,
+}
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct HostToolInventoryResponse {
+    pub inventory: Option<HostToolInventory>,
 }

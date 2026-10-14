@@ -20,12 +20,12 @@ mod read;
 mod search;
 
 #[derive(Debug, Clone)]
-pub(crate) struct LocalMemoriesBackend {
+pub struct LocalMemoriesBackend {
     root: PathBuf,
 }
 
 impl LocalMemoriesBackend {
-    pub(crate) fn from_memory_root(root: impl Into<PathBuf>) -> Self {
+    pub fn from_memory_root(root: impl Into<PathBuf>) -> Self {
         Self { root: root.into() }
     }
 

@@ -68,7 +68,7 @@ impl<'call> ToolExecutor<ToolCall<'call>> for ReadTool {
     fn spec(&self) -> ToolSpec {
         skill_function_tool::<ReadArgs, ReadResponse>(
             TOOL_NAME,
-            "Read one page from a skill. Pass its provided package directly; root aliases are resolved automatically. Omit resource to read SKILL.md; to read another file, use the same package and pass the file's complete skill:// identifier as resource. For executor-backed skills, skill_root is the skill's absolute directory in the executor filesystem and can be used to locate bundled scripts. If the package is not provided, use skills.list to find it. Pass next_cursor back as cursor to continue the same snapshot while it is cached; omit cursor to read again.",
+            "For an installed file skill, pass its SKILL.md path as package and optionally an absolute path inside that same skill as resource. Read one page from a skill. Pass its provided package directly; root aliases are resolved automatically. Omit resource to read SKILL.md; to read another file, use the same package and pass the file's complete skill:// identifier as resource. For executor-backed skills, skill_root is the skill's absolute directory in the executor filesystem and can be used to locate bundled scripts. If the package is not provided, use skills.list to find it. Pass next_cursor back as cursor to continue the same snapshot while it is cached; omit cursor to read again.",
         )
     }
 
@@ -86,6 +86,7 @@ impl<'call> ToolExecutor<ToolCall<'call>> for ReadTool {
 
             let mut selected_skill = None;
             for selector in [
+                super::SkillToolAuthoritySelector::Host,
                 super::SkillToolAuthoritySelector::Cloud,
                 super::SkillToolAuthoritySelector::Executor,
             ] {
@@ -127,6 +128,12 @@ impl<'call> ToolExecutor<ToolCall<'call>> for ReadTool {
                     .unwrap_or_else(|| SkillResourceId::new(resource)),
             };
             let (context, access_key) = match output_authority {
+                SkillToolAuthoritySelector::Host => (
+                    SkillReadContext::Host {
+                        host_snapshot: self.context.host_snapshot.clone(),
+                    },
+                    None,
+                ),
                 SkillToolAuthoritySelector::Cloud => (
                     SkillReadContext::Cloud {
                         mcp_resources: self.context.mcp_resources.clone(),

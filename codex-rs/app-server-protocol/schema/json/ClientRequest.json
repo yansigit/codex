@@ -1646,6 +1646,18 @@
       },
       "type": "object"
     },
+    "HostToolInventoryParams": {
+      "additionalProperties": false,
+      "properties": {
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "threadId"
+      ],
+      "type": "object"
+    },
     "ImageDetail": {
       "enum": [
         "auto",
@@ -2192,6 +2204,18 @@
       ],
       "type": "string"
     },
+    "McpServerOauthDisconnectParams": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
     "McpServerOauthLoginParams": {
       "properties": {
         "clientRegistration": {
@@ -2263,6 +2287,22 @@
         "tool"
       ],
       "type": "object"
+    },
+    "MemoryInspectOperation": {
+      "enum": [
+        "list",
+        "read",
+        "search"
+      ],
+      "type": "string"
+    },
+    "MemoryMaintenanceOperation": {
+      "enum": [
+        "start",
+        "status",
+        "stop"
+      ],
+      "type": "string"
     },
     "MergeStrategy": {
       "enum": [
@@ -8290,6 +8330,54 @@
         "params"
       ],
       "title": "ExperimentalFeature/enablement/setRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "mcpServer/oauth/disconnect"
+          ],
+          "title": "McpServer/oauth/disconnectRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/McpServerOauthDisconnectParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "McpServer/oauth/disconnectRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "host/toolInventory/read"
+          ],
+          "title": "Host/toolInventory/readRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/HostToolInventoryParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Host/toolInventory/readRequest",
       "type": "object"
     },
     {

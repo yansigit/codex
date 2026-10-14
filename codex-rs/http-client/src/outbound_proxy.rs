@@ -169,11 +169,13 @@ pub struct HttpClientFactory {
     system_proxy_fallback: bool,
     chatgpt_cookie_store: Option<Arc<ChatGptCookieStore>>,
     network_policy: NetworkPolicy,
+    enforced_proxy: Option<String>,
 }
 
 impl PartialEq for HttpClientFactory {
     fn eq(&self, other: &Self) -> bool {
-        self.outbound_proxy_policy == other.outbound_proxy_policy
+        self.enforced_proxy == other.enforced_proxy
+            && self.outbound_proxy_policy == other.outbound_proxy_policy
             && self.system_proxy_fallback == other.system_proxy_fallback
             && self.network_policy == other.network_policy
             && self
@@ -222,10 +224,19 @@ impl HttpClientFactory {
             system_proxy_fallback: false,
             chatgpt_cookie_store: None,
             network_policy: NetworkPolicy::unmanaged(),
+            enforced_proxy: None,
         }
     }
 
     /// Carries the account/configuration owner's application policy into every transport.
+    /// Host-only routing ceiling. Empty or malformed proxy values fail closed.
+    pub fn with_enforced_proxy(mut self, proxy: String) -> Self {
+        self.enforced_proxy = Some(proxy);
+        self.system_proxy_fallback = false;
+        self.chatgpt_cookie_store = None;
+        self
+    }
+
     pub fn with_network_policy(mut self, policy: NetworkPolicy) -> Self {
         self.network_policy = policy;
         self
@@ -249,7 +260,8 @@ impl HttpClientFactory {
     }
 
     pub fn allows_system_proxy_fallback(&self) -> bool {
-        self.system_proxy_fallback
+        self.enforced_proxy.is_none()
+            && self.system_proxy_fallback
             && self.outbound_proxy_policy == OutboundProxyPolicy::ReqwestDefault
     }
 
@@ -282,6 +294,12 @@ impl HttpClientFactory {
     /// resolution is unavailable, explicit environment settings are resolved before falling back
     /// to a direct route.
     pub fn resolve_proxy_route(&self, request_url: &str) -> OutboundProxyRoute {
+        if let Some(proxy) = &self.enforced_proxy {
+            return OutboundProxyRoute::Proxy {
+                url: proxy.clone(),
+                no_proxy: None,
+            };
+        }
         resolve_proxy_route(
             &ProcessEnv,
             request_url,
@@ -295,6 +313,20 @@ impl HttpClientFactory {
         &self,
         request_url: String,
     ) -> io::Result<OutboundProxyRoute> {
+        if let Some(proxy) = &self.enforced_proxy {
+            let parsed = reqwest::Url::parse(proxy)
+                .map_err(|_| io::Error::other("host MCP proxy unavailable"))?;
+            if parsed.scheme() != "http"
+                || parsed.host_str() != Some("127.0.0.1")
+                || parsed.port().is_none()
+            {
+                return Err(io::Error::other("host MCP proxy unavailable"));
+            }
+            return Ok(OutboundProxyRoute::Proxy {
+                url: proxy.clone(),
+                no_proxy: None,
+            });
+        }
         if matches!(
             self.outbound_proxy_policy,
             OutboundProxyPolicy::ReqwestDefault

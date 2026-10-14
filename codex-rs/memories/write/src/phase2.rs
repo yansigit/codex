@@ -105,6 +105,24 @@ pub async fn run(
     };
     let raw_memory_count = raw_memories.len();
     let new_watermark = get_watermark(claim.watermark, &raw_memories);
+    // A fresh workspace has no signal to consolidate. Do not spend a provider
+    // turn merely because creating the native layout produced a git diff.
+    if codex_extension_api::host_memory_admitted()
+        && raw_memories.is_empty()
+        && !root.join("MEMORY.md").exists()
+        && !root.join("memory_summary.md").exists()
+    {
+        job::succeed(
+            context.as_ref(),
+            &db,
+            &claim,
+            new_watermark,
+            &raw_memories,
+            "skipped_no_inputs",
+        )
+        .await;
+        return;
+    }
 
     // 5. Sync the current inputs into the memory workspace.
     if let Err(err) = sync_phase2_workspace_inputs(&root, &raw_memories, &config).await {
@@ -173,7 +191,7 @@ pub async fn run(
     };
 
     // 9. Hand off completion handling, heartbeats, and baseline reset.
-    agent::handle(
+    let completion = agent::handle(
         Arc::clone(&context),
         claim,
         new_watermark,
@@ -183,6 +201,10 @@ pub async fn run(
         agent,
         phase_two_e2e_timer,
     );
+
+    if codex_extension_api::host_memory_admitted() && completion.await.is_err() {
+        crate::start::host_error("native consolidation supervision failed");
+    }
 
     // 10. Emit dispatch metrics.
     let counters = Counters {
@@ -252,6 +274,7 @@ mod job {
         claim: &Claim,
         reason: &'static str,
     ) {
+        crate::start::host_error(reason);
         context.counter(MEMORY_PHASE_TWO_JOBS, /*inc*/ 1, &[("status", reason)]);
         if matches!(
             db.mark_global_phase2_job_failed(
@@ -314,6 +337,10 @@ mod agent {
         agent_config.permissions.approval_policy = Constrained::allow_only(AskForApproval::Never);
         // Consolidation runs as an internal worker and must not recursively delegate.
         let _ = agent_config.features.disable(Feature::Collab);
+        let _ = agent_config.features.disable(Feature::Goals);
+        agent_config
+            .multi_agent_v2
+            .max_concurrent_threads_per_session = 1;
         let _ = agent_config.features.disable(Feature::MemoryTool);
         let _ = agent_config.features.disable(Feature::Apps);
         let _ = agent_config.features.disable(Feature::Plugins);
@@ -341,6 +368,37 @@ mod agent {
         }
         .ok()?;
 
+        if codex_extension_api::host_memory_admitted() {
+            use codex_protocol::permissions::{
+                FileSystemAccessMode, FileSystemPath, FileSystemSandboxEntry,
+                FileSystemSandboxPolicy, FileSystemSpecialPath, NetworkSandboxPolicy,
+            };
+            let files = FileSystemSandboxPolicy::restricted(vec![
+                FileSystemSandboxEntry::new(
+                    FileSystemPath::Special {
+                        value: FileSystemSpecialPath::Minimal,
+                    },
+                    FileSystemAccessMode::Read,
+                ),
+                // The fs/exec sandbox re-enters this immutable executable. Agent
+                // images install it outside the minimal OS paths, under /opt.
+                FileSystemSandboxEntry::new(
+                    std::env::current_exe().ok()?.into(),
+                    FileSystemAccessMode::Read,
+                ),
+                FileSystemSandboxEntry::new(
+                    agent_config.cwd.clone().into(),
+                    FileSystemAccessMode::Write,
+                ),
+            ]);
+            agent_config
+                .permissions
+                .set_permission_profile(PermissionProfile::from_runtime_permissions(
+                    &files,
+                    NetworkSandboxPolicy::Restricted,
+                ))
+                .ok()?;
+        }
         agent_config.model = Some(
             config
                 .memories
@@ -372,7 +430,7 @@ mod agent {
         version: MemoryVersion,
         agent: SpawnedConsolidationAgent,
         phase_two_e2e_timer: Option<codex_otel::Timer>,
-    ) {
+    ) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
             let Some(db) = context.memory_store().await else {
                 return;
@@ -384,12 +442,12 @@ mod agent {
                 loop_agent(db.clone(), claim.token.clone(), thread_id, &thread).await;
 
             let agent_completed = matches!(final_status, AgentStatus::Completed(_));
-            if agent_completed
-                && let Some(token_usage) = thread
-                    .token_usage_info()
-                    .await
-                    .map(|info| info.total_token_usage)
+            if let Some(token_usage) = thread
+                .token_usage_info()
+                .await
+                .map(|info| info.total_token_usage)
             {
+                crate::start::host_tokens(token_usage.total_tokens);
                 emit_token_usage_metrics(context.as_ref(), &token_usage);
             }
 
@@ -471,7 +529,7 @@ mod agent {
                 }
                 job::failed(context.as_ref(), &db, &claim, "failed_agent").await;
             }
-        });
+        })
     }
 
     async fn loop_agent(
@@ -489,6 +547,12 @@ mod agent {
         tokio::pin!(session_termination);
 
         loop {
+            if crate::start::host_status().force_stop {
+                if thread.shutdown_and_wait().await.is_err() {
+                    crate::start::host_error("memory child shutdown failed");
+                }
+                break AgentStatus::Interrupted;
+            }
             let status = thread.agent_status().await;
             if is_final_agent_status(&status) {
                 break status;
