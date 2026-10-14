@@ -33,6 +33,9 @@ RUN apt-get update \
         cmake \
         curl \
         git \
+        gstreamer1.0-plugins-base \
+        gstreamer1.0-plugins-good \
+        gstreamer1.0-tools \
         libasound2-dev \
         libcap-dev \
         libclang-dev \
@@ -92,6 +95,9 @@ RUN set -eu; \
     tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin "sccache-v${SCCACHE_VERSION}-$(uname -m)-unknown-linux-musl/sccache"; \
     sccache --version; \
     pkg-config --atleast-version=1.28 gstreamer-1.0 gstreamer-app-1.0 gstreamer-audio-1.0; \
+    for element in appsrc appsink audioconvert audioresample capsfilter opusdec rtpopusdepay rtpjitterbuffer; do \
+        gst-inspect-1.0 "$element" >/dev/null; \
+    done; \
     rm /tmp/nextest.tar.gz /tmp/sccache.tar.gz
 
 WORKDIR /src
