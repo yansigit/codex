@@ -196,7 +196,10 @@ fn spawn_agent_tool_keeps_model_controls_when_spawn_metadata_is_hidden(
 
     assert!(!properties.contains_key("agent_type"));
     assert!(properties.contains_key("model"));
-    assert!(properties.contains_key("model_provider"));
+    assert!(
+        !properties.contains_key("model_provider"),
+        "Reserved V2 schemas cannot add provider overrides"
+    );
     assert!(properties.contains_key("reasoning_effort"));
     assert!(!properties.contains_key("service_tier"));
     assert!(!description.contains(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE));

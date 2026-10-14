@@ -2824,9 +2824,21 @@ async fn multi_agent_feature_selects_one_agent_tool_family() {
     for property in ["model", "reasoning_effort"] {
         assert!(spawn_agent_properties.contains_key(property));
     }
-    for property in ["agent_type", "service_tier"] {
-        assert!(!spawn_agent_properties.contains_key(property));
-    }
+    // Reserved V2 schemas must remain provider-compatible. Provider selection
+    // is inherited/enforced by the host, not an extra model-facing argument.
+    assert_eq!(
+        spawn_agent_properties
+            .keys()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        vec![
+            "fork_turns",
+            "message",
+            "model",
+            "reasoning_effort",
+            "task_name"
+        ]
+    );
     let spawn_agent_description = spawn_agent.description.as_str();
     assert!(!spawn_agent_description.contains("max_concurrent_threads_per_session"));
     assert!(spawn_agent_description.contains(
