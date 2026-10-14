@@ -30,7 +30,7 @@ codex-utils-process = { workspace = true }
 codex-http-client = { workspace = true }
 anyhow = "1.0"
 base64 = { workspace = true }
-chrono = { version = "0.4.42", default-features = false, features = [
+chrono = { version = "0.4.45", default-features = false, features = [
     "clock",
     "std",
 ] }
@@ -45,12 +45,6 @@ serde_json = "1.0"
 tempfile = "3"
 tokio = { workspace = true, features = ["sync", "rt", "macros", "signal", "time"] }
 tracing-appender = { workspace = true }
-windows = { version = "0.58", features = [
-    "Win32_Foundation",
-    "Win32_NetworkManagement_WindowsFirewall",
-    "Win32_System_Com",
-    "Win32_System_Variant",
-] }
 
 [dependencies.codex-protocol]
 package = "codex-protocol"
@@ -58,8 +52,8 @@ path = "../protocol"
 
 [dependencies.rand]
 default-features = false
-features = ["std", "small_rng"]
-version = "0.8"
+features = ["std", "sys_rng", "thread_rng"]
+version = "0.10"
 
 [dependencies.dirs-next]
 version = "2.0"
@@ -104,3 +98,11 @@ workspace = true
 codex-utils-cargo-bin = { workspace = true }
 codex-windows-sandbox-test-support = { workspace = true }
 pretty_assertions = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_NetworkManagement_WindowsFirewall",
+    "Win32_System_Com",
+    "Win32_System_Variant",
+] }

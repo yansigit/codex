@@ -56,11 +56,11 @@ impl<'de> Deserialize<'de> for GuardianHistoryCheckpoint {
 }
 
 impl JsonSchema for GuardianHistoryCheckpoint {
-    fn schema_name() -> String {
-        "GuardianHistoryCheckpoint".to_owned()
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "GuardianHistoryCheckpoint".into()
     }
 
-    fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::schema::Schema {
+    fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
         Vec::<Entry<'_>>::json_schema(generator)
     }
 }

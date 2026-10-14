@@ -6,6 +6,7 @@ license.workspace = true
 [lints]
 workspace = true
 [dependencies]
+hex = { workspace = true }
 codex-provider-api = { path = "../provider-api" }
 reqwest = { workspace = true, features = ["json", "stream"] }
 serde_json = { workspace = true }

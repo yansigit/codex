@@ -14,7 +14,7 @@
         },
         "globScanMaxDepth": {
           "format": "uint",
-          "minimum": 1.0,
+          "minimum": 1,
           "type": [
             "integer",
             "null"

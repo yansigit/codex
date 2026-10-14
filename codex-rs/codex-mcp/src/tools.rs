@@ -237,7 +237,7 @@ fn sha1_hex(s: &str) -> String {
     let mut hasher = Sha1::new();
     hasher.update(s.as_bytes());
     let sha1 = hasher.finalize();
-    format!("{sha1:x}")
+    hex::encode(sha1)
 }
 
 fn callable_name_hash_suffix(raw_identity: &str) -> String {

@@ -95,6 +95,7 @@ impl std::fmt::Debug for RetainedUserMessage {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[schemars(rename = "Ordered_for_{T}")]
 struct Ordered<T> {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     revision: Option<codex_protocol::ResponseItemId>,

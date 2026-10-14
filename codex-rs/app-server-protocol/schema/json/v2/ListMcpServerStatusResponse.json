@@ -70,7 +70,7 @@
           "$ref": "#/definitions/McpAuthStatus"
         },
         "httpOrigin": {
-          "description": "HTTP origin of the effective configured endpoint, including plugin servers. Excludes credentials, path, query, and fragment; null for non-HTTP transports.",
+          "description": "HTTP origin of the effective configured endpoint, including plugin servers.\nExcludes credentials, path, query, and fragment; null for non-HTTP transports.",
           "type": [
             "string",
             "null"
@@ -128,7 +128,7 @@
           "type": "object"
         },
         "toolsError": {
-          "description": "Tool discovery failed and no catalog was returned. Null when a catalog is returned, including cached or empty catalogs.",
+          "description": "Tool discovery failed and no catalog was returned.\nNull when a catalog is returned, including cached or empty catalogs.",
           "type": [
             "string",
             "null"
@@ -274,7 +274,7 @@
       "type": "array"
     },
     "nextCursor": {
-      "description": "Opaque cursor to pass to the next call to continue after the last item. If None, there are no more items to return.",
+      "description": "Opaque cursor to pass to the next call to continue after the last item.\nIf None, there are no more items to return.",
       "type": [
         "string",
         "null"

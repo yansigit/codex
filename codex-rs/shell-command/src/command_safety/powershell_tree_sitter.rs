@@ -92,7 +92,7 @@ fn collect_command_nodes<'tree>(root: Node<'tree>, commands: &mut Vec<Node<'tree
             commands.push(node);
             continue;
         }
-        for child_index in (0..node.named_child_count()).rev() {
+        for child_index in (0..u32::try_from(node.named_child_count()).unwrap_or(u32::MAX)).rev() {
             if let Some(child) = node.named_child(child_index) {
                 stack.push(child);
             }

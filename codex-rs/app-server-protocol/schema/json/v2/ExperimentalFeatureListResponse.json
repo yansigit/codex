@@ -4,7 +4,7 @@
     "ExperimentalFeature": {
       "properties": {
         "announcement": {
-          "description": "Announcement copy shown to users when the feature is introduced. Null when this feature is not in beta.",
+          "description": "Announcement copy shown to users when the feature is introduced.\nNull when this feature is not in beta.",
           "type": [
             "string",
             "null"
@@ -15,14 +15,14 @@
           "type": "boolean"
         },
         "description": {
-          "description": "Short summary describing what the feature does. Null when this feature is not in beta.",
+          "description": "Short summary describing what the feature does.\nNull when this feature is not in beta.",
           "type": [
             "string",
             "null"
           ]
         },
         "displayName": {
-          "description": "User-facing display name shown in the experimental features UI. Null when this feature is not in beta.",
+          "description": "User-facing display name shown in the experimental features UI.\nNull when this feature is not in beta.",
           "type": [
             "string",
             "null"
@@ -101,7 +101,7 @@
       "type": "array"
     },
     "nextCursor": {
-      "description": "Opaque cursor to pass to the next call to continue after the last item. If None, there are no more items to return.",
+      "description": "Opaque cursor to pass to the next call to continue after the last item.\nIf None, there are no more items to return.",
       "type": [
         "string",
         "null"

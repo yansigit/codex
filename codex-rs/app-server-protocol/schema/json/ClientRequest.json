@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "definitions": {
     "AbsolutePathBuf": {
-      "description": "A path that is guaranteed to be absolute and normalized (though it is not guaranteed to be canonicalized or exist on the filesystem).\n\nIMPORTANT: When deserializing an `AbsolutePathBuf`, a base path must be set using [AbsolutePathBufGuard::new]. If no base path is set, the deserialization will fail unless the path being deserialized is already absolute.",
+      "description": "A path that is guaranteed to be absolute and normalized (though it is not\nguaranteed to be canonicalized or exist on the filesystem).\n\nIMPORTANT: When deserializing an `AbsolutePathBuf`, a base path must be set\nusing [AbsolutePathBufGuard::new]. If no base path is set, the\ndeserialization will fail unless the path being deserialized is already\nabsolute.",
       "type": "string"
     },
     "AddCreditsNudgeCreditType": {
@@ -91,7 +91,7 @@
       "description": "Read the committed installed connector runtime snapshot.",
       "properties": {
         "forceRefresh": {
-          "description": "When true and Apps are permitted, refresh and publish the hosted connector runtime tool snapshot first.",
+          "description": "When true and Apps are permitted, refresh and publish the hosted connector runtime tool\nsnapshot first.",
           "type": "boolean"
         },
         "threadId": {
@@ -121,7 +121,7 @@
         "limit": {
           "description": "Optional page size; defaults to a reasonable server-side value.",
           "format": "uint32",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
@@ -141,7 +141,7 @@
       "description": "EXPERIMENTAL - read metadata for specific apps/connectors.",
       "properties": {
         "appIds": {
-          "description": "App ids to read. The server accepts at most 100 ids and deduplicates repeated ids while preserving their first-request order.",
+          "description": "App ids to read. The server accepts at most 100 ids and deduplicates repeated ids while\npreserving their first-request order.",
           "items": {
             "type": "string"
           },
@@ -217,12 +217,12 @@
       "properties": {
         "end": {
           "format": "uint",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         },
         "start": {
           "format": "uint",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         }
       },
@@ -320,7 +320,7 @@
       "type": "object"
     },
     "CommandExecParams": {
-      "description": "Run a standalone command (argv vector) in the server sandbox without creating a thread or turn.\n\nThe final `command/exec` response is deferred until the process exits and is sent only after all `command/exec/outputDelta` notifications for that connection have been emitted.",
+      "description": "Run a standalone command (argv vector) in the server sandbox without\ncreating a thread or turn.\n\nThe final `command/exec` response is deferred until the process exits and is\nsent only after all `command/exec/outputDelta` notifications for that\nconnection have been emitted.",
       "properties": {
         "command": {
           "description": "Command argv vector. Empty arrays are rejected.",
@@ -351,23 +351,23 @@
               "null"
             ]
           },
-          "description": "Optional environment overrides merged into the server-computed environment.\n\nMatching names override inherited values. Set a key to `null` to unset an inherited variable.",
+          "description": "Optional environment overrides merged into the server-computed\nenvironment.\n\nMatching names override inherited values. Set a key to `null` to unset\nan inherited variable.",
           "type": [
             "object",
             "null"
           ]
         },
         "outputBytesCap": {
-          "description": "Optional per-stream stdout/stderr capture cap in bytes.\n\nWhen omitted, the server default applies. Cannot be combined with `disableOutputCap`.",
+          "description": "Optional per-stream stdout/stderr capture cap in bytes.\n\nWhen omitted, the server default applies. Cannot be combined with\n`disableOutputCap`.",
           "format": "uint",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
           ]
         },
         "processId": {
-          "description": "Optional client-supplied, connection-scoped process id.\n\nRequired for `tty`, `streamStdin`, `streamStdoutStderr`, and follow-up `command/exec/write`, `command/exec/resize`, and `command/exec/terminate` calls. When omitted, buffered execution gets an internal id that is not exposed to the client.",
+          "description": "Optional client-supplied, connection-scoped process id.\n\nRequired for `tty`, `streamStdin`, `streamStdoutStderr`, and follow-up\n`command/exec/write`, `command/exec/resize`, and\n`command/exec/terminate` calls. When omitted, buffered execution gets an\ninternal id that is not exposed to the client.",
           "type": [
             "string",
             "null"
@@ -382,7 +382,7 @@
               "type": "null"
             }
           ],
-          "description": "Optional sandbox policy for this command.\n\nUses the same shape as thread/turn execution sandbox configuration and defaults to the user's configured policy when omitted. Cannot be combined with `permissionProfile`."
+          "description": "Optional sandbox policy for this command.\n\nUses the same shape as thread/turn execution sandbox configuration and\ndefaults to the user's configured policy when omitted. Cannot be\ncombined with `permissionProfile`."
         },
         "size": {
           "anyOf": [
@@ -393,18 +393,18 @@
               "type": "null"
             }
           ],
-          "description": "Optional initial PTY size in character cells. Only valid when `tty` is true."
+          "description": "Optional initial PTY size in character cells. Only valid when `tty` is\ntrue."
         },
         "streamStdin": {
           "description": "Allow follow-up `command/exec/write` requests to write stdin bytes.\n\nRequires a client-supplied `processId`.",
           "type": "boolean"
         },
         "streamStdoutStderr": {
-          "description": "Stream stdout/stderr via `command/exec/outputDelta` notifications.\n\nStreamed bytes are not duplicated into the final response and require a client-supplied `processId`.",
+          "description": "Stream stdout/stderr via `command/exec/outputDelta` notifications.\n\nStreamed bytes are not duplicated into the final response and require a\nclient-supplied `processId`.",
           "type": "boolean"
         },
         "timeoutMs": {
-          "description": "Optional timeout in milliseconds.\n\nWhen omitted, the server default applies. Cannot be combined with `disableTimeout`.",
+          "description": "Optional timeout in milliseconds.\n\nWhen omitted, the server default applies. Cannot be combined with\n`disableTimeout`.",
           "format": "int64",
           "type": [
             "integer",
@@ -425,7 +425,7 @@
       "description": "Resize a running PTY-backed `command/exec` session.",
       "properties": {
         "processId": {
-          "description": "Client-supplied, connection-scoped `processId` from the original `command/exec` request.",
+          "description": "Client-supplied, connection-scoped `processId` from the original\n`command/exec` request.",
           "type": "string"
         },
         "size": {
@@ -449,13 +449,15 @@
         "cols": {
           "description": "Terminal width in character cells.",
           "format": "uint16",
-          "minimum": 0.0,
+          "maximum": 65535,
+          "minimum": 0,
           "type": "integer"
         },
         "rows": {
           "description": "Terminal height in character cells.",
           "format": "uint16",
-          "minimum": 0.0,
+          "maximum": 65535,
+          "minimum": 0,
           "type": "integer"
         }
       },
@@ -469,7 +471,7 @@
       "description": "Terminate a running `command/exec` session.",
       "properties": {
         "processId": {
-          "description": "Client-supplied, connection-scoped `processId` from the original `command/exec` request.",
+          "description": "Client-supplied, connection-scoped `processId` from the original\n`command/exec` request.",
           "type": "string"
         }
       },
@@ -479,7 +481,7 @@
       "type": "object"
     },
     "CommandExecWriteParams": {
-      "description": "Write stdin bytes to a running `command/exec` session, close stdin, or both.",
+      "description": "Write stdin bytes to a running `command/exec` session, close stdin, or\nboth.",
       "properties": {
         "closeStdin": {
           "description": "Close stdin after writing `deltaBase64`, if present.",
@@ -493,7 +495,7 @@
           ]
         },
         "processId": {
-          "description": "Client-supplied, connection-scoped `processId` from the original `command/exec` request.",
+          "description": "Client-supplied, connection-scoped `processId` from the original\n`command/exec` request.",
           "type": "string"
         }
       },
@@ -535,7 +537,7 @@
           ]
         },
         "reloadUserConfig": {
-          "description": "When true, hot-reload updated runtime settings into loaded threads after writing. Session-static model, reasoning-effort, Plan-mode reasoning-effort, and service-tier defaults are not reloaded. The deprecated personality setting is also not reloaded.",
+          "description": "When true, hot-reload updated runtime settings into loaded threads after writing.\nSession-static model, reasoning-effort, Plan-mode reasoning-effort, and service-tier\ndefaults are not reloaded. The deprecated personality setting is also not reloaded.",
           "type": "boolean"
         }
       },
@@ -564,7 +566,7 @@
     "ConfigReadParams": {
       "properties": {
         "cwd": {
-          "description": "Optional working directory to resolve project config layers. If specified, return the effective config as seen from that directory (i.e., including any project layers between `cwd` and the project/repo root).",
+          "description": "Optional working directory to resolve project config layers. If specified,\nreturn the effective config as seen from that directory (i.e., including any\nproject layers between `cwd` and the project/repo root).",
           "type": [
             "string",
             "null"
@@ -621,14 +623,14 @@
     "ConsumeAccountRateLimitResetCreditParams": {
       "properties": {
         "creditId": {
-          "description": "Opaque reset-credit identifier to redeem. When omitted, the backend selects the next available credit.",
+          "description": "Opaque reset-credit identifier to redeem. When omitted, the backend selects the next\navailable credit.",
           "type": [
             "string",
             "null"
           ]
         },
         "idempotencyKey": {
-          "description": "Identifies one logical reset attempt. A UUID is recommended; reuse the same value when retrying that attempt.",
+          "description": "Identifies one logical reset attempt. A UUID is recommended; reuse the same value when\nretrying that attempt.",
           "type": "string"
         }
       },
@@ -776,7 +778,7 @@
       "type": "string"
     },
     "CyberAccessProgram": {
-      "description": "Requested cyber treatment for an OpenAI model turn. Authorization and model-tier restrictions remain server-owned.",
+      "description": "Requested cyber treatment for an OpenAI model turn.\nAuthorization and model-tier restrictions remain server-owned.",
       "enum": [
         "standard",
         "daybreakBlue",
@@ -784,20 +786,57 @@
       ],
       "type": "string"
     },
+    "DynamicToolFunctionSpec": {
+      "properties": {
+        "deferLoading": {
+          "type": "boolean"
+        },
+        "description": {
+          "type": "string"
+        },
+        "inputSchema": true,
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "description",
+        "inputSchema",
+        "name"
+      ],
+      "type": "object"
+    },
+    "DynamicToolNamespaceSpec": {
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "tools": {
+          "items": {
+            "$ref": "#/definitions/DynamicToolNamespaceTool"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "description",
+        "name",
+        "tools"
+      ],
+      "type": "object"
+    },
     "DynamicToolNamespaceTool": {
       "oneOf": [
         {
+          "allOf": [
+            {
+              "$ref": "#/definitions/DynamicToolFunctionSpec"
+            }
+          ],
           "properties": {
-            "deferLoading": {
-              "type": "boolean"
-            },
-            "description": {
-              "type": "string"
-            },
-            "inputSchema": true,
-            "name": {
-              "type": "string"
-            },
             "type": {
               "enum": [
                 "function"
@@ -807,9 +846,6 @@
             }
           },
           "required": [
-            "description",
-            "inputSchema",
-            "name",
             "type"
           ],
           "title": "FunctionDynamicToolNamespaceTool",
@@ -820,17 +856,12 @@
     "DynamicToolSpec": {
       "oneOf": [
         {
+          "allOf": [
+            {
+              "$ref": "#/definitions/DynamicToolFunctionSpec"
+            }
+          ],
           "properties": {
-            "deferLoading": {
-              "type": "boolean"
-            },
-            "description": {
-              "type": "string"
-            },
-            "inputSchema": true,
-            "name": {
-              "type": "string"
-            },
             "type": {
               "enum": [
                 "function"
@@ -840,28 +871,18 @@
             }
           },
           "required": [
-            "description",
-            "inputSchema",
-            "name",
             "type"
           ],
           "title": "FunctionDynamicToolSpec",
           "type": "object"
         },
         {
+          "allOf": [
+            {
+              "$ref": "#/definitions/DynamicToolNamespaceSpec"
+            }
+          ],
           "properties": {
-            "description": {
-              "type": "string"
-            },
-            "name": {
-              "type": "string"
-            },
-            "tools": {
-              "items": {
-                "$ref": "#/definitions/DynamicToolNamespaceTool"
-              },
-              "type": "array"
-            },
             "type": {
               "enum": [
                 "namespace"
@@ -871,9 +892,6 @@
             }
           },
           "required": [
-            "description",
-            "name",
-            "tools",
             "type"
           ],
           "title": "NamespaceDynamicToolSpec",
@@ -902,7 +920,7 @@
           "additionalProperties": {
             "type": "boolean"
           },
-          "description": "Process-wide runtime feature enablement keyed by canonical feature name.\n\nOnly named features are updated. Omitted features are left unchanged. Send an empty map for a no-op.",
+          "description": "Process-wide runtime feature enablement keyed by canonical feature name.\n\nOnly named features are updated. Omitted features are left unchanged.\nSend an empty map for a no-op.",
           "type": "object"
         }
       },
@@ -923,14 +941,14 @@
         "limit": {
           "description": "Optional page size; defaults to a reasonable server-side value.",
           "format": "uint32",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
           ]
         },
         "threadId": {
-          "description": "Optional loaded thread id. Pass this when showing feature state for an existing thread so enablement is computed from that thread's refreshed config, including project-local config for the thread's cwd.",
+          "description": "Optional loaded thread id. Pass this when showing feature state for an\nexisting thread so enablement is computed from that thread's refreshed\nconfig, including project-local config for the thread's cwd.",
           "type": [
             "string",
             "null"
@@ -958,7 +976,7 @@
         "maxSessionAgeDays": {
           "description": "Maximum age in days for detected sessions. Missing values use the default limit.",
           "format": "uint32",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
@@ -967,7 +985,7 @@
         "maxSessions": {
           "description": "Maximum number of sessions to detect. Missing values use the default limit.",
           "format": "uint32",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
@@ -981,7 +999,7 @@
           ]
         },
         "source": {
-          "description": "Deprecated field retained for compatibility. This field is ignored; use `migrationSource` to select the migration source.",
+          "description": "Deprecated field retained for compatibility. This field is ignored; use `migrationSource`\nto select the migration source.",
           "type": [
             "string",
             "null"
@@ -1124,14 +1142,14 @@
           "type": "array"
         },
         "migrationSource": {
-          "description": "Migration-source selector used to produce the migration items. Pass the same value to detection and import; missing or unrecognized values use the default source.",
+          "description": "Migration-source selector used to produce the migration items. Pass the same value to\ndetection and import; missing or unrecognized values use the default source.",
           "type": [
             "string",
             "null"
           ]
         },
         "providerId": {
-          "description": "Opaque provider identifier supplied by the caller for analytics attribution and import history display. This does not select the migration source.",
+          "description": "Opaque provider identifier supplied by the caller for analytics attribution and import\nhistory display. This does not select the migration source.",
           "type": [
             "string",
             "null"
@@ -1448,7 +1466,7 @@
       ]
     },
     "FunctionCallOutputContentItem": {
-      "description": "Responses API compatible content items that can be returned by a tool call. This is a subset of ContentItem with the types we support as function call outputs.",
+      "description": "Responses API compatible content items that can be returned by a tool call.\nThis is a subset of ContentItem with the types we support as function call outputs.",
       "oneOf": [
         {
           "properties": {
@@ -1591,7 +1609,7 @@
     "GetAccountParams": {
       "properties": {
         "refreshToken": {
-          "description": "When `true`, requests a proactive token refresh before returning.\n\nIn managed auth mode this triggers the normal refresh-token flow. In external auth mode this flag is ignored. Clients should refresh tokens themselves and call `account/login/start` with `chatgptAuthTokens`.",
+          "description": "When `true`, requests a proactive token refresh before returning.\n\nIn managed auth mode this triggers the normal refresh-token flow. In\nexternal auth mode this flag is ignored. Clients should refresh tokens\nthemselves and call `account/login/start` with `chatgptAuthTokens`.",
           "type": "boolean"
         }
       },
@@ -1601,11 +1619,11 @@
       "description": "Usage-read capabilities of the requesting client, never inferred from its experiment arm.",
       "properties": {
         "excludeResetCreditDetails": {
-          "description": "Skip the separate reset-credit detail lookup for background usage polls. The usage response still includes the available count; omitted/false preserves detailed reads.",
+          "description": "Skip the separate reset-credit detail lookup for background usage polls. The usage\nresponse still includes the available count; omitted/false preserves detailed reads.",
           "type": "boolean"
         },
         "supportsLunaReserve": {
-          "description": "The client supports automatic Luna Reserve fallback. For eligible ChatGPT CLI users, allow the backend to record experiment exposure after ordinary usage is blocked.",
+          "description": "The client supports automatic Luna Reserve fallback. For eligible ChatGPT CLI users,\nallow the backend to record experiment exposure after ordinary usage is blocked.",
           "type": "boolean"
         }
       },
@@ -1664,7 +1682,7 @@
           "type": "boolean"
         },
         "explicitGatewayOauth": {
-          "description": "Use explicit gateway OAuth login instead of automatic browser authorization. Applies to this app-server's gateway runtime; later connections cannot undo it.",
+          "description": "Use explicit gateway OAuth login instead of automatic browser authorization.\nApplies to this app-server's gateway runtime; later connections cannot undo it.",
           "type": "boolean"
         },
         "extensions": {
@@ -1680,7 +1698,7 @@
           "type": "boolean"
         },
         "optOutNotificationMethods": {
-          "description": "Exact notification method names that should be suppressed for this connection (for example `thread/started`).",
+          "description": "Exact notification method names that should be suppressed for this\nconnection (for example `thread/started`).",
           "items": {
             "type": "string"
           },
@@ -1719,7 +1737,7 @@
       "type": "object"
     },
     "InternalChatMessageMetadataPassthrough": {
-      "description": "Internal Responses API passthrough metadata copied into underlying chat messages.\n\nResponses API strongly types this payload. Do not modify it without first getting API approval and making the corresponding Responses API change.",
+      "description": "Internal Responses API passthrough metadata copied into underlying chat messages.\n\nResponses API strongly types this payload. Do not modify it without first getting API\napproval and making the corresponding Responses API change.",
       "properties": {
         "turn_id": {
           "type": [
@@ -1751,12 +1769,12 @@
               "type": "null"
             }
           ],
-          "description": "Controls how much MCP inventory data to fetch for each server. Defaults to `Full` when omitted."
+          "description": "Controls how much MCP inventory data to fetch for each server.\nDefaults to `Full` when omitted."
         },
         "limit": {
           "description": "Optional page size; defaults to a server-defined value.",
           "format": "uint32",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
@@ -1781,58 +1799,70 @@
     "LocalShellAction": {
       "oneOf": [
         {
+          "allOf": [
+            {
+              "$ref": "#/definitions/LocalShellExecAction"
+            }
+          ],
           "properties": {
-            "command": {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "env": {
-              "additionalProperties": {
-                "type": "string"
-              },
-              "type": [
-                "object",
-                "null"
-              ]
-            },
-            "timeout_ms": {
-              "format": "uint64",
-              "minimum": 0.0,
-              "type": [
-                "integer",
-                "null"
-              ]
-            },
             "type": {
               "enum": [
                 "exec"
               ],
               "title": "ExecLocalShellActionType",
               "type": "string"
-            },
-            "user": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "working_directory": {
-              "type": [
-                "string",
-                "null"
-              ]
             }
           },
           "required": [
-            "command",
             "type"
           ],
           "title": "ExecLocalShellAction",
           "type": "object"
         }
       ]
+    },
+    "LocalShellExecAction": {
+      "properties": {
+        "command": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "timeout_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "user": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "working_directory": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "type": "object"
     },
     "LocalShellStatus": {
       "enum": [
@@ -1959,10 +1989,10 @@
           "type": "object"
         },
         {
-          "description": "[UNSTABLE] FOR OPENAI INTERNAL USE ONLY - DO NOT USE. The access token must contain the same scopes that Codex-managed ChatGPT auth tokens have.",
+          "description": "[UNSTABLE] FOR OPENAI INTERNAL USE ONLY - DO NOT USE.\nThe access token must contain the same scopes that Codex-managed ChatGPT auth tokens have.",
           "properties": {
             "accessToken": {
-              "description": "Access token (JWT) supplied by the client. This token is used for backend API requests and email extraction.",
+              "description": "Access token (JWT) supplied by the client.\nThis token is used for backend API requests and email extraction.",
               "type": "string"
             },
             "chatgptAccountId": {
@@ -1970,7 +2000,7 @@
               "type": "string"
             },
             "chatgptPlanType": {
-              "description": "Optional plan type supplied by the client.\n\nWhen `null`, Codex attempts to derive the plan type from access-token claims. If unavailable, the plan defaults to `unknown`.",
+              "description": "Optional plan type supplied by the client.\n\nWhen `null`, Codex attempts to derive the plan type from access-token\nclaims. If unavailable, the plan defaults to `unknown`.",
               "type": [
                 "string",
                 "null"
@@ -2272,10 +2302,10 @@
       "type": "string"
     },
     "MessagePhase": {
-      "description": "Classifies assistant text as commentary, a partial answer, or a terminal answer.\n\nProviders do not emit this consistently, so callers must treat `None` as \"phase unknown\" and keep compatibility behavior for legacy models.",
+      "description": "Classifies assistant text as commentary, a partial answer, or a terminal answer.\n\nProviders do not emit this consistently, so callers must treat `None` as\n\"phase unknown\" and keep compatibility behavior for legacy models.",
       "oneOf": [
         {
-          "description": "Mid-turn assistant text (for example preamble/progress narration).\n\nAdditional tool calls or assistant output may follow before turn completion.",
+          "description": "Mid-turn assistant text (for example preamble/progress narration).\n\nAdditional tool calls or assistant output may follow before turn\ncompletion.",
           "enum": [
             "commentary"
           ],
@@ -2384,7 +2414,7 @@
         "limit": {
           "description": "Optional page size; defaults to a reasonable server-side value.",
           "format": "uint32",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
@@ -2397,7 +2427,7 @@
       "type": "object"
     },
     "MultiAgentMode": {
-      "description": "Controls the effective multi-agent delegation instructions for a turn. `custom` means the configured mode hint defines the policy instead of a built-in policy.",
+      "description": "Controls the effective multi-agent delegation instructions for a turn. `custom` means the\nconfigured mode hint defines the policy instead of a built-in policy.",
       "oneOf": [
         {
           "enum": [
@@ -2447,7 +2477,7 @@
         "limit": {
           "description": "Optional page size; defaults to the full result set.",
           "format": "uint32",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
@@ -2512,7 +2542,7 @@
           ]
         },
         "installSuggestionPluginNames": {
-          "description": "Additional uninstalled plugin names that should be returned when present locally. This is used by mention surfaces that intentionally expose install entrypoints.",
+          "description": "Additional uninstalled plugin names that should be returned when present locally.\nThis is used by mention surfaces that intentionally expose install entrypoints.",
           "items": {
             "type": "string"
           },
@@ -2537,7 +2567,7 @@
     "PluginListParams": {
       "properties": {
         "cwds": {
-          "description": "Optional working directories used to discover repo marketplaces. When omitted, only home-scoped marketplaces and the official curated marketplace are considered.",
+          "description": "Optional working directories used to discover repo marketplaces. When omitted,\nonly home-scoped marketplaces and the official curated marketplace are considered.",
           "items": {
             "$ref": "#/definitions/AbsolutePathBuf"
           },
@@ -2551,7 +2581,7 @@
           "type": "boolean"
         },
         "marketplaceKinds": {
-          "description": "Optional marketplace kind filter. When omitted, only local marketplaces are queried, plus the default remote catalog when enabled by feature flag.",
+          "description": "Optional marketplace kind filter. When omitted, only local marketplaces are queried, plus\nthe default remote catalog when enabled by feature flag.",
           "items": {
             "$ref": "#/definitions/PluginListMarketplaceKind"
           },
@@ -2797,13 +2827,15 @@
         "cols": {
           "description": "Terminal width in character cells.",
           "format": "uint16",
-          "minimum": 0.0,
+          "maximum": 65535,
+          "minimum": 0,
           "type": "integer"
         },
         "rows": {
           "description": "Terminal height in character cells.",
           "format": "uint16",
-          "minimum": 0.0,
+          "maximum": 65535,
+          "minimum": 0,
           "type": "integer"
         }
       },
@@ -2841,7 +2873,7 @@
         },
         "revision": {
           "format": "uint64",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         },
         "threadId": {
@@ -3015,7 +3047,7 @@
         },
         "revision": {
           "format": "uint64",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         },
         "threadId": {
@@ -3165,7 +3197,7 @@
       ]
     },
     "ReasoningSummary": {
-      "description": "A summary of the reasoning performed by the model. This can be useful for debugging and understanding the model's reasoning process. See https://platform.openai.com/docs/guides/reasoning?api-mode=responses#reasoning-summaries",
+      "description": "A summary of the reasoning performed by the model. This can be useful for\ndebugging and understanding the model's reasoning process.\nSee https://platform.openai.com/docs/guides/reasoning?api-mode=responses#reasoning-summaries",
       "oneOf": [
         {
           "enum": [
@@ -3216,6 +3248,7 @@
         {
           "properties": {
             "id": {
+              "description": "A Responses API item ID. New IDs require an explicit prefix; deserialization\nremains permissive so legacy rollouts can still be read.",
               "type": [
                 "string",
                 "null"
@@ -3259,6 +3292,7 @@
               ]
             },
             "id": {
+              "description": "A Responses API item ID. New IDs require an explicit prefix; deserialization\nremains permissive so legacy rollouts can still be read.",
               "type": [
                 "string",
                 "null"
@@ -3321,6 +3355,7 @@
               "type": "array"
             },
             "id": {
+              "description": "A Responses API item ID. New IDs require an explicit prefix; deserialization\nremains permissive so legacy rollouts can still be read.",
               "type": [
                 "string",
                 "null"
@@ -3375,6 +3410,7 @@
               ]
             },
             "id": {
+              "description": "A Responses API item ID. New IDs require an explicit prefix; deserialization\nremains permissive so legacy rollouts can still be read.",
               "type": [
                 "string",
                 "null"
@@ -3489,6 +3525,7 @@
               ]
             },
             "id": {
+              "description": "A Responses API item ID. New IDs require an explicit prefix; deserialization\nremains permissive so legacy rollouts can still be read.",
               "type": [
                 "string",
                 "null"
@@ -3555,6 +3592,7 @@
               "type": "string"
             },
             "id": {
+              "description": "A Responses API item ID. New IDs require an explicit prefix; deserialization\nremains permissive so legacy rollouts can still be read.",
               "type": [
                 "string",
                 "null"
@@ -3601,6 +3639,7 @@
               ]
             },
             "id": {
+              "description": "A Responses API item ID. New IDs require an explicit prefix; deserialization\nremains permissive so legacy rollouts can still be read.",
               "type": [
                 "string",
                 "null"
@@ -3658,6 +3697,7 @@
               ]
             },
             "id": {
+              "description": "A Responses API item ID. New IDs require an explicit prefix; deserialization\nremains permissive so legacy rollouts can still be read.",
               "type": [
                 "string",
                 "null"
@@ -3714,6 +3754,7 @@
               "type": "string"
             },
             "id": {
+              "description": "A Responses API item ID. New IDs require an explicit prefix; deserialization\nremains permissive so legacy rollouts can still be read.",
               "type": [
                 "string",
                 "null"
@@ -3766,6 +3807,7 @@
               "type": "string"
             },
             "id": {
+              "description": "A Responses API item ID. New IDs require an explicit prefix; deserialization\nremains permissive so legacy rollouts can still be read.",
               "type": [
                 "string",
                 "null"
@@ -3824,6 +3866,7 @@
               ]
             },
             "id": {
+              "description": "A Responses API item ID. New IDs require an explicit prefix; deserialization\nremains permissive so legacy rollouts can still be read.",
               "type": [
                 "string",
                 "null"
@@ -3868,6 +3911,7 @@
               ]
             },
             "id": {
+              "description": "A Responses API item ID. New IDs require an explicit prefix; deserialization\nremains permissive so legacy rollouts can still be read.",
               "type": [
                 "string",
                 "null"
@@ -3917,6 +3961,7 @@
               "type": "string"
             },
             "id": {
+              "description": "A Responses API item ID. New IDs require an explicit prefix; deserialization\nremains permissive so legacy rollouts can still be read.",
               "type": [
                 "string",
                 "null"
@@ -3993,6 +4038,7 @@
               ]
             },
             "id": {
+              "description": "A Responses API item ID. New IDs require an explicit prefix; deserialization\nremains permissive so legacy rollouts can still be read.",
               "type": [
                 "string",
                 "null"
@@ -4160,7 +4206,7 @@
             }
           ],
           "default": null,
-          "description": "Where to run the review: inline (default) on the current thread or detached on a new thread (returned in `reviewThreadId`). Detached delivery is deprecated and emits `deprecationNotice`. Use `thread/start` followed by an inline review for a separate review thread."
+          "description": "Where to run the review: inline (default) on the current thread or\ndetached on a new thread (returned in `reviewThreadId`).\nDetached delivery is deprecated and emits `deprecationNotice`.\nUse `thread/start` followed by an inline review for a separate review thread."
         },
         "target": {
           "$ref": "#/definitions/ReviewTarget"
@@ -4625,7 +4671,7 @@
         },
         "limit": {
           "format": "uint32",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
@@ -4664,7 +4710,7 @@
         },
         "limit": {
           "format": "uint32",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
@@ -4720,7 +4766,7 @@
       "type": "object"
     },
     "ThreadForkParams": {
-      "description": "There are two ways to fork a thread: 1. By thread_id: load the thread from disk by thread_id and fork it into a new thread. 2. By path: load the thread from disk by path and fork it into a new thread.\n\nIf using a non-empty path, the thread_id param will be ignored. Empty string path values are treated as absent.\n\nPrefer using thread_id whenever possible.",
+      "description": "There are two ways to fork a thread:\n1. By thread_id: load the thread from disk by thread_id and fork it into a new thread.\n2. By path: load the thread from disk by path and fork it into a new thread.\n\nIf using a non-empty path, the thread_id param will be ignored.\nEmpty string path values are treated as absent.\n\nPrefer using thread_id whenever possible.",
       "properties": {
         "approvalPolicy": {
           "anyOf": [
@@ -4741,7 +4787,7 @@
               "type": "null"
             }
           ],
-          "description": "Override where approval requests are routed for review on this thread and subsequent turns."
+          "description": "Override where approval requests are routed for review on this thread\nand subsequent turns."
         },
         "baseInstructions": {
           "type": [
@@ -4772,11 +4818,11 @@
           "type": "boolean"
         },
         "excludeTurns": {
-          "description": "When true, return only thread metadata and live fork state without populating `thread.turns`. This is useful when the client plans to call `thread/turns/list` immediately after forking. Full-history hydration is deprecated for paginated threads; use this with `thread/turns/list` and `thread/items/list` instead.",
+          "description": "When true, return only thread metadata and live fork state without\npopulating `thread.turns`. This is useful when the client plans to call\n`thread/turns/list` immediately after forking. Full-history hydration\nis deprecated for paginated threads; use this with `thread/turns/list`\nand `thread/items/list` instead.",
           "type": "boolean"
         },
         "lastTurnId": {
-          "description": "Optional last turn id to fork through, inclusive.\n\nWhen specified, turns after `last_turn_id` are omitted from the fork. The referenced turn cannot be in progress.",
+          "description": "Optional last turn id to fork through, inclusive.\n\nWhen specified, turns after `last_turn_id` are omitted from the fork.\nThe referenced turn cannot be in progress.",
           "type": [
             "string",
             "null"
@@ -4999,12 +5045,12 @@
               "type": "null"
             }
           ],
-          "description": "Opaque continuation cursor or an exclusive item anchor in the requested visible turn. An item anchor requires a non-empty `turnId`; ascending (the default) returns items after it, and descending returns items before it. Continue with the returned string cursor."
+          "description": "Opaque continuation cursor or an exclusive item anchor in the requested visible turn.\nAn item anchor requires a non-empty `turnId`; ascending (the default) returns items\nafter it, and descending returns items before it. Continue with the returned string cursor."
         },
         "limit": {
           "description": "Optional item page size.",
           "format": "uint32",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
@@ -5053,7 +5099,7 @@
     "ThreadListParams": {
       "properties": {
         "archived": {
-          "description": "Optional archived filter; when set to true, only archived threads are returned. If false or null, only non-archived threads are returned.",
+          "description": "Optional archived filter; when set to true, only archived threads are returned.\nIf false or null, only non-archived threads are returned.",
           "type": [
             "boolean",
             "null"
@@ -5075,10 +5121,10 @@
               "type": "null"
             }
           ],
-          "description": "Optional cwd filter or filters; when set, only threads whose session cwd exactly matches one of these paths are returned."
+          "description": "Optional cwd filter or filters; when set, only threads whose session cwd\nexactly matches one of these paths are returned."
         },
         "excludedThreadIds": {
-          "description": "Thread IDs to exclude before applying the result limit. Up to 100 entries; invalid IDs or a larger list are rejected, never truncated. Send the same exclusions on each page. Omitted, null, or empty means no exclusions.",
+          "description": "Thread IDs to exclude before applying the result limit. Up to 100\nentries; invalid IDs or a larger list are rejected, never truncated.\nSend the same exclusions on each page. Omitted, null, or empty means no exclusions.",
           "items": {
             "type": "string"
           },
@@ -5090,14 +5136,14 @@
         "limit": {
           "description": "Optional page size; defaults to a reasonable server-side value.",
           "format": "uint32",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
           ]
         },
         "modelProviders": {
-          "description": "Optional provider filter; when set, only sessions recorded under these providers are returned. When present but empty, includes all providers.",
+          "description": "Optional provider filter; when set, only sessions recorded under these\nproviders are returned. When present but empty, includes all providers.",
           "items": {
             "type": "string"
           },
@@ -5107,7 +5153,7 @@
           ]
         },
         "originators": {
-          "description": "Optional originator allowlist, matching any supplied value exactly. Supported by hosted backends only; the local app-server rejects a nonempty list. Omitted or empty lists leave originators unrestricted.",
+          "description": "Optional originator allowlist, matching any supplied value exactly.\nSupported by hosted backends only; the local app-server rejects a nonempty list.\nOmitted or empty lists leave originators unrestricted.",
           "items": {
             "type": "string"
           },
@@ -5124,7 +5170,7 @@
           ]
         },
         "sectionId": {
-          "description": "Omit to include every section, set to `null` for unsectioned threads, or provide a section ID to return only threads in that section.",
+          "description": "Omit to include every section, set to `null` for unsectioned threads,\nor provide a section ID to return only threads in that section.",
           "type": [
             "string",
             "null"
@@ -5153,7 +5199,7 @@
           "description": "Optional sort key; defaults to created_at."
         },
         "sourceKinds": {
-          "description": "Optional source filter; when set, only sessions from these source kinds are returned. When omitted or empty, defaults to interactive sources.",
+          "description": "Optional source filter; when set, only sessions from these source kinds\nare returned. When omitted or empty, defaults to interactive sources.",
           "items": {
             "$ref": "#/definitions/ThreadSourceKind"
           },
@@ -5163,7 +5209,7 @@
           ]
         },
         "useStateDbOnly": {
-          "description": "If true, return from the state DB without scanning JSONL rollouts to repair thread metadata. Omitted or false preserves scan-and-repair behavior.",
+          "description": "If true, return from the state DB without scanning JSONL rollouts to\nrepair thread metadata. Omitted or false preserves scan-and-repair\nbehavior.",
           "type": "boolean"
         }
       },
@@ -5181,7 +5227,7 @@
         "limit": {
           "description": "Optional page size; defaults to no limit.",
           "format": "uint32",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
@@ -5200,21 +5246,21 @@
     "ThreadMetadataGitInfoUpdateParams": {
       "properties": {
         "branch": {
-          "description": "Omit to leave the stored branch unchanged, set to `null` to clear it, or provide a non-empty string to replace it.",
+          "description": "Omit to leave the stored branch unchanged, set to `null` to clear it,\nor provide a non-empty string to replace it.",
           "type": [
             "string",
             "null"
           ]
         },
         "originUrl": {
-          "description": "Omit to leave the stored origin URL unchanged, set to `null` to clear it, or provide a non-empty string to replace it.",
+          "description": "Omit to leave the stored origin URL unchanged, set to `null` to clear it,\nor provide a non-empty string to replace it.",
           "type": [
             "string",
             "null"
           ]
         },
         "sha": {
-          "description": "Omit to leave the stored commit unchanged, set to `null` to clear it, or provide a non-empty string to replace it.",
+          "description": "Omit to leave the stored commit unchanged, set to `null` to clear it,\nor provide a non-empty string to replace it.",
           "type": [
             "string",
             "null"
@@ -5234,7 +5280,7 @@
               "type": "null"
             }
           ],
-          "description": "Patch the stored Git metadata for this thread. Omit a field to leave it unchanged, set it to `null` to clear it, or provide a string to replace the stored value."
+          "description": "Patch the stored Git metadata for this thread.\nOmit a field to leave it unchanged, set it to `null` to clear it, or\nprovide a string to replace the stored value."
         },
         "threadId": {
           "type": "string"
@@ -5248,7 +5294,7 @@
     "ThreadReadParams": {
       "properties": {
         "includeTurns": {
-          "description": "When true, include turns and their items from rollout history. Full-history hydration is deprecated for paginated threads; prefer a metadata-only read and page with `thread/turns/list` and `thread/items/list`.",
+          "description": "When true, include turns and their items from rollout history.\nFull-history hydration is deprecated for paginated threads; prefer a\nmetadata-only read and page with `thread/turns/list` and\n`thread/items/list`.",
           "type": "boolean"
         },
         "threadId": {
@@ -5310,17 +5356,18 @@
         },
         "numChannels": {
           "format": "uint16",
-          "minimum": 0.0,
+          "maximum": 65535,
+          "minimum": 0,
           "type": "integer"
         },
         "sampleRate": {
           "format": "uint32",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         },
         "samplesPerChannel": {
           "format": "uint32",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
@@ -5372,7 +5419,7 @@
         {
           "properties": {
             "sdp": {
-              "description": "SDP offer generated by a WebRTC RTCPeerConnection after configuring audio and the realtime events data channel.",
+              "description": "SDP offer generated by a WebRTC RTCPeerConnection after configuring audio and the\nrealtime events data channel.",
               "type": "string"
             },
             "type": {
@@ -5429,7 +5476,7 @@
         "limit": {
           "description": "Optional turn page size.",
           "format": "uint32",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
@@ -5450,7 +5497,7 @@
       "type": "object"
     },
     "ThreadResumeParams": {
-      "description": "There are three ways to resume a thread: 1. By thread_id: load the thread from disk by thread_id and resume it. 2. By history: instantiate the thread from memory and resume it. 3. By path: load the thread from disk by path and resume it.\n\nFor non-running threads, the precedence is: history > non-empty path > thread_id. If using history or a non-empty path for a non-running thread, the thread_id param will be ignored.\n\nIf thread_id identifies a running thread, app-server rejoins that thread and treats a non-empty path as a consistency check against the active rollout path. Empty string path values are treated as absent.\n\nPrefer using thread_id whenever possible.",
+      "description": "There are three ways to resume a thread:\n1. By thread_id: load the thread from disk by thread_id and resume it.\n2. By history: instantiate the thread from memory and resume it.\n3. By path: load the thread from disk by path and resume it.\n\nFor non-running threads, the precedence is: history > non-empty path > thread_id.\nIf using history or a non-empty path for a non-running thread, the thread_id\nparam will be ignored.\n\nIf thread_id identifies a running thread, app-server rejoins that thread and\ntreats a non-empty path as a consistency check against the active rollout path.\nEmpty string path values are treated as absent.\n\nPrefer using thread_id whenever possible.",
       "properties": {
         "approvalPolicy": {
           "anyOf": [
@@ -5471,7 +5518,7 @@
               "type": "null"
             }
           ],
-          "description": "Override where approval requests are routed for review on this thread and subsequent turns."
+          "description": "Override where approval requests are routed for review on this thread\nand subsequent turns."
         },
         "baseInstructions": {
           "type": [
@@ -5499,7 +5546,7 @@
           ]
         },
         "excludeTurns": {
-          "description": "When true, return only thread metadata and live-resume state without populating `thread.turns`. This is useful when the client plans to call `thread/turns/list` immediately after resuming. Full-history hydration is deprecated for paginated threads; use this with `thread/turns/list` and `thread/items/list` instead.",
+          "description": "When true, return only thread metadata and live-resume state without\npopulating `thread.turns`. This is useful when the client plans to call\n`thread/turns/list` immediately after resuming. Full-history hydration\nis deprecated for paginated threads; use this with `thread/turns/list`\nand `thread/items/list` instead.",
           "type": "boolean"
         },
         "model": {
@@ -5524,7 +5571,7 @@
               "type": "null"
             }
           ],
-          "description": "@deprecated `friendly` and `pragmatic` no longer select a style. Changing this does not rewrite the thread's existing instructions."
+          "description": "@deprecated `friendly` and `pragmatic` no longer select a style.\nChanging this does not rewrite the thread's existing instructions."
         },
         "sandbox": {
           "anyOf": [
@@ -5644,7 +5691,7 @@
         "limit": {
           "description": "Maximum number of sections to return.",
           "format": "uint32",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
@@ -5728,14 +5775,14 @@
     "ThreadShellCommandParams": {
       "properties": {
         "command": {
-          "description": "Shell command string evaluated by the thread's configured shell. Unlike `command/exec`, this intentionally preserves shell syntax such as pipes, redirects, and quoting. This runs unsandboxed with full access rather than inheriting the thread sandbox policy.",
+          "description": "Shell command string evaluated by the thread's configured shell.\nUnlike `command/exec`, this intentionally preserves shell syntax\nsuch as pipes, redirects, and quoting. This runs unsandboxed with full\naccess rather than inheriting the thread sandbox policy.",
           "type": "string"
         },
         "threadId": {
           "type": "string"
         },
         "timeoutMs": {
-          "description": "Maximum execution time in milliseconds. Defaults to one hour when omitted or null. Must be non-negative; zero requests an immediate timeout, not unlimited execution. Does not affect the immediate RPC acknowledgement.",
+          "description": "Maximum execution time in milliseconds. Defaults to one hour when omitted\nor null. Must be non-negative; zero requests an immediate timeout, not\nunlimited execution. Does not affect the immediate RPC acknowledgement.",
           "format": "int64",
           "type": [
             "integer",
@@ -5797,7 +5844,7 @@
               "type": "null"
             }
           ],
-          "description": "Override where approval requests are routed for review on this thread and subsequent turns."
+          "description": "Override where approval requests are routed for review on this thread\nand subsequent turns."
         },
         "baseInstructions": {
           "type": [
@@ -5929,7 +5976,7 @@
         "limit": {
           "description": "Optional turn page size.",
           "format": "uint32",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
@@ -6064,7 +6111,7 @@
               "type": "null"
             }
           ],
-          "description": "Override where approval requests are routed for review on this turn and subsequent turns."
+          "description": "Override where approval requests are routed for review on this turn and\nsubsequent turns."
         },
         "clientUserMessageId": {
           "type": [
@@ -6080,7 +6127,7 @@
           ]
         },
         "disabledPluginIds": {
-          "description": "Replace this thread's disabled plugin IDs. Omitted/null preserves the list; [] clears it.",
+          "description": "Replace this thread's disabled plugin IDs.\nOmitted/null preserves the list; [] clears it.",
           "items": {
             "type": "string"
           },
@@ -6114,10 +6161,10 @@
           ]
         },
         "outputSchema": {
-          "description": "Optional JSON Schema used to constrain the final assistant message for this turn."
+          "description": "Optional JSON Schema used to constrain the final assistant message for\nthis turn."
         },
         "parentTurnId": {
-          "description": "ID of the turn that caused this new turn to start.\n\nSet this when starting work on behalf of another turn, such as delegated work in a different thread. Leave unset for work started directly by the user. Ignored when this request adds input to an active turn.",
+          "description": "ID of the turn that caused this new turn to start.\n\nSet this when starting work on behalf of another turn, such as delegated\nwork in a different thread. Leave unset for work started directly by the\nuser. Ignored when this request adds input to an active turn.",
           "type": [
             "string",
             "null"
@@ -6132,10 +6179,10 @@
               "type": "null"
             }
           ],
-          "description": "@deprecated `friendly` and `pragmatic` no longer select a style. Changing this does not rewrite the thread's existing instructions."
+          "description": "@deprecated `friendly` and `pragmatic` no longer select a style.\nChanging this does not rewrite the thread's existing instructions."
         },
         "rootTurnId": {
-          "description": "ID of the first turn in the chain of work that led to this new turn.\n\nWhen setting `parentTurnId`, set this to the parent turn's `rootTurnId` when known. This keeps descendant work attributed to the original turn. If omitted, the new turn becomes its own root. Ignored when this request adds input to an active turn.",
+          "description": "ID of the first turn in the chain of work that led to this new turn.\n\nWhen setting `parentTurnId`, set this to the parent turn's `rootTurnId`\nwhen known. This keeps descendant work attributed to the original turn.\nIf omitted, the new turn becomes its own root. Ignored when this request\nadds input to an active turn.",
           "type": [
             "string",
             "null"
@@ -6160,7 +6207,7 @@
           ]
         },
         "serviceTierForTurn": {
-          "description": "Override the service tier only when this request starts a new turn. Use \"default\" for standard speed. Omitted or null inherits the thread's tier. Does not change the thread's tier or a turn being steered.",
+          "description": "Override the service tier only when this request starts a new turn.\nUse \"default\" for standard speed. Omitted or null inherits the thread's tier.\nDoes not change the thread's tier or a turn being steered.",
           "type": [
             "string",
             "null"
@@ -6191,7 +6238,7 @@
           ]
         },
         "turnTrigger": {
-          "description": "Optional source classification for the caller that starts this turn. Ignored when this request steers an already-active turn.",
+          "description": "Optional source classification for the caller that starts this turn.\nIgnored when this request steers an already-active turn.",
           "type": [
             "string",
             "null"
@@ -6213,7 +6260,7 @@
           ]
         },
         "expectedTurnId": {
-          "description": "Required active turn id precondition. The request fails when it does not match the currently active turn.",
+          "description": "Required active turn id precondition. The request fails when it does not\nmatch the currently active turn.",
           "type": "string"
         },
         "input": {

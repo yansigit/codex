@@ -36,8 +36,5 @@ fn reads_session_import_in_one_pass() {
     assert_eq!(parsed.ai_title.as_deref(), Some("generated title"));
     assert_eq!(parsed.messages.len(), 1);
     assert_eq!(parsed.messages[0].text, "first request");
-    assert_eq!(
-        parsed.content_sha256,
-        format!("{:x}", Sha256::digest(contents))
-    );
+    assert_eq!(parsed.content_sha256, hex::encode(Sha256::digest(contents)));
 }

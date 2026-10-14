@@ -77,7 +77,7 @@
   },
   "properties": {
     "callId": {
-      "description": "Use to correlate this with [codex_protocol::protocol::PatchApplyBeginEvent] and [codex_protocol::protocol::PatchApplyEndEvent].",
+      "description": "Use to correlate this with [codex_protocol::protocol::PatchApplyBeginEvent]\nand [codex_protocol::protocol::PatchApplyEndEvent].",
       "type": "string"
     },
     "conversationId": {
@@ -90,7 +90,7 @@
       "type": "object"
     },
     "grantRoot": {
-      "description": "When set, the agent is asking the user to allow writes under this root for the remainder of the session (unclear if this is honored today).",
+      "description": "When set, the agent is asking the user to allow writes under this root\nfor the remainder of the session (unclear if this is honored today).",
       "type": [
         "string",
         "null"

@@ -8,7 +8,8 @@ use pretty_assertions::assert_eq;
 
 #[test]
 fn verification_mode_is_removed_from_flattened_typescript_only_for_stable_exports() -> Result<()> {
-    let generated = McpServerElicitationRequestParams::export_to_string()?;
+    let generated =
+        McpServerElicitationRequestParams::export_to_string(&crate::export::typescript_config())?;
     assert!(generated.contains(MODE));
     let filtered = filter_ts(&generated);
     assert!(!filtered.contains(MODE));
@@ -29,8 +30,8 @@ fn verification_mode_is_removed_from_inline_json_without_changing_other_modes() 
     let modes = expected["oneOf"].as_array_mut().expect("flattened modes");
     let verification = modes.remove(0);
     assert_eq!(
-        verification["properties"]["mode"]["enum"],
-        serde_json::json!([MODE])
+        verification["properties"]["mode"]["const"],
+        serde_json::json!(MODE)
     );
     let mut filtered = generated;
     filter_json(&mut filtered);

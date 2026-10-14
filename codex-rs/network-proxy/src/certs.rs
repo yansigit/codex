@@ -584,7 +584,7 @@ fn is_generated_managed_ca_artifact_path(path: &Path, proxy_dir: &Path, prefix: 
     let Ok(trust_bundle) = fs::read(path) else {
         return false;
     };
-    format!("{:x}", Sha256::digest(trust_bundle)) == expected_hash
+    hex::encode(Sha256::digest(trust_bundle)) == expected_hash
 }
 
 /// Returns whether `path` points at a current Codex-generated MITM CA bundle.
@@ -600,10 +600,9 @@ pub fn is_managed_mitm_ca_trust_bundle_path(path: &str) -> bool {
 fn persist_managed_ca_trust_bundle(proxy_dir: &Path, trust_bundle: &str) -> Result<PathBuf> {
     fs::create_dir_all(proxy_dir)
         .with_context(|| format!("failed to create {}", proxy_dir.display()))?;
-    let hash = Sha256::digest(trust_bundle.as_bytes());
-    let trust_bundle_path = proxy_dir.join(format!(
-        "{MANAGED_MITM_CA_TRUST_BUNDLE_PREFIX}-{hash:x}.pem"
-    ));
+    let hash = hex::encode(Sha256::digest(trust_bundle.as_bytes()));
+    let trust_bundle_path =
+        proxy_dir.join(format!("{MANAGED_MITM_CA_TRUST_BUNDLE_PREFIX}-{hash}.pem"));
     write_atomic_create_new_or_reuse(
         &trust_bundle_path,
         trust_bundle.as_bytes(),
@@ -629,8 +628,8 @@ fn push_certificate_pem(bundle: &mut String, der: &[u8]) {
 }
 
 fn persist_managed_ca_certificate(proxy_dir: &Path, cert_pem: &str) -> Result<PathBuf> {
-    let hash = Sha256::digest(cert_pem.as_bytes());
-    let cert_path = proxy_dir.join(format!("{MANAGED_MITM_CA_CERT_PREFIX}-{hash:x}.pem"));
+    let hash = hex::encode(Sha256::digest(cert_pem.as_bytes()));
+    let cert_path = proxy_dir.join(format!("{MANAGED_MITM_CA_CERT_PREFIX}-{hash}.pem"));
     write_atomic_create_new_or_reuse(&cert_path, cert_pem.as_bytes(), /*mode*/ 0o644)
         .with_context(|| {
             format!(

@@ -106,8 +106,11 @@ pub fn seed_gateway_auth(
         digest.update(scope.as_bytes());
         digest.update([0]);
     }
-    let name = SecretName::new(&format!("PROVIDER_OAUTH_{:X}", digest.finalize()))
-        .expect("gateway test credential name");
+    let name = SecretName::new(&format!(
+        "PROVIDER_OAUTH_{}",
+        hex::encode_upper(digest.finalize())
+    ))
+    .expect("gateway test credential name");
     secrets
         .set(&SecretScope::Global, &name, &token.to_string())
         .expect("seed encrypted gateway credentials");

@@ -1008,12 +1008,7 @@ fn history_hashes_keep_baseline_bytes_across_json_map_features_in_bootstrap() {
     let roots = wire::State::decode(run.state.as_slice()).unwrap().roots;
     let digests = roots
         .iter()
-        .map(|id| {
-            format!(
-                "{:x}",
-                sha2::Sha256::digest(state.blob(id).unwrap().unwrap())
-            )
-        })
+        .map(|id| hex::encode(sha2::Sha256::digest(state.blob(id).unwrap().unwrap())))
         .collect::<Vec<_>>();
     assert_eq!(
         digests,

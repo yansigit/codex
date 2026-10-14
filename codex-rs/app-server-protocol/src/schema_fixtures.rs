@@ -358,7 +358,8 @@ fn collect_typescript_fixture_file<T: TS + 'static + ?Sized>(
         return Ok(());
     }
 
-    let contents = T::export_to_string().context("export TypeScript fixture content")?;
+    let contents = T::export_to_string(&crate::export::typescript_config())
+        .context("export TypeScript fixture content")?;
     let output_path = normalize_relative_fixture_path(&output_path);
     files.insert(
         output_path,

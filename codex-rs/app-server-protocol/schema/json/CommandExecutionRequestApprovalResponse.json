@@ -11,7 +11,7 @@
           "type": "string"
         },
         {
-          "description": "User approved the command and future prompts in the same session-scoped approval cache should run without prompting.",
+          "description": "User approved the command and future prompts in the same session-scoped\napproval cache should run without prompting.",
           "enum": [
             "acceptForSession"
           ],
@@ -19,7 +19,7 @@
         },
         {
           "additionalProperties": false,
-          "description": "User approved the command, and wants to apply the proposed execpolicy amendment so future matching commands can run without prompting.",
+          "description": "User approved the command, and wants to apply the proposed execpolicy amendment so future\nmatching commands can run without prompting.",
           "properties": {
             "acceptWithExecpolicyAmendment": {
               "properties": {

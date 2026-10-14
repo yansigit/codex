@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "definitions": {
     "AbsolutePathBuf": {
-      "description": "A path that is guaranteed to be absolute and normalized (though it is not guaranteed to be canonicalized or exist on the filesystem).\n\nIMPORTANT: When deserializing an `AbsolutePathBuf`, a base path must be set using [AbsolutePathBufGuard::new]. If no base path is set, the deserialization will fail unless the path being deserialized is already absolute.",
+      "description": "A path that is guaranteed to be absolute and normalized (though it is not\nguaranteed to be canonicalized or exist on the filesystem).\n\nIMPORTANT: When deserializing an `AbsolutePathBuf`, a base path must be set\nusing [AbsolutePathBufGuard::new]. If no base path is set, the\ndeserialization will fail unless the path being deserialized is already\nabsolute.",
       "type": "string"
     },
     "HookErrorInfo": {
@@ -116,9 +116,9 @@
       ],
       "properties": {
         "additionalContextLimit": {
-          "description": "Configured `additionalContext` spill threshold. `null` uses 2,500 tokens; `0` disables spilling.",
+          "description": "Configured `additionalContext` spill threshold.\n`null` uses 2,500 tokens; `0` disables spilling.",
           "format": "uint",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
@@ -169,7 +169,7 @@
         },
         "timeoutSec": {
           "format": "uint64",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         },
         "trustStatus": {

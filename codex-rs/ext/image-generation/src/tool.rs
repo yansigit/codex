@@ -44,7 +44,7 @@ use codex_utils_image::PromptImageMode;
 use codex_utils_image::load_for_prompt_bytes;
 use codex_utils_path_uri::PathUri;
 use schemars::JsonSchema;
-use schemars::r#gen::SchemaSettings;
+use schemars::generate::SchemaSettings;
 use serde::Deserialize;
 use serde_json::Map;
 use serde_json::Value;

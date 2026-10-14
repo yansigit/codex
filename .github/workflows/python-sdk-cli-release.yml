@@ -30,7 +30,7 @@ jobs:
       version: ${{ steps.release.outputs.version }}
       source_sha: ${{ steps.release.outputs.source_sha }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Resolve the completed CLI release
@@ -85,13 +85,13 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.resolve-cli-release.outputs.source_sha }}
           persist-credentials: false
 
       - name: Download Python runtime wheels
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: python-runtime-wheels
           path: dist/python-runtime
@@ -103,15 +103,15 @@ jobs:
           skip-existing: true
 
       - name: Install uv
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
-          version: "0.11.3"
+          version: "0.13.0"
 
       - name: Verify Python runtime wheels are available on PyPI
         env:
           PYTHON_RUNTIME_VERSION: ${{ needs.resolve-cli-release.outputs.version }}
         run: |
-          uv run --no-project --with packaging==26.2 python .github/scripts/verify_pypi_release.py \
+          uv run --no-project --with packaging==26.3 python .github/scripts/verify_pypi_release.py \
             openai-codex-cli-bin "$PYTHON_RUNTIME_VERSION"
 
   publish-python-sdk:
@@ -128,13 +128,13 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.resolve-cli-release.outputs.source_sha }}
           persist-credentials: false
 
       - name: Download Python SDK package
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: python-sdk-package
           path: dist/python-sdk
@@ -146,11 +146,11 @@ jobs:
           skip-existing: true
 
       - name: Install uv
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
-          version: "0.11.3"
+          version: "0.13.0"
 
       - name: Verify Python SDK is available on PyPI
         env:
           SDK_VERSION: ${{ needs.resolve-cli-release.outputs.version }}
-        run: uv run --no-project --with packaging==26.2 python .github/scripts/verify_pypi_release.py openai-codex "$SDK_VERSION"
+        run: uv run --no-project --with packaging==26.3 python .github/scripts/verify_pypi_release.py openai-codex "$SDK_VERSION"

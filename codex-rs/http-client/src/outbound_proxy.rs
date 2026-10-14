@@ -712,7 +712,7 @@ fn system_proxy_cache_key(request_url: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(b"system-proxy-cache-v1\0");
     hasher.update(request_url.as_bytes());
-    format!("{:x}", hasher.finalize())
+    hex::encode(hasher.finalize())
 }
 
 #[cfg(any(test, target_os = "windows"))]

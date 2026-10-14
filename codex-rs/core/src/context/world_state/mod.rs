@@ -363,7 +363,7 @@ impl WorldStateHash {
     pub(crate) fn from_json(value: &Value) -> Self {
         let mut value = value.clone();
         value.sort_all_objects();
-        Self(format!("{:x}", Sha1::digest(value.to_string().as_bytes())))
+        Self(hex::encode(Sha1::digest(value.to_string().as_bytes())))
     }
 
     pub(crate) fn from_fragment(fragment: &(impl ContextualUserFragment + ?Sized)) -> Self {
@@ -371,7 +371,7 @@ impl WorldStateHash {
         hasher.update(b"codex-world-state-fragment-v1\0");
         hash_component(&mut hasher, fragment.role());
         hash_component(&mut hasher, &fragment.render());
-        Self(format!("{:x}", hasher.finalize()))
+        Self(hex::encode(hasher.finalize()))
     }
 }
 

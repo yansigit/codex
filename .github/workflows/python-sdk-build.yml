@@ -26,13 +26,13 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.source_ref || github.sha }}
           persist-credentials: false
 
       - name: Setup Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
 
@@ -45,7 +45,7 @@ jobs:
           set -euo pipefail
           python3 -m venv "${RUNNER_TEMP}/python-sdk-build-venv"
           build_python="${RUNNER_TEMP}/python-sdk-build-venv/bin/python"
-          "$build_python" -m pip install build twine packaging==26.2
+          "$build_python" -m pip install build twine packaging==26.3
           "$build_python" sdk/python/scripts/update_sdk_artifacts.py \
             stage-sdk "${RUNNER_TEMP}/openai-codex" \
             --sdk-version "$SDK_VERSION" \
@@ -58,7 +58,7 @@ jobs:
           "$build_python" -m twine check --strict dist/python-sdk/*
 
       - name: Upload Python SDK package
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: python-sdk-package
           path: dist/python-sdk/*

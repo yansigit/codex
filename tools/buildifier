@@ -4,68 +4,68 @@
   "name": "buildifier",
   "platforms": {
     "macos-aarch64": {
-      "size": 7565746,
+      "size": 9596226,
       "hash": "sha256",
-      "digest": "62836a9667fa0db309b0d91e840f0a3f2813a9c8ea3e44b9cd58187c90bc88ba",
+      "digest": "e9804864c407f920f5ecbf03a5e056a8145e11a6ae6b90d2438a3fd106d34473",
       "path": "buildifier",
       "providers": [
         {
-          "url": "https://github.com/bazelbuild/buildtools/releases/download/v8.5.1/buildifier-darwin-arm64"
+          "url": "https://github.com/bazel-contrib/buildtools/releases/download/v10.1.0/buildifier-darwin-arm64"
         }
       ]
     },
     "macos-x86_64": {
-      "size": 7737072,
+      "size": 10050384,
       "hash": "sha256",
-      "digest": "31de189e1a3fe53aa9e8c8f74a0309c325274ad19793393919e1ca65163ca1a4",
+      "digest": "e9e10ff52ec8786fcabccd251c8109ebf31ef7be1f667e27c6e069b96dbdc1f6",
       "path": "buildifier",
       "providers": [
         {
-          "url": "https://github.com/bazelbuild/buildtools/releases/download/v8.5.1/buildifier-darwin-amd64"
+          "url": "https://github.com/bazel-contrib/buildtools/releases/download/v10.1.0/buildifier-darwin-amd64"
         }
       ]
     },
     "linux-aarch64": {
-      "size": 7483831,
+      "size": 9561790,
       "hash": "sha256",
-      "digest": "947bf6700d708026b2057b09bea09abbc3cafc15d9ecea35bb3885c4b09ccd04",
+      "digest": "38d2ed845f560b4a16ddee41de906508a95f8dc85b04e0851b0a71e3a70d3890",
       "path": "buildifier",
       "providers": [
         {
-          "url": "https://github.com/bazelbuild/buildtools/releases/download/v8.5.1/buildifier-linux-arm64"
+          "url": "https://github.com/bazel-contrib/buildtools/releases/download/v10.1.0/buildifier-linux-arm64"
         }
       ]
     },
     "linux-x86_64": {
-      "size": 7757842,
+      "size": 10029304,
       "hash": "sha256",
-      "digest": "887377fc64d23a850f4d18a077b5db05b19913f4b99b270d193f3c7334b5a9a7",
+      "digest": "31b6a8aa1e5c746696788f428729701770ad91925873d8256cb885c60e12c77e",
       "path": "buildifier",
       "providers": [
         {
-          "url": "https://github.com/bazelbuild/buildtools/releases/download/v8.5.1/buildifier-linux-amd64"
+          "url": "https://github.com/bazel-contrib/buildtools/releases/download/v10.1.0/buildifier-linux-amd64"
         }
       ]
     },
     "windows-aarch64": {
-      "size": 7451648,
+      "size": 9789440,
       "hash": "sha256",
-      "digest": "55a276ad8b1ff46be48bf64e432264034ea69a45aa3914e89c1d1936f5c2d85c",
+      "digest": "aeffa5a342ce119b52cd7aa17bd9dda22b0406245d90643985749d01f51d2de1",
       "path": "buildifier.exe",
       "providers": [
         {
-          "url": "https://github.com/bazelbuild/buildtools/releases/download/v8.5.1/buildifier-windows-arm64.exe"
+          "url": "https://github.com/bazel-contrib/buildtools/releases/download/v10.1.0/buildifier-windows-arm64.exe"
         }
       ]
     },
     "windows-x86_64": {
-      "size": 7861760,
+      "size": 10471424,
       "hash": "sha256",
-      "digest": "f4ecb9c73de2bc38b845d4ee27668f6248c4813a6647db4b4931a7556052e4e1",
+      "digest": "931a6e9c3844b90ccdb1467ccacd8dd72457e308d2709d624a3c5880d835ac3c",
       "path": "buildifier.exe",
       "providers": [
         {
-          "url": "https://github.com/bazelbuild/buildtools/releases/download/v8.5.1/buildifier-windows-amd64.exe"
+          "url": "https://github.com/bazel-contrib/buildtools/releases/download/v10.1.0/buildifier-windows-amd64.exe"
         }
       ]
     }

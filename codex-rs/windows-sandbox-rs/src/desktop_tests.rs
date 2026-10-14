@@ -12,7 +12,7 @@ use codex_protocol::models::PermissionProfile;
 use codex_protocol::permissions::NetworkSandboxPolicy;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
-use rand::Rng;
+use rand::RngExt;
 use rand::SeedableRng;
 use rand::rngs::SmallRng;
 use std::collections::HashMap;
@@ -43,7 +43,7 @@ fn private_desktop_rejects_interactive_and_injected_names() {
 fn opening_missing_private_desktop_does_not_create_or_fall_back() {
     let name = format!(
         "{PRIVATE_DESKTOP_PREFIX}{:032x}",
-        SmallRng::from_entropy().r#gen::<u128>(),
+        SmallRng::from_rng(&mut rand::rng()).random::<u128>(),
     );
     assert!(LaunchDesktop::open_private(&name).is_err());
 }

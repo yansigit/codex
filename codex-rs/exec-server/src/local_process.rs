@@ -1271,7 +1271,7 @@ mod tests {
     use crate::protocol::NetworkPolicyRequestResponse;
 
     #[cfg(target_os = "linux")]
-    #[ctor::ctor]
+    #[ctor::ctor(unsafe)]
     fn initialize_spawn_helper() {
         use std::os::unix::ffi::OsStringExt;
         let command_line = std::fs::read("/proc/self/cmdline").expect("test command line");

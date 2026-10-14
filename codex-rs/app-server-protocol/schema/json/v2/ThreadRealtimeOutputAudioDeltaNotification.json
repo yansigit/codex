@@ -15,17 +15,18 @@
         },
         "numChannels": {
           "format": "uint16",
-          "minimum": 0.0,
+          "maximum": 65535,
+          "minimum": 0,
           "type": "integer"
         },
         "sampleRate": {
           "format": "uint32",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         },
         "samplesPerChannel": {
           "format": "uint32",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": [
             "integer",
             "null"

@@ -1,3 +1,4 @@
+diff --git a/cargo/private/cargo_build_script.bzl b/cargo/private/cargo_build_script.bzl
 --- a/cargo/private/cargo_build_script.bzl
 +++ b/cargo/private/cargo_build_script.bzl
 @@ -3,6 +3,7 @@
@@ -23,7 +24,7 @@
 +    "is_exec_configuration",
      _name_to_crate_name = "name_to_crate_name",
  )
-
+ 
 @@ -66,6 +69,43 @@
      },
      executable = True,
@@ -65,13 +66,13 @@
 +        "/DNDEBUG=1",
 +    ]
 +    return [flag for flag in flags if flag not in profile_defaults]
-
- def get_cc_compile_args_and_env(cc_toolchain, feature_configuration):
+ 
+ def get_cc_compile_args_and_env(ctx, cc_toolchain, feature_configuration):
      """Gather cc environment variables from the given `cc_toolchain`
-@@ -469,6 +509,22 @@
-         env["CARGO_PKG_VERSION_PRE"] = patch[1] if len(patch) > 1 else ""
-         env["CARGO_PKG_VERSION"] = ctx.attr.version
-
+@@ -536,6 +576,22 @@
+         ctx.attr._default_use_cc_toolchain,
+     )
+ 
 +    cargo_release_profile = _feature_enabled(ctx, "cargo-release-profile")
 +    if cargo_release_profile:
 +        # Compatibility with Cargo release profiles that retain debug info:
@@ -90,14 +91,13 @@
 +
      # Pull in env vars which may be required for the cc_toolchain to work (e.g. on OSX, the SDK version).
      # We hope that the linker env is sufficient for the whole cc_toolchain.
-     cc_toolchain, feature_configuration = find_cc_toolchain(ctx)
-@@ -484,6 +540,13 @@
+     if use_cc_toolchain:
+@@ -554,6 +610,12 @@
      if cc_toolchain:
          # MSVC requires INCLUDE to be set
-         cc_c_args, cc_cxx_args, cc_env = get_cc_compile_args_and_env(cc_toolchain, feature_configuration)
+         cc_c_args, cc_cxx_args, cc_env = get_cc_compile_args_and_env(ctx, cc_toolchain, feature_configuration)
 +        if cargo_release_profile:
-+            # Preserve SDK, ABI, CRT and security options. User copts and crate
-+            # build_script_env overrides retain precedence over these defaults.
++            # Preserve SDK, ABI, CRT and security options; user flags take precedence.
 +            copts = _release_user_opts(ctx, ctx.fragments.cpp.copts)
 +            cxxopts = _release_user_opts(ctx, ctx.fragments.cpp.cxxopts)
 +            cc_c_args = _cargo_profile_native_flags(cc_c_args) + copts + ctx.fragments.cpp.conlyopts
@@ -105,7 +105,7 @@
          include = cc_env.get("INCLUDE")
          if include:
              if toolchain.exec_triple.str.find("windows") > 0:
-@@ -837,6 +900,10 @@
+@@ -940,6 +1002,10 @@
          "_cargo_manifest_dir_filename_suffixes_to_retain": attr.label(
              default = Label("//cargo/settings:cargo_manifest_dir_filename_suffixes_to_retain"),
          ),

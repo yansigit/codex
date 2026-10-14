@@ -15,7 +15,7 @@ use anyhow::Context;
 use anyhow::Result;
 use anyhow::ensure;
 use pretty_assertions::assert_eq;
-use rand::RngCore;
+use rand::TryRng;
 use windows_sys::Win32::Foundation::ERROR_ACCESS_DENIED;
 use windows_sys::Win32::Foundation::ERROR_FILE_NOT_FOUND;
 use windows_sys::Win32::Foundation::ERROR_SUCCESS;
@@ -94,10 +94,18 @@ impl Drop for ProfileFixture {
 #[test]
 fn profile_cleanup_preserves_account_until_profile_can_be_deleted() -> Result<()> {
     // Production names are static. This one unique name lives for this test process only.
-    let name: &'static str =
-        Box::leak(format!("CodexPrf{:08x}", rand::rngs::OsRng.next_u32()).into_boxed_str());
+    let name: &'static str = Box::leak(
+        format!(
+            "CodexPrf{:08x}",
+            rand::rngs::SysRng.try_next_u32().expect("OS random source")
+        )
+        .into_boxed_str(),
+    );
     let username = to_wide(name);
-    let password = to_wide(format!("Cdx!a0{:016x}", rand::rngs::OsRng.next_u64()));
+    let password = to_wide(format!(
+        "Cdx!a0{:016x}",
+        rand::rngs::SysRng.try_next_u64().expect("OS random source")
+    ));
     let user_info = network::USER_INFO_1 {
         usri1_name: username.as_ptr().cast_mut(),
         usri1_password: password.as_ptr().cast_mut(),
