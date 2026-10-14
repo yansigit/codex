@@ -1,56 +1,36 @@
 # Container verification
 
-`scripts/verify-container.sh` runs the Rust checks in a Ubuntu 24.04 image. Docker and Podman both build `Containerfile` (a `Dockerfile` symlink points at the same file).
+Run the Rust workspace checks in a cached Ubuntu 26.04 container on a Linux host:
 
 ```sh
 scripts/verify-container.sh fast
-scripts/verify-container.sh
+scripts/verify-container.sh full
 ```
 
-`fast` runs `cargo fmt --check`, then Clippy and nextest for crates whose files changed since the merge base with `origin/main`. `scripts/verify-container.sh` with no arguments, or `full`, then runs workspace fmt, Clippy, a debug build, nextest, and a `nyacode --version` / `--help` smoke test.
+Docker and Podman use the same `Containerfile`; `Dockerfile` is a compatibility symlink. The image includes Rust **1.95.0**, cargo-nextest **0.9.148**, sccache **0.18.0**, and the native build dependencies. Release tool downloads have pinned SHA-256 checksums for x86-64 and ARM64. Ubuntu 26.04 [provides GStreamer 1.28](https://packages.ubuntu.com/resolute/libgstreamer1.0-dev), so voice and Code Mode remain included.
 
-The script bind-mounts the repository and nothing from the host home directory. Sandbox tests inside the container mount `$HOME`; mounting the host home nests those mounts and crashed the first upstream-sync test run. The container home is `/home/verifier`, created in the image. The script refuses to start if that path is itself a mount.
+`full` verifies pinned V8 inputs, checks Rust formatting and workspace Clippy with `-D warnings`, builds workspace binaries and tests, runs nextest, and checks `nyacode --version` and `--help`. Binaries such as `codex`, `codex-code-mode-host`, and `test_stdio_server` are built before tests need them. Cargo resolution uses `--locked`; there are no verifier-specific crate exclusions or test filters. Existing repository nextest settings still apply.
 
-## Toolchain and PATH
+`fast` selects packages changed since the merge base with `origin/main` (or local `main`) plus their transitive workspace consumers, including uncommitted and untracked changes. Shared manifests, lockfiles, toolchain/configuration changes, V8 inputs, and verifier changes select the whole workspace. Package discovery failures stop the run. Documentation-only changes may run just formatting, with an explicit message that no Rust packages changed. Fast verification also builds required helpers before running tests.
 
-The image installs Rust 1.95.0, matching `codex-rs/rust-toolchain.toml`, with rustfmt, clippy, and rust-src. `cargo`, `rustc`, and `cargo-nextest` live on `/usr/local/cargo/bin` and are symlinked into `/usr/local/bin`, and the image `PATH` includes both. A non-login shell still finds `cargo`.
+## Filesystem and sandbox tests
 
-System packages match the Linux CI and source build prerequisites: a C toolchain, pkg-config, OpenSSL headers, Clang, CMake, protobuf, libcap, ALSA headers, and bubblewrap.
+Only the repository and cache volumes are mounted. A checkout beneath the host home directory is supported; mounting the entire home directory or one of its ancestors is rejected. Linked worktrees also mount their common Git metadata read-only. The container home `/home/verifier` stays inside the disposable container, independent of the host home.
 
-## Cache
+The verifier runs with the calling user's UID/GID so it does not create root-owned files in the checkout. Podman uses `--userns keep-id`. Nested sandbox tests require the container's `SYS_ADMIN` capability and relaxed seccomp/AppArmor settings; use this verifier with trusted repository code. Engine probing never opens a password prompt: direct Docker/Podman access or existing noninteractive sudo access is required.
 
-These named volumes persist across runs:
+The container sets a 64 MiB Rust thread stack and stack ulimit for large debug test futures. It disables incremental builds and debug symbols to keep workspace verification within hosted runner disk limits. Ordinary local and release build settings are unchanged.
 
-| Volume | Contents |
-| --- | --- |
-| `nyacode-verify-cargo-registry` | Cargo registry download cache |
-| `nyacode-verify-cargo-git` | Cargo git dependency checkouts |
-| `nyacode-verify-target` | `codex-rs/target` |
-| `nyacode-verify-sccache` | sccache object cache |
+## Caches
 
-`RUSTC_WRAPPER=sccache` and `CARGO_INCREMENTAL=0` are set for the run. The second run of an unchanged build should finish from the target directory and sccache instead of recompiling. `scripts/verify-container.sh --reset-cache` deletes the volumes before the next run.
-
-Each engine has its own volumes. A Docker cache is not visible to Podman.
-
-## Stack size
-
-Debug tests for `codex-app-server --test all` and `codex-tui --lib` overflow an 8 MiB thread stack and pass at 64 MiB. The container sets `RUST_MIN_STACK=67108864` and raises the process stack ulimit to 64 MiB. `cargo test` reads the same value from `codex-rs/.cargo/config.toml`. `just test` and the full Linux nextest job export it before starting nextest. cargo-nextest 0.9.103, the version CI installs, does not read a profile `env` table, so the variable has to be in the environment nextest inherits.
-
-## Crates this image does not build
-
-`[workspace.metadata.nyacode.container-verify]` in `codex-rs/Cargo.toml` lists the packages the script passes to `--exclude`:
-
-- `codex-code-mode-runtime` and `codex-code-mode-host`: `rusty_v8` 150.4.0 has no Linux prebuilt for `v8_enable_sandbox`.
-- `codex-voice-host`: the `gstreamer` crates require GStreamer >= 1.28, and Ubuntu 24.04 ships 1.24.
-
-The same metadata holds a nextest filter for tests that spawn those binaries, including app-server cases that fail closed when `codex-code-mode-host` is absent. Other tests still run. Add a test name to that filter when a new test starts requiring one of the excluded binaries. Tests that only need `codex` or `test_stdio_server` stay in the suite; the full run builds those bins before nextest.
-
-## Other commands
+Named volumes retain Cargo registry/git data, build outputs, sccache objects, and verified V8 archives. V8 archive and binding hashes are checked against release manifests whose hashes are pinned in the repository. Corrupt cache entries are replaced only after the downloaded bytes pass verification.
 
 ```sh
 scripts/verify-container.sh --engine podman fast
-scripts/verify-container.sh run -- cargo test -p codex-tui --lib
+scripts/verify-container.sh run -- cargo test --locked -p codex-tui --lib
 scripts/verify-container.sh --reset-cache full
 ```
 
-`run --` executes a command in the same container, with the same mounts, home directory, and caches. `--engine` selects `docker` or `podman`. When it is omitted, the script uses whichever engine is already reachable, including via `sudo`.
+`--reset-cache` removes only the verifier's named volumes. `--no-cache` rebuilds the image layers. Docker and Podman maintain separate caches. `CARGO_BUILD_JOBS` controls compilation and test concurrency; hosted verification uses two jobs. The command prints phase timings and sccache statistics.
+
+The **Container verification** GitHub workflow runs the complete path for verifier changes and supports manual execution. A successful fast run alone does not establish full-workspace acceptance.

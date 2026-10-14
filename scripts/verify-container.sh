@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run Nyacode's Rust verification inside a Ubuntu 24.04 container.
+# Run Nyacode's Rust verification inside a Ubuntu 26.04 container.
 #
 #   scripts/verify-container.sh fast
 #   scripts/verify-container.sh
@@ -9,14 +9,15 @@
 
 set -euo pipefail
 
-IMAGE_TAG="nyacode-verify:rust-1.95"
+IMAGE_TAG="nyacode-verify:ubuntu-26.04-rust-1.95"
 VOLUME_REGISTRY="nyacode-verify-cargo-registry"
 VOLUME_GIT="nyacode-verify-cargo-git"
 VOLUME_TARGET="nyacode-verify-target"
 VOLUME_SCCACHE="nyacode-verify-sccache"
 CONTAINER_HOME="/home/verifier"
 CONTAINER_SRC="/src"
-CONTAINER_TARGET="${CONTAINER_SRC}/codex-rs/target"
+CONTAINER_TARGET="/var/cache/nyacode-target"
+VOLUME_V8="nyacode-verify-v8"
 
 usage() {
     cat <<'EOF'
@@ -34,11 +35,7 @@ Options:
 EOF
 }
 
-if [[ "${NYACODE_VERIFY_INNER:-}" == "1" ]]; then
-    ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
-else
-    ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
-fi
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)"
 
 refuse_if_home_is_mounted() {
     local target
@@ -85,130 +82,19 @@ configure_inner_env() {
     fi
 }
 
-read_verify_metadata() {
-    python3 - "$ROOT/codex-rs/Cargo.toml" <<'PY'
-import sys
-import tomllib
-from pathlib import Path
-
-manifest = tomllib.loads(Path(sys.argv[1]).read_text())
-config = manifest["workspace"]["metadata"]["nyacode"]["container-verify"]
-excludes = config["exclude"]
-if not excludes:
-    raise SystemExit("container-verify.exclude is empty")
-test_filter = " ".join(config.get("test-filter", "").split())
-print("\n".join(excludes))
-print("---")
-print(test_filter)
-PY
+prepare_v8() {
+    local host prepared
+    host="$(rustc -vV | sed -n 's/^host: //p')"
+    prepared="$(python3 "$ROOT/scripts/verify_container.py" prepare-v8 --cache /var/cache/nyacode-v8 --target "$host")"
+    local paths=()
+    mapfile -t paths <<<"$prepared"
+    [[ ${#paths[@]} == 2 ]]
+    export RUSTY_V8_ARCHIVE="${paths[0]}"
+    export RUSTY_V8_SRC_BINDING_PATH="${paths[1]}"
 }
 
-load_excludes_and_filter() {
-    local raw excludes_text
-    raw="$(read_verify_metadata)"
-    excludes_text="${raw%%---*}"
-    TEST_FILTER="${raw#*---}"
-    TEST_FILTER="${TEST_FILTER#$'\n'}"
-    EXCLUDES=()
-    local name
-    while IFS= read -r name; do
-        if [[ -n "$name" ]]; then
-            EXCLUDES+=("$name")
-        fi
-    done <<<"$excludes_text"
-    EXCLUDE_ARGS=()
-    for name in "${EXCLUDES[@]}"; do
-        EXCLUDE_ARGS+=(--exclude "$name")
-    done
-}
-
-affected_packages() {
-    python3 - "$ROOT" <<'PY'
-import subprocess
-import sys
-import tomllib
-from pathlib import Path
-
-root = Path(sys.argv[1])
-workspace = root / "codex-rs"
-manifest = tomllib.loads((workspace / "Cargo.toml").read_text())
-excludes = set(manifest["workspace"]["metadata"]["nyacode"]["container-verify"]["exclude"])
-
-def git(*args: str) -> list[str]:
-    result = subprocess.run(
-        ["git", *args],
-        cwd=root,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        return []
-    return [line for line in result.stdout.splitlines() if line]
-
-base = ""
-for ref in ("origin/main", "main"):
-    probe = subprocess.run(
-        ["git", "rev-parse", "--verify", "--quiet", ref],
-        cwd=root,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if probe.returncode == 0:
-        merge = subprocess.run(
-            ["git", "merge-base", "HEAD", ref],
-            cwd=root,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        if merge.returncode == 0:
-            base = merge.stdout.strip()
-            break
-
-changed = set(git("diff", "--name-only", "--no-renames", base or "HEAD"))
-changed.update(git("diff", "--name-only", "--cached", "--no-renames"))
-changed.update(git("ls-files", "--others", "--exclude-standard"))
-
-workspace_markers = {
-    "codex-rs/Cargo.toml",
-    "codex-rs/Cargo.lock",
-    "codex-rs/rust-toolchain.toml",
-    "codex-rs/rustfmt.toml",
-    "codex-rs/.cargo/config.toml",
-    "codex-rs/.config/nextest.toml",
-}
-if changed & workspace_markers:
-    print(
-        "workspace-level files changed; fast mode does not rebuild every crate. Run full for the workspace.",
-        file=sys.stderr,
-    )
-
-def package_at(path: Path) -> str | None:
-    current = path if path.is_dir() else path.parent
-    while current != workspace and workspace in current.parents:
-        cargo_toml = current / "Cargo.toml"
-        if cargo_toml.is_file():
-            data = tomllib.loads(cargo_toml.read_text())
-            name = data.get("package", {}).get("name")
-            if isinstance(name, str) and name not in excludes:
-                return name
-            return None
-        parent = current.parent
-        if parent == current:
-            break
-        current = parent
-    return None
-
-packages: set[str] = set()
-for relative in sorted(changed):
-    name = package_at(root / relative)
-    if name:
-        packages.add(name)
-for name in sorted(packages):
-    print(name)
-PY
+run_helpers() {
+    cargo build --locked -p codex-cli -p codex-code-mode-host -p codex-rmcp-client --bins
 }
 
 phase() {
@@ -229,19 +115,15 @@ run_fmt() {
 }
 
 run_clippy() {
-    cargo clippy --workspace --tests "${EXCLUDE_ARGS[@]}" -- -D warnings
+    cargo clippy --locked --workspace --tests -- -D warnings
 }
 
 run_build() {
-    cargo build --workspace --bins --tests "${EXCLUDE_ARGS[@]}"
+    cargo build --locked --workspace --bins --tests
 }
 
 run_tests() {
-    local -a args=(nextest run --workspace --no-fail-fast "${EXCLUDE_ARGS[@]}")
-    if [[ -n "$TEST_FILTER" ]]; then
-        args+=(-E "$TEST_FILTER")
-    fi
-    cargo "${args[@]}"
+    cargo nextest run --locked --workspace --no-fail-fast --test-threads "${CARGO_BUILD_JOBS}"
 }
 
 run_cli_smoke() {
@@ -269,7 +151,6 @@ run_inner() {
     local mode="${1:-full}"
     configure_inner_env
     refuse_if_home_is_mounted
-    load_excludes_and_filter
     TIMING_LOG="$(mktemp)"
     trap 'status=$?; if ((status != 0)); then print_timing_summary || true; fi' EXIT
     echo "rustc: $(rustc --version)"
@@ -278,11 +159,11 @@ run_inner() {
     echo "CARGO_TARGET_DIR=${CARGO_TARGET_DIR}"
     echo "CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}"
     echo "RUST_MIN_STACK=${RUST_MIN_STACK} ulimit_stack_kib=$(ulimit -s)"
-    echo "excluded: ${EXCLUDES[*]}"
     cd "$ROOT/codex-rs"
 
     case "$mode" in
         full)
+            phase inputs prepare_v8
             phase fmt run_fmt
             phase clippy run_clippy
             phase build run_build
@@ -291,13 +172,15 @@ run_inner() {
             ;;
         fast)
             phase fmt run_fmt
+            local affected
+            affected="$(python3 "$ROOT/scripts/verify_container.py" affected)"
             local packages=()
             local package
             while IFS= read -r package; do
                 if [[ -n "$package" ]]; then
                     packages+=("$package")
                 fi
-            done < <(affected_packages)
+            done <<<"$affected"
             if ((${#packages[@]} == 0)); then
                 echo "==> no affected crates; skipping clippy and tests"
             else
@@ -306,11 +189,10 @@ run_inner() {
                 for package in "${packages[@]}"; do
                     package_args+=(-p "$package")
                 done
-                phase clippy cargo clippy --tests "${package_args[@]}" -- -D warnings
-                local -a test_args=(nextest run --no-fail-fast --no-tests=pass "${package_args[@]}")
-                if [[ -n "$TEST_FILTER" ]]; then
-                    test_args+=(-E "$TEST_FILTER")
-                fi
+                phase inputs prepare_v8
+                phase clippy cargo clippy --locked --tests "${package_args[@]}" -- -D warnings
+                phase helpers run_helpers
+                local -a test_args=(nextest run --locked --no-fail-fast --test-threads "${CARGO_BUILD_JOBS}" "${package_args[@]}")
                 phase test cargo "${test_args[@]}"
             fi
             ;;
@@ -323,6 +205,7 @@ run_inner() {
                 echo "run requires a command" >&2
                 exit 2
             fi
+            phase inputs prepare_v8
             phase run "$@"
             ;;
         *)
@@ -345,8 +228,8 @@ select_engine() {
     if [[ -n "$requested" ]]; then
         if engine_works "$requested"; then
             ENGINE=("$requested")
-        elif engine_works sudo "$requested"; then
-            ENGINE=(sudo "$requested")
+        elif engine_works sudo -n "$requested"; then
+            ENGINE=(sudo -n "$requested")
         else
             echo "container engine '$requested' is not available" >&2
             exit 1
@@ -358,8 +241,8 @@ select_engine() {
             ENGINE=("$candidate")
             return
         fi
-        if engine_works sudo "$candidate"; then
-            ENGINE=(sudo "$candidate")
+        if engine_works sudo -n "$candidate"; then
+            ENGINE=(sudo -n "$candidate")
             return
         fi
     done
@@ -375,7 +258,7 @@ assert_mount_is_not_host_home() {
         return
     fi
     home="$(CDPATH= cd -- "$HOME" && pwd)"
-    if [[ "$source" == "$home" || "$source" == "$home"/* ]]; then
+    if [[ "$source" == "$home" || "$home" == "$source"/* || "$source" == / ]]; then
         echo "refusing to mount host home path $source" >&2
         exit 1
     fi
@@ -438,7 +321,7 @@ run_outer() {
     echo "==> image build done in $((build_end - build_start))s"
 
     if ((reset_cache)); then
-        "${ENGINE[@]}" volume rm -f "$VOLUME_REGISTRY" "$VOLUME_GIT" "$VOLUME_TARGET" "$VOLUME_SCCACHE" >/dev/null
+        "${ENGINE[@]}" volume rm -f "$VOLUME_REGISTRY" "$VOLUME_GIT" "$VOLUME_TARGET" "$VOLUME_SCCACHE" "$VOLUME_V8" >/dev/null
     fi
 
     local -a mounts=(
@@ -447,7 +330,14 @@ run_outer() {
         "${VOLUME_GIT}:/usr/local/cargo/git"
         "${VOLUME_TARGET}:${CONTAINER_TARGET}"
         "${VOLUME_SCCACHE}:/var/cache/sccache"
+        "${VOLUME_V8}:/var/cache/nyacode-v8"
     )
+    # Linked worktrees need only the common Git metadata, never the host home.
+    local git_common
+    git_common="$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir)"
+    if [[ "$git_common" != "$ROOT/.git" ]]; then
+        mounts+=("${git_common}:${git_common}:ro")
+    fi
     local spec
     for spec in "${mounts[@]}"; do
         assert_mount_is_not_host_home "$spec"
@@ -455,6 +345,7 @@ run_outer() {
 
     local -a run_args=(
         run --rm
+        --user "$(id -u):$(id -g)"
         --network=host
         -e NYACODE_VERIFY_INNER=1
         -e HOME="$CONTAINER_HOME"
@@ -464,6 +355,8 @@ run_outer() {
         -e SCCACHE_DIR=/var/cache/sccache
         -e RUSTC_WRAPPER=sccache
         -e CARGO_INCREMENTAL=0
+        -e CARGO_PROFILE_DEV_DEBUG=0
+        -e CARGO_PROFILE_TEST_DEBUG=0
         -e CARGO_NET_GIT_FETCH_WITH_CLI=true
         -e CARGO_TERM_COLOR=always
         -e RUST_MIN_STACK=67108864
@@ -478,7 +371,7 @@ run_outer() {
         run_args+=(-e "CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}")
     fi
     if [[ "$engine_bin" == "podman" ]]; then
-        run_args+=(--security-opt label=disable)
+        run_args+=(--userns keep-id --security-opt label=disable)
     elif [[ -d /sys/kernel/security/apparmor ]]; then
         run_args+=(--security-opt apparmor=unconfined)
     fi

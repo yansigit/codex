@@ -71,7 +71,7 @@ just test -p codex-cli
 
 `just codex` and the internal `codex-*` build targets remain compatible aliases. Run affected crate tests; full workspace builds need substantially more resources.
 
-For a repeatable Ubuntu 24.04 run, use the container verifier. It pins Rust 1.95, leaves the host home unmounted, and caches Cargo outputs between runs:
+For a repeatable Ubuntu 26.04 run, use the container verifier. It pins Rust 1.95, leaves the host home unmounted, and caches Cargo outputs between runs:
 
 ```sh
 scripts/verify-container.sh fast
