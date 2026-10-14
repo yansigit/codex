@@ -64,7 +64,8 @@ fn create_env_from_core_vars() -> HashMap<String, String> {
 }
 
 fn codex_linux_sandbox_exe() -> PathBuf {
-    let sandbox_program = PathBuf::from(env!("CARGO_BIN_EXE_codex-linux-sandbox"));
+    let sandbox_program =
+        codex_utils_cargo_bin::cargo_bin("codex-linux-sandbox").expect("sandbox test executable");
     match sandbox_program.canonicalize() {
         Ok(path) => path,
         Err(_) => sandbox_program,
@@ -1322,6 +1323,39 @@ async fn sandbox_blocks_explicit_split_policy_carveouts_under_bwrap() {
     );
 
     assert_ne!(output.exit_code, 0);
+}
+
+#[tokio::test]
+async fn process_relative_descriptor_denial_fails_before_command_execution() {
+    if should_skip_bwrap_tests().await {
+        return;
+    }
+    let mut policy = FileSystemSandboxPolicy::read_only();
+    policy.entries.push(FileSystemSandboxEntry::new(
+        AbsolutePathBuf::from_absolute_path("/dev/fd")
+            .unwrap()
+            .into(),
+        FileSystemAccessMode::Deny,
+    ));
+    let output = expect_denied(
+        run_cmd_result_with_permission_profile(
+            &["sh", "-c", "printf command-executed"],
+            PermissionProfile::from_runtime_permissions(&policy, NetworkSandboxPolicy::Enabled),
+            LONG_TIMEOUT_MS,
+            /*use_legacy_landlock*/ false,
+        )
+        .await,
+        "an unsupported descriptor mask must not run the command",
+    );
+    assert_ne!(output.exit_code, 0);
+    assert!(output.stdout.text.is_empty(), "{output:?}");
+    assert!(
+        output
+            .stderr
+            .text
+            .contains("Can't mount tmpfs on /newroot/dev/fd"),
+        "{output:?}"
+    );
 }
 
 #[tokio::test]

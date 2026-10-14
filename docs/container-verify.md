@@ -11,6 +11,8 @@ Docker and Podman use the same `Containerfile`; `Dockerfile` is a compatibility 
 
 `full` verifies pinned V8 inputs, checks the bundled sandbox helper, checks Rust formatting and workspace Clippy with `-D warnings`, builds workspace binaries and tests, runs nextest, and checks `nyacode --version` and `--help`. Binaries such as `codex`, `codex-code-mode-host`, and `test_stdio_server` are built before tests need them. Cargo resolution uses `--locked`; there are no verifier-specific crate exclusions or test filters. Existing repository nextest settings still apply.
 
+The verifier enables `codex-v8-poc/sandbox` to match the pinned sandboxed V8 archive and Code Mode's workspace dependency features. This preserves the proof-of-concept test's strict check of the linked library. The V8 canary separately builds and tests both sandboxed and ordinary archives.
+
 `fast` selects packages changed since the merge base with `origin/main` (or local `main`) plus their transitive workspace consumers, including uncommitted and untracked changes. Shared manifests, lockfiles, toolchain/configuration changes, V8 inputs, and verifier changes select the whole workspace. Package discovery failures stop the run. Documentation-only changes may run just formatting, with an explicit message that no Rust packages changed. Fast verification also builds required helpers before running tests.
 
 ## Filesystem and sandbox tests

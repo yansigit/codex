@@ -129,15 +129,15 @@ run_fmt() {
 }
 
 run_clippy() {
-    cargo clippy --locked --workspace --tests --keep-going -- -D warnings
+    cargo clippy --locked --workspace --features codex-v8-poc/sandbox --tests --keep-going -- -D warnings
 }
 
 run_build() {
-    cargo build --locked --workspace --bins --tests --keep-going
+    cargo build --locked --workspace --features codex-v8-poc/sandbox --bins --tests --keep-going
 }
 
 run_tests() {
-    cargo nextest run --locked --workspace --no-fail-fast --test-threads "${CARGO_BUILD_JOBS}"
+    cargo nextest run --locked --workspace --features codex-v8-poc/sandbox --no-fail-fast --test-threads "${CARGO_BUILD_JOBS}"
 }
 
 run_cli_smoke() {
@@ -203,6 +203,9 @@ run_inner() {
                 local -a package_args=()
                 for package in "${packages[@]}"; do
                     package_args+=(-p "$package")
+                    if [[ "$package" == "codex-v8-poc" ]]; then
+                        package_args+=(--features codex-v8-poc/sandbox)
+                    fi
                 done
                 phase inputs prepare_v8
                 phase sandbox run_sandbox_check
