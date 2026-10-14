@@ -78,7 +78,7 @@ scripts/verify-container.sh fast
 scripts/verify-container.sh
 ```
 
-Details, cache volumes, and the crates that image cannot build are in [container verification](container-verify.md).
+Full workspace checks, cache volumes, and container requirements are described in [container verification](container-verify.md).
 
 ## Logging
 

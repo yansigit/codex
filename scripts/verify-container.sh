@@ -52,6 +52,8 @@ configure_inner_env() {
     export RUSTUP_HOME="${RUSTUP_HOME:-/usr/local/rustup}"
     export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$CONTAINER_TARGET}"
     export SCCACHE_DIR="${SCCACHE_DIR:-/var/cache/sccache}"
+    # Host networking must not attach to a developer's existing cache server.
+    export SCCACHE_SERVER_UDS="$HOME/.sccache.sock"
     export RUSTC_WRAPPER="${RUSTC_WRAPPER:-sccache}"
     export CARGO_INCREMENTAL="${CARGO_INCREMENTAL:-0}"
     export CARGO_NET_GIT_FETCH_WITH_CLI="${CARGO_NET_GIT_FETCH_WITH_CLI:-true}"
@@ -257,7 +259,7 @@ assert_mount_is_not_host_home() {
     if [[ "$source" != /* ]]; then
         return
     fi
-    home="$(CDPATH= cd -- "$HOME" && pwd)"
+    home="$(CDPATH= cd -- "$HOME" && pwd -P)"
     if [[ "$source" == "$home" || "$home" == "$source"/* || "$source" == / ]]; then
         echo "refusing to mount host home path $source" >&2
         exit 1

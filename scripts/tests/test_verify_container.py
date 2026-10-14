@@ -2,6 +2,7 @@
 
 import hashlib
 import io
+import os
 import re
 import shlex
 import subprocess
@@ -135,6 +136,19 @@ class MountTests(unittest.TestCase):
 
     def test_named_cache_volume_is_allowed(self):
         self.assertEqual(self.check_mount("nyacode-verify-target").returncode, 0)
+
+    def test_home_symlink_cannot_allow_the_entire_physical_home(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            physical = Path(temporary) / "physical"
+            physical.mkdir()
+            alias = Path(temporary) / "alias"
+            alias.symlink_to(physical, target_is_directory=True)
+            with patch.dict(os.environ, {"HOME": str(alias)}):
+                self.assertNotEqual(self.check_mount(str(physical)).returncode, 0)
+                self.assertEqual(
+                    self.check_mount(str(physical / "Projects/nyacode")).returncode,
+                    0,
+                )
 
 
 class ArtifactTests(unittest.TestCase):

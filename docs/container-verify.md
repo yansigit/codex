@@ -23,7 +23,7 @@ The container sets a 64 MiB Rust thread stack and stack ulimit for large debug t
 
 ## Caches
 
-Named volumes retain Cargo registry/git data, build outputs, sccache objects, and verified V8 archives. V8 archive and binding hashes are checked against release manifests whose hashes are pinned in the repository. Corrupt cache entries are replaced only after the downloaded bytes pass verification.
+Named volumes retain Cargo registry/git data, build outputs, sccache objects, and verified V8 archives. The sccache server uses a socket inside the container home, independent of any host cache server. V8 archive and binding hashes are checked against release manifests whose hashes are pinned in the repository. Corrupt cache entries are replaced only after the downloaded bytes pass verification.
 
 ```sh
 scripts/verify-container.sh --engine podman fast
