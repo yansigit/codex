@@ -24,6 +24,7 @@ fn mcp_inventory_connection_states() {
     ]
     .into_iter()
     .map(|(name, runtime_status)| McpServerStatus {
+        tool_identities: Default::default(),
         server_capabilities: None,
         name: name.to_string(),
         runtime_status,
