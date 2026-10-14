@@ -383,7 +383,11 @@ mod agent {
                 // The fs/exec sandbox re-enters this immutable executable. Agent
                 // images install it outside the minimal OS paths, under /opt.
                 FileSystemSandboxEntry::new(
-                    std::env::current_exe().ok()?.into(),
+                    codex_utils_absolute_path::AbsolutePathBuf::try_from(
+                        std::env::current_exe().ok()?,
+                    )
+                    .ok()?
+                    .into(),
                     FileSystemAccessMode::Read,
                 ),
                 FileSystemSandboxEntry::new(

@@ -25,12 +25,96 @@ TOP_LEVEL_NAME_EXCEPTIONS = {
 UTILITY_NAME_EXCEPTIONS = {
     "path-utils": "codex-utils-path",
 }
+# Nyacode's existing Cargo-native provider variants are exercised by
+# scripts/native_provider_checks.py (metadata-only, each provider, all features).
+# Keep exact exceptions during the fork's Bazel migration: changes still fail.
 MANIFEST_FEATURE_EXCEPTIONS = {
-    "codex-rs/code-mode/Cargo.toml": {"sandbox": ("v8/v8_enable_sandbox",)},
+    "codex-rs/model-provider/Cargo.toml": {
+        "default": (
+            "provider-cursor",
+            "provider-opencode",
+            "provider-claude",
+            "provider-antigravity",
+        ),
+        "provider-antigravity": ("codex-provider-adapter/provider-antigravity",),
+        "provider-claude": ("codex-provider-adapter/provider-claude",),
+        "provider-cursor": ("codex-provider-adapter/provider-cursor",),
+        "provider-opencode": ("codex-provider-adapter/provider-opencode",),
+    },
+    "codex-rs/providers/provider-adapter/Cargo.toml": {
+        "default": (
+            "provider-cursor",
+            "provider-opencode",
+            "provider-claude",
+            "provider-antigravity",
+        ),
+        "provider-antigravity": ("codex-provider-registry/provider-antigravity",),
+        "provider-claude": ("codex-provider-registry/provider-claude",),
+        "provider-cursor": ("codex-provider-registry/provider-cursor",),
+        "provider-opencode": ("codex-provider-registry/provider-opencode",),
+    },
+    "codex-rs/providers/provider-registry/Cargo.toml": {
+        "default": (),
+        "provider-antigravity": ("runtime", "dep:codex-provider-antigravity"),
+        "provider-claude": ("runtime", "dep:codex-provider-claude"),
+        "provider-cursor": ("runtime", "dep:codex-provider-cursor"),
+        "provider-opencode": ("runtime", "dep:codex-provider-opencode"),
+        "runtime": (
+            "dep:codex-provider-auth",
+            "dep:reqwest",
+            "dep:serde_json",
+            "dep:tokio-util",
+        ),
+    },
     "codex-rs/v8-poc/Cargo.toml": {"sandbox": ("v8/v8_enable_sandbox",)},
 }
-OPTIONAL_DEPENDENCY_EXCEPTIONS = set()
-INTERNAL_DEPENDENCY_FEATURE_EXCEPTIONS = {}
+OPTIONAL_DEPENDENCY_EXCEPTIONS = {
+    (
+        "codex-rs/providers/provider-registry/Cargo.toml",
+        "dependencies",
+        "codex-provider-antigravity",
+    ),
+    (
+        "codex-rs/providers/provider-registry/Cargo.toml",
+        "dependencies",
+        "codex-provider-auth",
+    ),
+    (
+        "codex-rs/providers/provider-registry/Cargo.toml",
+        "dependencies",
+        "codex-provider-claude",
+    ),
+    (
+        "codex-rs/providers/provider-registry/Cargo.toml",
+        "dependencies",
+        "codex-provider-cursor",
+    ),
+    (
+        "codex-rs/providers/provider-registry/Cargo.toml",
+        "dependencies",
+        "codex-provider-opencode",
+    ),
+    ("codex-rs/providers/provider-registry/Cargo.toml", "dependencies", "reqwest"),
+    ("codex-rs/providers/provider-registry/Cargo.toml", "dependencies", "serde_json"),
+    ("codex-rs/providers/provider-registry/Cargo.toml", "dependencies", "tokio-util"),
+}
+INTERNAL_DEPENDENCY_FEATURE_EXCEPTIONS = {
+    (
+        "codex-rs/providers/provider-adapter/Cargo.toml",
+        "dependencies",
+        "codex-provider-registry",
+    ): ("runtime",)
+}
+INTERNAL_DEPENDENCY_DEFAULT_FEATURE_EXCEPTIONS = {
+    ("codex-rs/Cargo.toml", "workspace.dependencies", "codex-provider-adapter"),
+    ("codex-rs/Cargo.toml", "workspace.dependencies", "codex-provider-registry"),
+    (
+        "codex-rs/model-provider-info/Cargo.toml",
+        "dependencies",
+        "codex-provider-registry",
+    ),
+    ("codex-rs/model-provider/Cargo.toml", "dependencies", "codex-provider-adapter"),
+}
 # This standalone workspace reproducibly builds the bundled Wasm parser; it is
 # not a member of the host workspace and cannot inherit its metadata or lints.
 STANDALONE_MANIFESTS = {
@@ -61,6 +145,18 @@ def main() -> int:
         used_optional_dependency_exceptions,
         used_internal_dependency_feature_exceptions,
     )
+
+    for path_key, section_name, dependency_name in sorted(
+        INTERNAL_DEPENDENCY_DEFAULT_FEATURE_EXCEPTIONS
+    ):
+        sections = dict(dependency_sections(load_manifest(ROOT / path_key)))
+        dependency = sections.get(section_name, {}).get(dependency_name, {})
+        if dependency.get("default-features") is not False:
+            add_failure(
+                failures_by_path,
+                path_key,
+                f"remove stale default-feature exception for {dependency_name}",
+            )
 
     if not failures_by_path:
         return 0
@@ -203,7 +299,11 @@ def manifest_errors(
                             f"(expected {render_string_list(expected_dependency_features)})"
                         )
 
-            if dependency.get("default-features") is False:
+            if (
+                dependency.get("default-features") is False
+                and (path_key, section_name, dependency_name)
+                not in INTERNAL_DEPENDENCY_DEFAULT_FEATURE_EXCEPTIONS
+            ):
                 errors.append(
                     "remove `default-features = false` from workspace dependency "
                     f"`{dependency_entry_label(section_name, dependency_name)}`; "
@@ -388,8 +488,7 @@ def cargo_manifests() -> list[Path]:
     return sorted(
         path
         for path in CARGO_RS_ROOT.rglob("Cargo.toml")
-        if path != CARGO_RS_ROOT / "Cargo.toml"
-        and path not in STANDALONE_MANIFESTS
+        if path != CARGO_RS_ROOT / "Cargo.toml" and path not in STANDALONE_MANIFESTS
     )
 
 

@@ -1,5 +1,5 @@
 //! Wire subset from agent.v1; nested checkpoint messages stay opaque so new
-//! server fields survive persistence and resume without a lossy decode/reencode.
+//! server fields survive persistence and resume without a lossy decode/re-encode.
 use std::collections::HashMap;
 
 use prost::Message;
