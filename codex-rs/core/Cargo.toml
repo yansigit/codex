@@ -12,6 +12,7 @@ path = "src/lib.rs"
 workspace = true
 
 [dependencies]
+hex = { workspace = true }
 codex-provider-adapter = { workspace = true }
 codex-utils-process = { workspace = true }
 anyhow = { workspace = true }
@@ -161,7 +162,7 @@ maplit = { workspace = true }
 opentelemetry = { workspace = true }
 predicates = { workspace = true }
 pretty_assertions = { workspace = true }
-test-case = "3.3.1"
+test-case = "3.4.0"
 opentelemetry_sdk = { workspace = true, features = [
     "experimental_metrics_custom_reader",
     "metrics",

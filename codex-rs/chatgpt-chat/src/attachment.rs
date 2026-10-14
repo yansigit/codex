@@ -223,7 +223,7 @@ impl AttachmentStager {
                 name,
                 size: bytes.len() as u64,
                 modified: None,
-                sha256: format!("{:x}", Sha256::digest(&bytes)),
+                sha256: hex::encode(Sha256::digest(&bytes)),
                 kind,
                 dimensions,
             };
@@ -340,7 +340,7 @@ impl AttachmentStager {
                     name,
                     size: bytes.len() as u64,
                     modified: before.modified().ok(),
-                    sha256: format!("{:x}", Sha256::digest(&bytes)),
+                    sha256: hex::encode(Sha256::digest(&bytes)),
                     kind,
                     dimensions,
                 };

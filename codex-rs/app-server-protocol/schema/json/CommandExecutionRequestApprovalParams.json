@@ -14,7 +14,7 @@
         },
         "globScanMaxDepth": {
           "format": "uint",
-          "minimum": 1.0,
+          "minimum": 1,
           "type": [
             "integer",
             "null"
@@ -200,7 +200,7 @@
           "type": "string"
         },
         {
-          "description": "User approved the command and future prompts in the same session-scoped approval cache should run without prompting.",
+          "description": "User approved the command and future prompts in the same session-scoped\napproval cache should run without prompting.",
           "enum": [
             "acceptForSession"
           ],
@@ -208,7 +208,7 @@
         },
         {
           "additionalProperties": false,
-          "description": "User approved the command, and wants to apply the proposed execpolicy amendment so future matching commands can run without prompting.",
+          "description": "User approved the command, and wants to apply the proposed execpolicy amendment so future\nmatching commands can run without prompting.",
           "properties": {
             "acceptWithExecpolicyAmendment": {
               "properties": {
@@ -533,7 +533,7 @@
   },
   "properties": {
     "approvalId": {
-      "description": "Unique identifier for this specific approval callback.\n\nFor regular shell/unified_exec approvals, this is null.\n\nFor zsh-exec-bridge subcommand approvals, multiple callbacks can belong to one parent `itemId`, so `approvalId` is a distinct opaque callback id (a UUID) used to disambiguate routing. Stdin approvals also use a distinct callback id; inspect `kind` to distinguish them.",
+      "description": "Unique identifier for this specific approval callback.\n\nFor regular shell/unified_exec approvals, this is null.\n\nFor zsh-exec-bridge subcommand approvals, multiple callbacks can belong to\none parent `itemId`, so `approvalId` is a distinct opaque callback id\n(a UUID) used to disambiguate routing.\nStdin approvals also use a distinct callback id; inspect `kind` to distinguish them.",
       "type": [
         "string",
         "null"

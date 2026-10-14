@@ -1,5 +1,5 @@
 use schemars::JsonSchema;
-use schemars::r#gen::SchemaSettings;
+use schemars::generate::SchemaSettings;
 use serde_json::Map;
 use serde_json::Value;
 
@@ -15,7 +15,11 @@ fn schema_for<T: JsonSchema>(option_add_null_type: bool) -> Value {
     let schema = SchemaSettings::draft2019_09()
         .with(|settings| {
             settings.inline_subschemas = true;
-            settings.option_add_null_type = option_add_null_type;
+            if !option_add_null_type {
+                settings
+                    .transforms
+                    .push(Box::new(codex_protocol::json_schema::omit_optional_null));
+            }
         })
         .into_generator()
         .into_root_schema_for::<T>();

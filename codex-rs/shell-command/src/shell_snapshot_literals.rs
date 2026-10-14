@@ -306,7 +306,8 @@ fn literal_words_with_quoting(
                                         pieces.push(piece.child_by_field_name("value")?);
                                     }
                                     "concatenation" | "string" => pieces.extend(
-                                        (0..piece.named_child_count())
+                                        (0..u32::try_from(piece.named_child_count())
+                                            .unwrap_or(u32::MAX))
                                             .rev()
                                             .filter_map(|index| piece.named_child(index)),
                                     ),
@@ -429,7 +430,7 @@ fn literal_words_with_quoting(
                         literal.push(b'$');
                     }
                     pieces.extend(
-                        (0..piece.named_child_count())
+                        (0..u32::try_from(piece.named_child_count()).unwrap_or(u32::MAX))
                             .rev()
                             .filter_map(|index| piece.named_child(index)),
                     );

@@ -102,9 +102,9 @@ impl Pet {
     pub(super) fn frame_cache_key(&self) -> Result<String> {
         let bytes = fs::read(&self.spritesheet_path)
             .with_context(|| format!("read {}", self.spritesheet_path.display()))?;
-        let digest = Sha256::digest(&bytes);
+        let digest = hex::encode(Sha256::digest(&bytes));
         Ok(format!(
-            "sha256-{digest:x}-{}x{}-{}x{}",
+            "sha256-{digest}-{}x{}-{}x{}",
             self.frame_width, self.frame_height, self.columns, self.rows
         ))
     }

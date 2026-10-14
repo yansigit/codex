@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "definitions": {
     "ThreadReadState": {
-      "description": "The first unread position in a durable local thread. A null position means read. The opaque revision guards edits against activity or marks the caller has not seen.",
+      "description": "The first unread position in a durable local thread. A null position means read.\nThe opaque revision guards edits against activity or marks the caller has not seen.",
       "properties": {
         "firstUnread": {
           "anyOf": [

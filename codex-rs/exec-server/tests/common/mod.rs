@@ -42,7 +42,7 @@ macro_rules! skip_if_mxc_unavailable {
     }};
 }
 
-#[ctor]
+#[ctor(unsafe)]
 pub static TEST_BINARY_DISPATCH_GUARD: Option<TestBinaryDispatchGuard> = {
     let guard = configure_test_binary_dispatch("codex-exec-server-tests", |exe_name, argv1| {
         if argv1 == Some(CODEX_ARG0_EXEC_HELPER_ARG1) {

@@ -136,8 +136,8 @@ pub fn build_id(build_commit: &str, target: &str) -> Option<String> {
         return None;
     }
     let identity = format!("git:{}:{target}", build_commit.to_ascii_lowercase());
-    let digest = Sha256::digest(identity.as_bytes());
-    Some(format!("sha256:{digest:x}"))
+    let digest = hex::encode(Sha256::digest(identity.as_bytes()));
+    Some(format!("sha256:{digest}"))
 }
 
 impl fmt::Display for BuildInfo {

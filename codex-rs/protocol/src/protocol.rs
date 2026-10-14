@@ -155,6 +155,7 @@ pub fn strip_user_message_prefix(text: &str) -> &str {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, TS)]
 #[serde(transparent)]
+#[schemars(inline)]
 #[ts(type = "string")]
 pub struct GitSha(pub String);
 
@@ -4707,7 +4708,7 @@ mod tests {
                 .expect("hook properties")
                 .contains_key("builtin")
         );
-        assert!(!HookRunSummary::decl().contains("builtin:"));
+        assert!(!HookRunSummary::decl(&ts_rs::Config::default()).contains("builtin:"));
         Ok(())
     }
 

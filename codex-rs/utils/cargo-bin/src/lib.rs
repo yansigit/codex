@@ -40,7 +40,6 @@ pub enum CargoBinError {
 /// In `cargo test`, `CARGO_BIN_EXE_*` env vars are absolute.
 /// In `bazel test`, `CARGO_BIN_EXE_*` env vars are rlocationpaths, intended to be consumed by `rlocation`.
 /// This helper allows callers to transparently support both.
-#[allow(deprecated)]
 pub fn cargo_bin(name: &str) -> Result<PathBuf, CargoBinError> {
     let env_keys = cargo_bin_env_keys(name);
     for key in &env_keys {
@@ -48,28 +47,32 @@ pub fn cargo_bin(name: &str) -> Result<PathBuf, CargoBinError> {
             return resolve_bin_from_env(key, value);
         }
     }
-    match assert_cmd::Command::cargo_bin(name) {
-        Ok(cmd) => {
-            let mut path = PathBuf::from(cmd.get_program());
-            if !path.is_absolute() {
-                path = std::env::current_dir()
-                    .map_err(|source| CargoBinError::CurrentDir { source })?
-                    .join(path);
-            }
-            if path.exists() {
-                Ok(path)
-            } else {
-                Err(CargoBinError::ResolvedPathDoesNotExist {
-                    key: "assert_cmd::Command::cargo_bin".to_owned(),
-                    path,
-                })
-            }
-        }
-        Err(err) => Err(CargoBinError::NotFound {
+    let executable =
+        std::env::current_exe().map_err(|source| CargoBinError::CurrentExe { source })?;
+    resolve_adjacent_binary(name, env_keys, executable)
+}
+
+fn resolve_adjacent_binary(
+    name: &str,
+    env_keys: Vec<String>,
+    mut executable: PathBuf,
+) -> Result<PathBuf, CargoBinError> {
+    // Cross-crate test helpers are built beside the deps directory. Do not use
+    // assert_cmd's discovery here: its missing-binary path panics, while callers
+    // rely on our Result to handle optional helpers and report missing fixtures.
+    executable.pop();
+    if executable.ends_with("deps") {
+        executable.pop();
+    }
+    let path = executable.join(format!("{name}{}", std::env::consts::EXE_SUFFIX));
+    if path.is_file() {
+        Ok(path)
+    } else {
+        Err(CargoBinError::NotFound {
             name: name.to_owned(),
             env_keys,
-            fallback: format!("assert_cmd fallback failed: {err}"),
-        }),
+            fallback: format!("build the test helper at {}", path.display()),
+        })
     }
 }
 
@@ -233,4 +236,62 @@ fn normalize_runfile_path(path: &Path) -> PathBuf {
             acc.push(component.as_os_str());
             acc
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn missing_optional_helper_returns_error_without_panicking() {
+        let name = "codex-intentionally-missing-test-helper-72c139b1";
+        let error = cargo_bin(name).expect_err("the fixture must not exist");
+        assert!(matches!(error, CargoBinError::NotFound { .. }));
+    }
+
+    #[test]
+    fn finds_cross_crate_helper_beside_deps_for_each_profile_layout() {
+        let root = tempfile::tempdir().expect("temporary directory");
+        for profile in ["debug", "release", "custom-target/debug"] {
+            let directory = root.path().join(profile);
+            std::fs::create_dir_all(directory.join("deps")).expect("test directory");
+            let helper = directory.join(format!("fixture{}", std::env::consts::EXE_SUFFIX));
+            std::fs::write(&helper, b"fixture").expect("test helper");
+            for test_path in ["deps/test-hash", "test-runner"] {
+                let actual = resolve_adjacent_binary(
+                    "fixture",
+                    cargo_bin_env_keys("fixture"),
+                    directory.join(test_path),
+                )
+                .expect("sibling test helper");
+                assert_eq!(actual, helper);
+            }
+        }
+    }
+
+    #[test]
+    fn missing_helper_reports_expected_location_and_environment_keys() {
+        let root = tempfile::tempdir().expect("temporary directory");
+        let keys = cargo_bin_env_keys("missing-helper");
+        let error = resolve_adjacent_binary(
+            "missing-helper",
+            keys.clone(),
+            root.path().join("deps/test-hash"),
+        )
+        .expect_err("missing helper");
+        let CargoBinError::NotFound {
+            name,
+            env_keys,
+            fallback,
+        } = error
+        else {
+            panic!("expected NotFound");
+        };
+        assert_eq!(name, "missing-helper");
+        assert_eq!(env_keys, keys);
+        let expected = root
+            .path()
+            .join(format!("missing-helper{}", std::env::consts::EXE_SUFFIX));
+        assert!(fallback.contains(&expected.display().to_string()));
+    }
 }

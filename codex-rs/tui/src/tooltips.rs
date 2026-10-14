@@ -8,6 +8,7 @@ use codex_features::FeatureSpec;
 use codex_protocol::account::PlanType;
 use lazy_static::lazy_static;
 use rand::Rng;
+use rand::RngExt;
 use rand::seq::IteratorRandom;
 use std::path::Path;
 

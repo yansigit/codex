@@ -1,7 +1,7 @@
 //! Builds authorization requests and validates callback state before consuming codes or errors.
 
 use base64::Engine;
-use rand::RngCore;
+use rand::Rng;
 use url::Url;
 
 use crate::oauth::PkceCodes;

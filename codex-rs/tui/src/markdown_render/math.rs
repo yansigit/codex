@@ -42,7 +42,7 @@ impl<'a> MathMarkdown<'a> {
             .collect();
         let mut containers = Vec::new();
         protected.extend(parser.into_offset_iter().filter_map(|(event, range)| {
-            if matches!(event, Event::Start(Tag::List(_) | Tag::BlockQuote)) {
+            if matches!(event, Event::Start(Tag::List(_) | Tag::BlockQuote(_))) {
                 containers.push(range.clone());
             }
             matches!(

@@ -2,6 +2,10 @@
 
 Build from source until this fork publishes its own release packages. Upstream Codex installers and packages do not contain Nyacode's native provider features.
 
+The [release pipeline](releases.md) builds optimized packages for Linux, macOS,
+and Windows on x64 and ARM64. Manual workflow runs produce downloadable test
+artifacts; matching `rust-vX.Y.Z` tags publish GitHub Releases after validation.
+
 ## Build from source
 
 Install Git, Python 3.11 or newer, the pinned Rust toolchain (via rustup), and your platform's C/C++ build tools. Linux builds also need `pkg-config`, OpenSSL development headers, Clang/libclang, CMake, and Protocol Buffers. On Ubuntu:
@@ -41,6 +45,17 @@ NYACODE_HOME=/path/to/nyacode-home nyacode
 ## Standalone installers and npm
 
 The checked-in `scripts/install/install.sh` and `install.ps1` install the `nyacode` command from **yansigit/nyacode** GitHub releases. They retain the native archive layout for compatibility and never fall back to OpenAI's release service. They require a matching release to have been published first.
+
+Once a release is published, run the installer from this checkout:
+
+```sh
+sh scripts/install/install.sh --release latest
+```
+
+On Windows, run `pwsh -File scripts/install/install.ps1 -Release latest`.
+To select a prerelease, replace `latest` with its explicit version. Release
+archives can also be downloaded from GitHub; retain their directory layout so
+the CLI can find its bundled helpers.
 
 The npm launcher and TypeScript SDK target `@yansigit/nyacode` and `@yansigit/nyacode-sdk`. These names are distribution configuration, not a claim that a package is already published. There is no Nyacode Homebrew cask configured.
 

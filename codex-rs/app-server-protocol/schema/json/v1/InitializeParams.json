@@ -31,7 +31,7 @@
           "type": "boolean"
         },
         "explicitGatewayOauth": {
-          "description": "Use explicit gateway OAuth login instead of automatic browser authorization. Applies to this app-server's gateway runtime; later connections cannot undo it.",
+          "description": "Use explicit gateway OAuth login instead of automatic browser authorization.\nApplies to this app-server's gateway runtime; later connections cannot undo it.",
           "type": "boolean"
         },
         "extensions": {
@@ -47,7 +47,7 @@
           "type": "boolean"
         },
         "optOutNotificationMethods": {
-          "description": "Exact notification method names that should be suppressed for this connection (for example `thread/started`).",
+          "description": "Exact notification method names that should be suppressed for this\nconnection (for example `thread/started`).",
           "items": {
             "type": "string"
           },

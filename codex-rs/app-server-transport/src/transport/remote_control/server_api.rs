@@ -10,7 +10,7 @@ use super::protocol::RefreshRemoteServerRequest;
 use super::protocol::RemoteControlTarget;
 use axum::http::HeaderMap;
 use axum::http::StatusCode;
-use rand::Rng;
+use rand::RngExt;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use std::fmt;

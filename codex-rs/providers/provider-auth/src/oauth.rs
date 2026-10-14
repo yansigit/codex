@@ -9,7 +9,7 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use codex_provider_api::Credentials;
 use codex_provider_api::ProviderError;
 use codex_provider_api::Result;
-use rand::RngCore;
+use rand::Rng;
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value;

@@ -41,7 +41,7 @@ use core_test_support::wait_for_event_match;
 use image::DynamicImage;
 use image::RgbImage;
 use pretty_assertions::assert_eq;
-use rand::RngCore;
+use rand::Rng;
 use rand::SeedableRng;
 use rand::rngs::StdRng;
 use serde_json::json;

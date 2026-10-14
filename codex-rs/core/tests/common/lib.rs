@@ -51,18 +51,18 @@ pub use test_environment::test_target_os;
 
 static TEST_ARG0_PATH_ENTRY: OnceLock<Option<Arg0PathEntryGuard>> = OnceLock::new();
 
-#[ctor]
+#[ctor(unsafe)]
 fn enable_deterministic_unified_exec_process_ids_for_tests() {
     codex_core::test_support::set_thread_manager_test_mode(/*enabled*/ true);
     codex_core::test_support::set_deterministic_process_ids(/*enabled*/ true);
 }
 
-#[ctor]
+#[ctor(unsafe)]
 fn configure_arg0_dispatch_for_test_binaries() {
     let _ = TEST_ARG0_PATH_ENTRY.get_or_init(codex_arg0::arg0_dispatch);
 }
 
-#[ctor]
+#[ctor(unsafe)]
 fn configure_insta_workspace_root_for_snapshot_tests() {
     if std::env::var_os("INSTA_WORKSPACE_ROOT").is_some() {
         return;

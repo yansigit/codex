@@ -388,7 +388,7 @@ impl GatewayAuthManager {
             digest.update(scope.as_bytes());
             digest.update([0]);
         }
-        format!("provider-oauth|{:x}", digest.finalize())
+        format!("provider-oauth|{}", hex::encode(digest.finalize()))
     }
 
     async fn load_token_async(&self) -> io::Result<Option<StoredToken>> {

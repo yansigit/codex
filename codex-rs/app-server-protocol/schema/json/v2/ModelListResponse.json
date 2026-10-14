@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "definitions": {
     "CyberAccessProgram": {
-      "description": "Requested cyber treatment for an OpenAI model turn. Authorization and model-tier restrictions remain server-owned.",
+      "description": "Requested cyber treatment for an OpenAI model turn.\nAuthorization and model-tier restrictions remain server-owned.",
       "enum": [
         "standard",
         "daybreakBlue",
@@ -293,7 +293,7 @@
       "type": "array"
     },
     "nextCursor": {
-      "description": "Opaque cursor to pass to the next call to continue after the last item. If None, there are no more items to return.",
+      "description": "Opaque cursor to pass to the next call to continue after the last item.\nIf None, there are no more items to return.",
       "type": [
         "string",
         "null"

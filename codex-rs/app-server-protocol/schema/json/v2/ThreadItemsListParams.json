@@ -55,12 +55,12 @@
           "type": "null"
         }
       ],
-      "description": "Opaque continuation cursor or an exclusive item anchor in the requested visible turn. An item anchor requires a non-empty `turnId`; ascending (the default) returns items after it, and descending returns items before it. Continue with the returned string cursor."
+      "description": "Opaque continuation cursor or an exclusive item anchor in the requested visible turn.\nAn item anchor requires a non-empty `turnId`; ascending (the default) returns items\nafter it, and descending returns items before it. Continue with the returned string cursor."
     },
     "limit": {
       "description": "Optional item page size.",
       "format": "uint32",
-      "minimum": 0.0,
+      "minimum": 0,
       "type": [
         "integer",
         "null"

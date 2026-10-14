@@ -358,7 +358,17 @@ impl HttpClientBuilder {
                             error = %fallback_error,
                             "failed to build fallback HTTP client"
                         );
-                        reqwest::Client::new()
+                        // Match this legacy infallible API's previous Client::new()
+                        // behavior if even platform TLS initialization fails.
+                        #[expect(
+                            clippy::expect_used,
+                            reason = "legacy infallible client constructor"
+                        )]
+                        let client = reqwest::Client::builder()
+                            .tls_backend_native()
+                            .build()
+                            .expect("build platform TLS client");
+                        client
                     })
             }
         };
@@ -384,7 +394,9 @@ impl HttpClientBuilder {
     }
 
     fn base_reqwest_builder(self) -> reqwest::ClientBuilder {
-        let mut builder = reqwest::Client::builder();
+        // Reqwest 0.13 defaults to Rustls. Preserve the existing platform TLS
+        // route and its explicit, policy-controlled Rustls retry behavior.
+        let mut builder = reqwest::Client::builder().tls_backend_native();
         if !self.automatic_retries {
             builder = builder.retry(reqwest::retry::never());
         }
@@ -393,12 +405,10 @@ impl HttpClientBuilder {
         }
         if self.tls_backend == TlsBackend::Rustls || self.tls.client_identity.is_some() {
             ensure_rustls_crypto_provider();
-            builder = builder.use_rustls_tls();
+            builder = builder.tls_backend_rustls();
         }
         if let Some(certificate) = self.tls.root_certificate {
-            builder = builder
-                .tls_built_in_root_certs(false)
-                .add_root_certificate(certificate);
+            builder = builder.tls_certs_only([certificate]);
         }
         if let Some(identity) = self.tls.client_identity {
             builder = builder.identity(identity).https_only(true);

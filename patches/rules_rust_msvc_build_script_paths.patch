@@ -1,25 +1,19 @@
 diff --git a/cargo/private/cargo_build_script.bzl b/cargo/private/cargo_build_script.bzl
 --- a/cargo/private/cargo_build_script.bzl
 +++ b/cargo/private/cargo_build_script.bzl
-@@ -304,7 +304,13 @@
-     return _prefix_pwd_to_paths(args)
+@@ -268,7 +268,7 @@
  
- def _pwd_flags(args):
--    return _pwd_flags_direct_libs(_pwd_flags_imacros(_pwd_flags_fsanitize_ignorelist(_pwd_flags_isystem(_pwd_flags_L(_pwd_flags_B(_pwd_flags_resource_dir(_pwd_flags_sysroot(args))))))))
-+    # clang-cl wraps both options and their operands in /clang:. Normalize
-+    # those tokens together, then restore the driver syntax without reordering.
-+    clang_prefix = "/clang:"
-+    flags = [arg[len(clang_prefix):] if arg.startswith(clang_prefix) else arg for arg in args]
-+    flags = _prefix_pwd_to_flag(flags, ["/imsvc", "/external:I", "-ivfsoverlay"])
-+    flags = _pwd_flags_direct_libs(_pwd_flags_imacros(_pwd_flags_fsanitize_ignorelist(_pwd_flags_isystem(_pwd_flags_L(_pwd_flags_B(_pwd_flags_resource_dir(_pwd_flags_sysroot(flags))))))))
-+    return [clang_prefix + flag if original.startswith(clang_prefix) else flag for original, flag in zip(args, flags)]
+ def _pwd_flags_isystem(args):
+     """Prefix execroot-relative paths in -isystem-like arguments with ${pwd}."""
+-    return _prefix_pwd_to_flag(args, ["-isystem", "-isystem-after", "-internal-isystem", "-cxx-isystem", "-stdlib++-isystem", "/imsvc"])
++    return _prefix_pwd_to_flag(args, ["-isystem", "-isystem-after", "-internal-isystem", "-cxx-isystem", "-stdlib++-isystem", "/imsvc", "/external:I"])
  
- def _feature_enabled(ctx, feature_name, default = False):
-     """Check if a feature is enabled.
+ def _pwd_flags_L(args):
+     """Prefix execroot-relative paths in -L arguments with ${pwd}."""
 diff --git a/cargo/tests/cargo_build_script/cc_args_and_env/cc_args_and_env_test.bzl b/cargo/tests/cargo_build_script/cc_args_and_env/cc_args_and_env_test.bzl
 --- a/cargo/tests/cargo_build_script/cc_args_and_env/cc_args_and_env_test.bzl
 +++ b/cargo/tests/cargo_build_script/cc_args_and_env/cc_args_and_env_test.bzl
-@@ -346,7 +346,7 @@
+@@ -375,7 +375,7 @@
      )
      with_extra_toolchains(
          name = name,
@@ -28,9 +22,9 @@ diff --git a/cargo/tests/cargo_build_script/cc_args_and_env/cc_args_and_env_test
          target = "%s/cargo_build_script_impl" % name,
          tags = ["manual"],
      )
-@@ -679,3 +679,75 @@
-         target_under_test = "%s/cargo_build_script" % name,
-         expected_cflags = ["/test/absolute/libclang_rt.builtins.static.a", "/test/absolute/obj.o", "/test/absolute/libfoo.so", "/test/absolute/libbar.dylib", "some_unrelated_arg"],
+@@ -845,3 +845,75 @@
+         forbidden_cflags = ["-DUSER_CXX_ONLY"],
+         forbidden_cxxflags = ["-DUSER_C_ONLY"],
      )
 +
 +def msvc_paths_relative_test(name):
@@ -107,19 +101,19 @@ diff --git a/cargo/tests/cargo_build_script/cc_args_and_env/cc_args_and_env_test
 diff --git a/cargo/tests/cargo_build_script/cc_args_and_env/BUILD.bazel b/cargo/tests/cargo_build_script/cc_args_and_env/BUILD.bazel
 --- a/cargo/tests/cargo_build_script/cc_args_and_env/BUILD.bazel
 +++ b/cargo/tests/cargo_build_script/cc_args_and_env/BUILD.bazel
-@@ -17,6 +17,8 @@
-     "libpath_absolute_test",
+@@ -23,6 +23,8 @@
      "libpath_relative_test",
+     "libpath_separated_relative_test",
      "libtool_fallback_test",
 +    "msvc_paths_absolute_test",
 +    "msvc_paths_relative_test",
      "resource_dir_absolute_test",
      "resource_dir_relative_test",
      "sysroot_absolute_test",
-@@ -76,3 +78,7 @@
- direct_libs_relative_test(name = "direct_libs_relative_test")
+@@ -97,3 +99,7 @@
+ direct_libs_as_flag_operand_test(name = "direct_libs_as_flag_operand_test")
  
- direct_libs_absolute_test(name = "direct_libs_absolute_test")
+ user_compile_flags_test(name = "user_compile_flags_test")
 +
 +msvc_paths_absolute_test(name = "msvc_paths_absolute_test")
 +

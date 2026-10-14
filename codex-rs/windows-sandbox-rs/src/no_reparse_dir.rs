@@ -6,7 +6,7 @@ use anyhow::Context;
 use anyhow::Result;
 use anyhow::bail;
 use anyhow::ensure;
-use rand::RngCore;
+use rand::TryRng;
 use std::ffi::OsStr;
 use std::ffi::c_void;
 use std::mem::size_of;
@@ -204,7 +204,7 @@ fn is_disk_volume(target: &[u16]) -> bool {
 /// retain its directory pins alongside the guard throughout privileged work.
 pub fn create_directory_guard(directory: BorrowedHandle<'_>) -> Result<OwnedHandle> {
     let mut random = [0_u8; 8];
-    rand::rngs::OsRng
+    rand::rngs::SysRng
         .try_fill_bytes(&mut random)
         .context("generate sandbox directory guard name")?;
     let guard_id = u64::from_le_bytes(random);

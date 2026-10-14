@@ -567,7 +567,7 @@ impl<'a, 'policy> Writer<'a, 'policy> {
         match event {
             Event::Start(tag) => self.start_tag(tag, range, iter),
             Event::End(tag) => self.end_tag(tag, range),
-            Event::Text(text) => {
+            Event::Text(text) | Event::InlineMath(text) | Event::DisplayMath(text) => {
                 if self.in_code_block {
                     self.code_block_content_end = range.end;
                 }
@@ -628,7 +628,7 @@ impl<'a, 'policy> Writer<'a, 'policy> {
         match tag {
             Tag::Paragraph => self.start_paragraph(),
             Tag::Heading { level, .. } => self.start_heading(level),
-            Tag::BlockQuote => {
+            Tag::BlockQuote(_) => {
                 self.start_blockquote();
                 let source = self.quote_sources.first().cloned().unwrap_or_else(|| {
                     crate::markdown_copy::quote_content(&self.input[range]).into()
@@ -702,7 +702,12 @@ impl<'a, 'policy> Writer<'a, 'policy> {
             Tag::HtmlBlock
             | Tag::FootnoteDefinition(_)
             | Tag::Image { .. }
-            | Tag::MetadataBlock(_) => {}
+            | Tag::MetadataBlock(_)
+            | Tag::DefinitionList
+            | Tag::DefinitionListTitle
+            | Tag::DefinitionListDefinition
+            | Tag::Superscript
+            | Tag::Subscript => {}
         }
     }
 
@@ -718,7 +723,7 @@ impl<'a, 'policy> Writer<'a, 'policy> {
                 self.end_paragraph();
             }
             TagEnd::Heading(_) => self.end_heading(),
-            TagEnd::BlockQuote => {
+            TagEnd::BlockQuote(_) => {
                 self.flush_current_line();
                 self.end_blockquote();
                 self.quote_sources.pop();
@@ -754,7 +759,12 @@ impl<'a, 'policy> Writer<'a, 'policy> {
             TagEnd::HtmlBlock
             | TagEnd::FootnoteDefinition
             | TagEnd::Image
-            | TagEnd::MetadataBlock(_) => {}
+            | TagEnd::MetadataBlock(_)
+            | TagEnd::DefinitionList
+            | TagEnd::DefinitionListTitle
+            | TagEnd::DefinitionListDefinition
+            | TagEnd::Superscript
+            | TagEnd::Subscript => {}
         }
     }
 

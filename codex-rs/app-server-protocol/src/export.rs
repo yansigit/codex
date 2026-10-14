@@ -24,7 +24,6 @@ use anyhow::Context;
 use anyhow::Result;
 use anyhow::anyhow;
 use codex_history::RolloutLine;
-use schemars::schema_for;
 use serde_json::Map;
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -101,6 +100,12 @@ impl GeneratedSchema {
 
 type JsonSchemaEmitter = fn(&Path) -> Result<GeneratedSchema>;
 
+pub(crate) fn typescript_config() -> ts_rs::Config {
+    // Keep the published map value contract while adopting the ts-rs 12 API.
+    #[allow(deprecated)]
+    ts_rs::Config::default().with_v11_hashmap()
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct GenerateTsOptions {
     pub generate_indices: bool,
@@ -129,16 +134,18 @@ pub fn generate_ts_with_options(
     ensure_dir(out_dir)?;
     ensure_dir(&v2_out_dir)?;
 
-    ClientRequest::export_all_to(out_dir)?;
-    export_client_responses(out_dir)?;
-    ClientNotification::export_all_to(out_dir)?;
-    crate::UserVerificationRpcError::export_all_to(out_dir)?;
-    crate::ChatErrorDetails::export_all_to(out_dir)?;
+    let config = typescript_config().with_out_dir(out_dir);
 
-    ServerRequest::export_all_to(out_dir)?;
+    ClientRequest::export_all(&config)?;
+    export_client_responses(out_dir)?;
+    ClientNotification::export_all(&config)?;
+    crate::UserVerificationRpcError::export_all(&config)?;
+    crate::ChatErrorDetails::export_all(&config)?;
+
+    ServerRequest::export_all(&config)?;
     export_server_responses(out_dir)?;
-    ServerNotification::export_all_to(out_dir)?;
-    ServerNotificationEnvelope::export_all_to(out_dir)?;
+    ServerNotification::export_all(&config)?;
+    ServerNotificationEnvelope::export_all(&config)?;
 
     if !options.experimental_api {
         filter_experimental_ts(out_dir)?;
@@ -1443,7 +1450,18 @@ where
     let (raw_namespace, logical_name) = split_namespace(file_stem);
     let include_in_json_codegen =
         raw_namespace != Some("v1") || JSON_V1_ALLOWLIST.contains(&logical_name);
-    let schema = schema_for!(T);
+    let schema = schemars::generate::SchemaSettings::draft07()
+        .with(|settings| {
+            settings
+                .transforms
+                .push(Box::new(codex_protocol::json_schema::sort_required_fields));
+            // Downstream schema consumers use single-valued enum discriminators.
+            settings
+                .transforms
+                .push(Box::new(schemars::transform::ReplaceConstValue::default()));
+        })
+        .into_generator()
+        .into_root_schema_for::<T>();
     let mut schema_value = serde_json::to_value(schema)?;
     if include_in_json_codegen {
         if file_stem == "ClientRequest" {
@@ -2551,27 +2569,33 @@ mod tests {
 
     #[test]
     fn generate_ts_with_experimental_api_retains_experimental_entries() -> Result<()> {
-        let client_request_ts = ClientRequest::export_to_string()?;
+        let client_request_ts =
+            ClientRequest::export_to_string(&crate::export::typescript_config())?;
         assert_eq!(client_request_ts.contains("mock/experimentalMethod"), true);
         assert_eq!(
             client_request_ts.contains("MockExperimentalMethodParams"),
             true
         );
         assert_eq!(
-            v2::MockExperimentalMethodParams::export_to_string()?
+            v2::MockExperimentalMethodParams::export_to_string(&crate::export::typescript_config())?
                 .contains("MockExperimentalMethodParams"),
             true
         );
         assert_eq!(
-            v2::MockExperimentalMethodResponse::export_to_string()?
-                .contains("MockExperimentalMethodResponse"),
+            v2::MockExperimentalMethodResponse::export_to_string(
+                &crate::export::typescript_config()
+            )?
+            .contains("MockExperimentalMethodResponse"),
             true
         );
 
-        let thread_start_ts = v2::ThreadStartParams::export_to_string()?;
+        let thread_start_ts =
+            v2::ThreadStartParams::export_to_string(&crate::export::typescript_config())?;
         assert_eq!(thread_start_ts.contains("mockExperimentalField"), true);
         let command_execution_request_approval_ts =
-            v2::CommandExecutionRequestApprovalParams::export_to_string()?;
+            v2::CommandExecutionRequestApprovalParams::export_to_string(
+                &crate::export::typescript_config(),
+            )?;
         assert_eq!(
             command_execution_request_approval_ts.contains("additionalPermissions"),
             true

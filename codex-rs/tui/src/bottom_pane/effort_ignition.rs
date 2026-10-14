@@ -15,7 +15,7 @@ use std::time::Duration;
 use std::time::Instant;
 
 use codex_protocol::openai_models::ReasoningEffort;
-use rand::Rng as _;
+use rand::RngExt as _;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Color;

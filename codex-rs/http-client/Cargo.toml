@@ -5,15 +5,16 @@ name = "codex-http-client"
 version.workspace = true
 
 [dependencies]
+hex = { workspace = true }
 bytes = { workspace = true }
 codex-utils-rustls-provider = { workspace = true }
 futures = { workspace = true }
 http = { workspace = true }
-http-body = "1.0.1"
+http-body = "1.1.0"
 httpdate = { workspace = true }
 native-tls = "0.2"
 opentelemetry = { workspace = true }
-reqwest = { workspace = true, features = ["json", "rustls-tls", "rustls-tls-native-roots", "stream"] }
+reqwest = { workspace = true, features = ["json", "native-tls", "rustls", "stream"] }
 rustls = { workspace = true }
 rustls-native-certs = { workspace = true }
 rustls-pki-types = { workspace = true }
@@ -26,7 +27,7 @@ tokio = { workspace = true, features = ["macros", "rt", "time", "sync"] }
 tracing = { workspace = true }
 tracing-opentelemetry = { workspace = true }
 zstd = { workspace = true }
-wreq = { version = "=6.0.0-rc.29", features = ["stream", "gzip", "brotli", "zstd", "deflate", "socks", "prefix-symbols"] }
+wreq = { version = "=6.0.0-rc.31", features = ["stream", "gzip", "brotli", "zstd", "deflate", "socks"] }
 wreq-util = "=3.0.0-rc.14"
 
 # btls prefixes its BoringSSL symbols but exports libssl/libcrypto search paths.
@@ -35,11 +36,17 @@ wreq-util = "=3.0.0-rc.14"
 [target.'cfg(target_os = "linux")'.dependencies]
 native-tls = { version = "0.2", features = ["vendored"] }
 
+# btls cannot prefix Mach-O or COFF archives. Enabling the feature there still
+# prefixes Rust bindings, causing undefined symbols at the final link. Their
+# platform TLS backends do not require a second OpenSSL implementation.
+[target.'cfg(not(any(target_os = "macos", target_os = "ios", target_os = "windows")))'.dependencies]
+wreq = { version = "=6.0.0-rc.31", features = ["prefix-symbols"] }
+
 [target.'cfg(target_os = "macos")'.dependencies]
 system-configuration = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-rustls-platform-verifier = "0.7.0"
+rustls-platform-verifier = "0.7.1"
 windows-sys = { workspace = true, features = [
     "Win32_Foundation",
     "Win32_Networking_WinHttp",

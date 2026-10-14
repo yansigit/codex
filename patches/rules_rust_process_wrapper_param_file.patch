@@ -1,7 +1,7 @@
 diff --git a/rust/private/rustc.bzl b/rust/private/rustc.bzl
 --- a/rust/private/rustc.bzl
 +++ b/rust/private/rustc.bzl
-@@ -1121,6 +1121,9 @@
+@@ -1219,6 +1219,9 @@
  
      # Wrapper args first
      process_wrapper_flags = ctx.actions.args()
@@ -14,7 +14,7 @@ diff --git a/rust/private/rustc.bzl b/rust/private/rustc.bzl
 diff --git a/util/process_wrapper/options.rs b/util/process_wrapper/options.rs
 --- a/util/process_wrapper/options.rs
 +++ b/util/process_wrapper/options.rs
-@@ -136,10 +136,17 @@
+@@ -140,10 +140,17 @@
          &mut require_explicit_unstable_features,
      );
  

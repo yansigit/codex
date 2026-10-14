@@ -24,8 +24,8 @@ cannot incorporate local V8 C++ flags or native debug/sanitizer settings.
 
 Current pinned versions:
 
-- Rust crate: `v8 = =150.4.0`
-- Embedded upstream V8 source for Bazel-produced release builds: `15.0.245.2`
+- Rust crate: `v8 = =152.2.0`
+- Embedded upstream V8 source for Bazel-produced release builds: `15.2.124.1`
 
 ## Updating to a new `v8` release
 
@@ -104,7 +104,7 @@ from upstream `rusty_v8` source. Those ABI-specific outputs cannot be produced
 by Codex's Bazel Windows GNU toolchain.
 
 The Bazel graph pins the same libc++, libc++abi, and llvm-libc source revisions
-used by `rusty_v8 v150.4.0`, compiles published artifact targets with
+used by `rusty_v8 v152.2.0`, compiles published artifact targets with
 `--config=rusty-v8-upstream-libcxx`, and folds the matching runtime objects into
 the final static archive so consumers can link it with the `v8` crate's default
 `use_custom_libcxx` feature. The config keeps the object files and the bundled

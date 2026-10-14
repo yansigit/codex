@@ -119,7 +119,7 @@
           "type": "integer"
         },
         "credits": {
-          "description": "Detail rows for available reset credits, when the backend provides them.\n\n`null` means only `availableCount` is known, while an empty array means details were fetched and no available credits were returned. The backend may cap this list, so its length can be less than `availableCount`.",
+          "description": "Detail rows for available reset credits, when the backend provides them.\n\n`null` means only `availableCount` is known, while an empty array means details were fetched\nand no available credits were returned. The backend may cap this list, so its length can be\nless than `availableCount`.",
           "items": {
             "$ref": "#/definitions/RateLimitResetCredit"
           },
@@ -293,7 +293,7 @@
       ]
     },
     "ordinaryUsageAllowed": {
-      "description": "Backend permission for ordinary included usage, validated against the active account. Null means unavailable; clients must not infer recovery from percentages or reset times.",
+      "description": "Backend permission for ordinary included usage, validated against the active account.\nNull means unavailable; clients must not infer recovery from percentages or reset times.",
       "type": [
         "boolean",
         "null"
@@ -310,7 +310,7 @@
       ]
     },
     "rateLimitUpsell": {
-      "description": "Optional backend-owned banner from the same usage read. Its nested keys retain the backend's snake_case contract; an absent banner leaves the client's existing UI unchanged."
+      "description": "Optional backend-owned banner from the same usage read. Its nested keys retain the\nbackend's snake_case contract; an absent banner leaves the client's existing UI unchanged."
     },
     "rateLimits": {
       "allOf": [
