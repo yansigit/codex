@@ -126,11 +126,15 @@ async fn sqlite_sink_filters_noisy_targets_without_dropping_useful_diagnostics()
             .collect::<Vec<_>>(),
         vec![
             ("INFO", "opentelemetry_sdk", Some("retained-info")),
-            ("ERROR", "opentelemetry_sdk", Some("retained-sdk-error")),
+            (
+                "ERROR",
+                "opentelemetry_sdk",
+                Some("retained-sdk-error name=\"UnrelatedSdkError\"")
+            ),
             (
                 "ERROR",
                 "application",
-                Some("retained-unrelated-export-name")
+                Some("retained-unrelated-export-name name=\"PeriodicReader.ExportError\"")
             ),
             (
                 "INFO",
