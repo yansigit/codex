@@ -19,6 +19,8 @@ Only the repository and cache volumes are mounted. A checkout beneath the host h
 
 The verifier runs with the calling user's UID/GID so it does not create root-owned files in the checkout. Podman uses `--userns keep-id`. Nested sandbox tests require `SYS_ADMIN`, `NET_ADMIN`, and `SYS_PTRACE` capabilities and relaxed seccomp/AppArmor settings; use this verifier with trusted repository code. The running container uses its own network namespace. Before the full build, the bundled helper must create user, PID, and network namespaces and bind a loopback socket. Engine probing never opens a password prompt: direct Docker/Podman access or existing noninteractive sudo access is required.
 
+Nested process namespaces also need an unmasked parent `/proc` so their sandbox can mount its own process filesystem. The verifier uses Docker's [`systempaths=unconfined`](https://docs.docker.com/reference/cli/docker/container/run/#optional-security-options---security-opt) or Podman's [`unmask=/proc/*`](https://docs.podman.io/en/v6.1.3/markdown/podman-run.1.html) setting for this purpose.
+
 The container sets a 64 MiB Rust thread stack and stack ulimit for large debug test futures. It disables incremental builds and debug symbols to keep workspace verification within hosted runner disk limits. Panic backtraces remain enabled; library backtraces are disabled so expected CLI error output stays stable. Ordinary local and release build settings are unchanged.
 
 ## Caches

@@ -389,11 +389,13 @@ run_outer() {
         run_args+=(-e "CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}")
     fi
     if [[ "$engine_bin" == "podman" ]]; then
-        run_args+=(--userns keep-id --security-opt label=disable)
+        run_args+=(--userns keep-id --security-opt label=disable --security-opt 'unmask=/proc/*')
     else
         # Docker can enforce AppArmor even when securityfs is not visible to
         # this caller. "unconfined" also works when AppArmor is unavailable.
-        run_args+=(--security-opt apparmor=unconfined)
+        # Locked masks in the parent /proc prevent an unprivileged nested
+        # PID namespace from mounting its own proc filesystem.
+        run_args+=(--security-opt apparmor=unconfined --security-opt systempaths=unconfined)
     fi
     for spec in "${mounts[@]}"; do
         run_args+=(-v "$spec")
