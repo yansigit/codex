@@ -49,6 +49,13 @@ jobs:
         run: |
           python3 -m unittest discover -s scripts/tests -p test_verify_container.py
           bash -n scripts/verify-container.sh
+      - name: Enable nested sandbox user namespaces
+        # Match setup-ci's Linux sandbox prerequisites on this disposable host.
+        run: |
+          sudo sysctl -w kernel.unprivileged_userns_clone=1
+          if sudo sysctl -n kernel.apparmor_restrict_unprivileged_userns >/dev/null 2>&1; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
       - name: Verify every Rust workspace crate in the container
         run: |
           set -o pipefail
