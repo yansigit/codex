@@ -109,7 +109,8 @@ pub mod host_privacy {
     use oauth2::TokenResponse;
     use serde::Serialize;
     use serde_json::Value;
-    use std::sync::{OnceLock, RwLock};
+    use std::sync::OnceLock;
+    use std::sync::RwLock;
     struct Secrets {
         values: Vec<String>,
         saturated: bool,

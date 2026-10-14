@@ -54,13 +54,17 @@ impl ThreadRequestProcessor {
         &self,
         params: codex_app_server_protocol::MemoryInspectParams,
     ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
-        use codex_app_server_protocol::{
-            MemoryInspectEntry, MemoryInspectOperation, MemoryInspectResponse,
-        };
-        use codex_memories_extension::{
-            ListMemoriesRequest, LocalMemoriesBackend, MemoriesBackend, MemoriesBackendError,
-            MemoryEntryType, ReadMemoryRequest, SearchMatchMode, SearchMemoriesRequest,
-        };
+        use codex_app_server_protocol::MemoryInspectEntry;
+        use codex_app_server_protocol::MemoryInspectOperation;
+        use codex_app_server_protocol::MemoryInspectResponse;
+        use codex_memories_extension::ListMemoriesRequest;
+        use codex_memories_extension::LocalMemoriesBackend;
+        use codex_memories_extension::MemoriesBackend;
+        use codex_memories_extension::MemoriesBackendError;
+        use codex_memories_extension::MemoryEntryType;
+        use codex_memories_extension::ReadMemoryRequest;
+        use codex_memories_extension::SearchMatchMode;
+        use codex_memories_extension::SearchMemoriesRequest;
         if params.path.as_ref().is_some_and(|v| v.len() > 1000)
             || params.query.as_ref().is_some_and(|v| v.len() > 500)
             || params.cursor.as_ref().is_some_and(|v| v.len() > 1000)
@@ -175,8 +179,11 @@ impl ThreadRequestProcessor {
         &self,
         params: codex_app_server_protocol::MemoryMaintenanceParams,
     ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
-        use codex_app_server_protocol::{MemoryMaintenanceOperation, MemoryMaintenanceResponse};
-        use codex_memories_write::start::{host_status, host_stop, start_host_memory_task};
+        use codex_app_server_protocol::MemoryMaintenanceOperation;
+        use codex_app_server_protocol::MemoryMaintenanceResponse;
+        use codex_memories_write::start::host_status;
+        use codex_memories_write::start::host_stop;
+        use codex_memories_write::start::start_host_memory_task;
         if !codex_extension_api::host_memory_admitted() {
             return Err(invalid_params("host has not admitted memory maintenance"));
         }

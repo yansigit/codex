@@ -369,10 +369,12 @@ mod agent {
         .ok()?;
 
         if codex_extension_api::host_memory_admitted() {
-            use codex_protocol::permissions::{
-                FileSystemAccessMode, FileSystemPath, FileSystemSandboxEntry,
-                FileSystemSandboxPolicy, FileSystemSpecialPath, NetworkSandboxPolicy,
-            };
+            use codex_protocol::permissions::FileSystemAccessMode;
+            use codex_protocol::permissions::FileSystemPath;
+            use codex_protocol::permissions::FileSystemSandboxEntry;
+            use codex_protocol::permissions::FileSystemSandboxPolicy;
+            use codex_protocol::permissions::FileSystemSpecialPath;
+            use codex_protocol::permissions::NetworkSandboxPolicy;
             let files = FileSystemSandboxPolicy::restricted(vec![
                 FileSystemSandboxEntry::new(
                     FileSystemPath::Special {

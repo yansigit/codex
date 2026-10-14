@@ -70,6 +70,8 @@ feature-depth = 1
 # A list of advisory IDs to ignore. Note that ignored advisories will still
 # output a note when they are encountered.
 ignore = [
+    # Reviewed 2026-10-14: informational maintenance debt, not a vulnerability waiver.
+    { id = "RUSTSEC-2024-0449", reason = "unsafe-libyaml 0.2.11 is unmaintained and has no fixed release; inherited through serde_yaml in native skills, plugin metadata and legacy migrations; remove when those parsers migrate to a maintained safe-Rust YAML implementation" },
     # Reviewed 2026-07-02. Keep this list in sync with .cargo/audit.toml.
     # Each exception must identify the dependency path and removal condition.
     { id = "RUSTSEC-2024-0388", reason = "derivative is unmaintained; pulled in via starlark/starlark_syntax v0.14.2 used by execpolicy/cli/core; no fixed starlark release yet" },
@@ -245,6 +247,16 @@ deny = [
         "codex-responses-api-proxy",
         # Temporary migration exceptions.
         "codex-otel",
+        # Existing Nyacode provider transports use the 0.12 compatibility client.
+        # Remove these exact migration entries when they use codex-http-client.
+        "codex-model-provider",
+        "codex-provider-auth",
+        "codex-provider-codecs",
+        "codex-provider-cursor",
+        "codex-provider-opencode",
+        "codex-provider-claude",
+        "codex-provider-antigravity",
+        "codex-provider-registry",
         # Third-party crates that own their reqwest integration. These are not part of the
         # first-party migration count above.
         "oauth2",

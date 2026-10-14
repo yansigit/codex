@@ -127,8 +127,10 @@ pub use model_request::ModelResponseInterceptor;
 pub use model_request::ModelResponseStream;
 pub use model_request::ResponseEvent;
 
-pub use tool_policy::{host_tool_inventory, record_host_tool_inventory};
+pub use tool_policy::host_tool_inventory;
+pub use tool_policy::record_host_tool_inventory;
 
-pub use tool_policy::{host_mcp_servers, host_skill_roots};
+pub use tool_policy::host_mcp_servers;
+pub use tool_policy::host_skill_roots;
 
 pub use tool_policy::host_mcp_resource_allowed;
