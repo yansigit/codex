@@ -341,6 +341,10 @@ pub struct ChatCitation {
 #[ts(export_to = "v2/")]
 pub struct ChatMessage {
     pub id: String,
+    /// Message creation time in Unix milliseconds, when supplied by ChatGPT.
+    #[serde(default)]
+    #[ts(type = "number | null")]
+    pub created_at_ms: Option<i64>,
     pub role: String,
     pub parts: Vec<ChatMessagePart>,
     pub model: Option<String>,

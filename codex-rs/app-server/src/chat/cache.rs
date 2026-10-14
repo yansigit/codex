@@ -97,6 +97,7 @@ fn to_cache(snapshot: &ConversationSnapshot, observed_at_ms: i64) -> ChatCachedC
                     };
                     Some(ChatCachedMessage {
                         id: message.id.clone(),
+                        created_at_ms: message.created_at_ms,
                         role,
                         model: message.model.clone(),
                         finished: message.finished,
@@ -166,6 +167,7 @@ fn from_cache(cached: ChatCachedConversation) -> ConversationSnapshot {
                     parent_id: node.parent_id,
                     message: node.message.map(|message| Message {
                         id: message.id,
+                        created_at_ms: message.created_at_ms,
                         role: match message.role {
                             ChatCacheRole::User => "user",
                             ChatCacheRole::Assistant => "assistant",

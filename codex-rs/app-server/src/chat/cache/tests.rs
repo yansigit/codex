@@ -23,6 +23,7 @@ fn snapshot() -> ConversationSnapshot {
                     parent_id: Some("root".into()),
                     message: Some(Message {
                         id: "assistant-message".into(),
+                        created_at_ms: Some(1_700_000_000_123),
                         role: "assistant".into(),
                         model: Some("fixture-model".into()),
                         finished: true,

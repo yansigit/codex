@@ -8,6 +8,7 @@ async fn native_chat_messages_do_not_mutate_codex_widget_or_emit_events() {
     chat.thread_usage.replaying_turn_completion = true;
     let before = render_bottom_popup(&chat, 80);
     let message = codex_app_server_protocol::ChatMessage {
+        created_at_ms: None,
         id: "fixture-message".into(),
         role: "assistant".into(),
         parts: vec![codex_app_server_protocol::ChatMessagePart::Text {
