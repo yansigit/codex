@@ -3,6 +3,20 @@ name: Container verification
 on:
   pull_request:
     paths:
+      - "codex-rs/**"
+      - "third_party/v8/**"
+      - "Containerfile"
+      - "Dockerfile"
+      - ".dockerignore"
+      - "scripts/verify-container.sh"
+      - "scripts/verify_container.py"
+      - "scripts/tests/test_verify_container.py"
+      - ".github/workflows/container-verify.yml"
+  push:
+    branches: [main]
+    paths:
+      - "codex-rs/**"
+      - "third_party/v8/**"
       - "Containerfile"
       - "Dockerfile"
       - ".dockerignore"

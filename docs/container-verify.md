@@ -33,4 +33,4 @@ scripts/verify-container.sh --reset-cache full
 
 `--reset-cache` removes only the verifier's named volumes. `--no-cache` rebuilds the image layers. Docker and Podman maintain separate caches. `CARGO_BUILD_JOBS` controls compilation and test concurrency; hosted verification uses two jobs. The command prints phase timings and sccache statistics.
 
-The **Container verification** GitHub workflow runs the complete path for verifier changes and supports manual execution. A successful fast run alone does not establish full-workspace acceptance.
+The **Container verification** GitHub workflow runs the complete path for Rust, dependency, V8 input, and verifier changes on pull requests and `main`. It also supports manual execution. A successful fast run alone does not establish full-workspace acceptance.
