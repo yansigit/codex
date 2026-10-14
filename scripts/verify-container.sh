@@ -102,10 +102,10 @@ run_helpers() {
 }
 
 run_sandbox_check() {
-    cargo build --locked -p codex-bwrap --bin codex-bwrap
+    cargo build --locked -p codex-bwrap --bin bwrap
     # Exercise the bundled helper, which may have different AppArmor rules
     # from the distribution's /usr/bin/bwrap. Fail before the full build.
-    "${CARGO_TARGET_DIR}/debug/codex-bwrap" \
+    "${CARGO_TARGET_DIR}/debug/bwrap" \
         --unshare-user --unshare-pid --unshare-net --uid 0 --gid 0 \
         --ro-bind / / --dev /dev --proc /proc --die-with-parent \
         -- python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); s.close()'
