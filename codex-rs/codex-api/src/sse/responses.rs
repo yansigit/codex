@@ -429,8 +429,9 @@ pub fn process_responses_event(
                     return Err(ResponsesEventError::Api(ApiError::ContentFilter));
                 }
                 if reason != "interrupted" {
-                    let message = format!("Incomplete response returned, reason: {reason}");
-                    return Err(ResponsesEventError::Api(ApiError::Stream(message)));
+                    return Err(ResponsesEventError::Api(ApiError::ResponseIncomplete(
+                        reason.to_string(),
+                    )));
                 }
             }
             if let Some(resp_val) = event.response {
@@ -639,7 +640,10 @@ async fn process_sse_with_treatment(
             Ok(None) => {}
             Err(error) => {
                 let error = error.into_api_error();
-                if matches!(error, ApiError::FlexUnavailable) {
+                if matches!(
+                    error,
+                    ApiError::FlexUnavailable | ApiError::ResponseIncomplete(_)
+                ) {
                     let _ = tx_event.send(Err(error)).await;
                     return;
                 }

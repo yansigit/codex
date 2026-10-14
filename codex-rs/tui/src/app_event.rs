@@ -308,6 +308,8 @@ pub(crate) enum AppEvent {
     SwitchSurface {
         chat: bool,
     },
+    ConfirmDaemonRestart,
+    RunDaemonRestart,
     ConfirmDaemonUpdate(crate::update_action::DaemonUpdateSource),
     RunDaemonUpdate(crate::update_action::DaemonUpdateSource),
     ReviewMisalignment(Arc<crate::chatwidget::MisalignmentReview>),

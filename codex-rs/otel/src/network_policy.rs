@@ -107,8 +107,10 @@ impl opentelemetry_http::HttpClient for RuntimeHttpClient {
                         .body(body)
                         .timeout(timeout)
                         .send()
-                        .await?
-                        .error_for_status()?;
+                        .await?;
+                    // The SDK classifies status codes and Retry-After itself.
+                    // Converting an HTTP rejection to a transport error here
+                    // would make non-retryable responses look like outages.
                     let mut builder = http::Response::builder().status(response.status());
                     if let Some(headers) = builder.headers_mut() {
                         *headers = response.headers().clone();
@@ -123,5 +125,56 @@ impl opentelemetry_http::HttpClient for RuntimeHttpClient {
                 .await
                 .ok_or("telemetry request task disappeared")??
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::RuntimeHttpClient;
+    use bytes::Bytes;
+    use codex_http_client::ClientRouteClass;
+    use codex_http_client::HttpClientFactory;
+    use codex_http_client::OutboundProxyPolicy;
+    use opentelemetry_http::HttpClient;
+    use pretty_assertions::assert_eq;
+    use std::time::Duration;
+    use tokio::io::AsyncReadExt;
+    use tokio::io::AsyncWriteExt;
+
+    #[tokio::test]
+    async fn http_rejections_preserve_status_headers_and_body_for_sdk_retry_classification() {
+        for status in [200, 400, 429, 500, 503] {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+                .await
+                .expect("bind collector");
+            let endpoint = format!("http://{}/v1/metrics", listener.local_addr().unwrap());
+            let server = tokio::spawn(async move {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                let mut request = Vec::new();
+                while !request.ends_with(b"\r\n\r\n") {
+                    assert!(request.len() < 4096, "request headers must be bounded");
+                    request.push(stream.read_u8().await.unwrap());
+                }
+                let response = format!(
+                    "HTTP/1.1 {status} Response\r\nContent-Length: 9\r\nRetry-After: 3\r\nConnection: close\r\n\r\ncollector"
+                );
+                stream.write_all(response.as_bytes()).await.unwrap();
+            });
+            let client = RuntimeHttpClient {
+                client: HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault)
+                    .build_client(&endpoint, ClientRouteClass::Other)
+                    .expect("build client"),
+                timeout: Duration::from_secs(5),
+                runtime: tokio::runtime::Handle::current(),
+            };
+            let response = client
+                .send_bytes(http::Request::post(endpoint).body(Bytes::new()).unwrap())
+                .await
+                .expect("HTTP responses are not transport failures");
+            assert_eq!(response.status().as_u16(), status);
+            assert_eq!(response.headers()["retry-after"], "3");
+            assert_eq!(response.body().as_ref(), b"collector");
+            server.await.unwrap();
+        }
     }
 }

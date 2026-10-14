@@ -319,6 +319,13 @@ where
 
         let mut visitor = MessageVisitor::default();
         event.record(&mut visitor);
+        // Export failures are ERROR events in newer SDKs. Persisting one would
+        // emit another log-write metric and restart the same failed export.
+        if target == "opentelemetry_sdk"
+            && visitor.event_name.as_deref() == Some("PeriodicReader.ExportError")
+        {
+            return;
+        }
         // OTLP gRPC connections run on their own task, so an unsolicited PING
         // ACK can emit this benign warning after every otherwise successful
         // export. Drop only that warning before queue/drop accounting; other
@@ -577,10 +584,14 @@ async fn flush(
 struct MessageVisitor {
     message: Option<String>,
     thread_id: Option<String>,
+    event_name: Option<String>,
 }
 
 impl MessageVisitor {
     fn record_field(&mut self, field: &Field, value: String) {
+        if field.name() == "name" && self.event_name.is_none() {
+            self.event_name = Some(value.clone());
+        }
         if field.name() == "message" && self.message.is_none() {
             self.message = Some(value.clone());
         }

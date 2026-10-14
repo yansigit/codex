@@ -949,6 +949,27 @@ impl ThreadManager {
         self.state.get_thread(thread_id).await
     }
 
+    /// Board hosts may reach internal runtimes only through a matching explicit connection.
+    pub(crate) async fn get_thread_for_board(
+        &self,
+        thread_id: ThreadId,
+        connection: &codex_agent_message_board_extension::LocalBoardConnection,
+    ) -> CodexResult<Arc<CodexThread>> {
+        self.state
+            .threads
+            .read()
+            .await
+            .get(&thread_id)
+            .filter(|thread| {
+                thread
+                    .thread_extension_data()
+                    .get::<codex_agent_message_board_extension::LocalBoardConnection>()
+                    .is_some_and(|other| connection.same_board(&other))
+            })
+            .cloned()
+            .ok_or(CodexErr::ThreadNotFound(thread_id))
+    }
+
     /// Updates metadata for loaded and cold threads through one entrypoint.
     ///
     /// Loaded threads route through `CodexThread`/`LiveThread`, so metadata changes stay ordered

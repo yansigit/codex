@@ -629,7 +629,8 @@ trust_level = "trusted"
                     .find(|metric| metric["name"] == "codex.daemon.update")
                     .context("handoff metric")?;
                 let update_point = &update["sum"]["dataPoints"][0];
-                assert_eq!(update_point["asInt"], 1);
+                // OTLP JSON represents 64-bit integers as decimal strings.
+                assert_eq!(update_point["asInt"].as_str(), Some("1"));
             }
             let point = exported
                 .iter()

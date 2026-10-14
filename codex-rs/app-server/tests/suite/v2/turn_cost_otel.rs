@@ -268,7 +268,8 @@ metrics_exporter = {{ otlp-http = {{ endpoint = "{}/metrics", protocol = "json" 
         }
     }
     assert_eq!(points.len(), 1);
-    assert_eq!(points[0]["asInt"], json!(1250001));
+    // OTLP JSON represents 64-bit integers as decimal strings.
+    assert_eq!(points[0]["asInt"], json!("1250001"));
     let attrs: std::collections::BTreeMap<_, _> = points[0]["attributes"]
         .as_array()
         .expect("attributes")
