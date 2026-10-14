@@ -59,6 +59,8 @@ configure_inner_env() {
     export CARGO_NET_GIT_FETCH_WITH_CLI="${CARGO_NET_GIT_FETCH_WITH_CLI:-true}"
     export RUST_MIN_STACK="${RUST_MIN_STACK:-67108864}"
     export RUST_BACKTRACE="${RUST_BACKTRACE:-1}"
+    # Keep panic traces without changing anyhow's user-facing error output.
+    export RUST_LIB_BACKTRACE=0
     export TMPDIR="${TMPDIR:-/tmp}"
     mkdir -p "$HOME" "$CARGO_TARGET_DIR" "$SCCACHE_DIR" "$TMPDIR"
     if ! git config --global --get-all safe.directory 2>/dev/null | grep -qx "$ROOT"; then
@@ -97,6 +99,16 @@ prepare_v8() {
 
 run_helpers() {
     cargo build --locked -p codex-cli -p codex-code-mode-host -p codex-rmcp-client --bins
+}
+
+run_sandbox_check() {
+    cargo build --locked -p codex-bwrap --bin codex-bwrap
+    # Exercise the bundled helper, which may have different AppArmor rules
+    # from the distribution's /usr/bin/bwrap. Fail before the full build.
+    "${CARGO_TARGET_DIR}/debug/codex-bwrap" \
+        --unshare-user --unshare-pid --unshare-net --uid 0 --gid 0 \
+        --ro-bind / / --dev /dev --proc /proc --die-with-parent \
+        -- python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); s.close()'
 }
 
 phase() {
@@ -166,6 +178,7 @@ run_inner() {
     case "$mode" in
         full)
             phase inputs prepare_v8
+            phase sandbox run_sandbox_check
             phase fmt run_fmt
             phase clippy run_clippy
             phase build run_build
@@ -192,6 +205,7 @@ run_inner() {
                     package_args+=(-p "$package")
                 done
                 phase inputs prepare_v8
+                phase sandbox run_sandbox_check
                 phase clippy cargo clippy --locked --tests "${package_args[@]}" -- -D warnings
                 phase helpers run_helpers
                 local -a test_args=(nextest run --locked --no-fail-fast --test-threads "${CARGO_BUILD_JOBS}" "${package_args[@]}")
@@ -348,7 +362,6 @@ run_outer() {
     local -a run_args=(
         run --rm
         --user "$(id -u):$(id -g)"
-        --network=host
         -e NYACODE_VERIFY_INNER=1
         -e HOME="$CONTAINER_HOME"
         -e CARGO_HOME=/usr/local/cargo
@@ -363,10 +376,13 @@ run_outer() {
         -e CARGO_TERM_COLOR=always
         -e RUST_MIN_STACK=67108864
         -e RUST_BACKTRACE=1
+        -e RUST_LIB_BACKTRACE=0
         -e TMPDIR=/tmp
         -w "$CONTAINER_SRC"
         --ulimit "stack=67108864:67108864"
         --cap-add SYS_ADMIN
+        --cap-add NET_ADMIN
+        --cap-add SYS_PTRACE
         --security-opt seccomp=unconfined
     )
     if [[ -n "${CARGO_BUILD_JOBS:-}" ]]; then
@@ -374,7 +390,9 @@ run_outer() {
     fi
     if [[ "$engine_bin" == "podman" ]]; then
         run_args+=(--userns keep-id --security-opt label=disable)
-    elif [[ -d /sys/kernel/security/apparmor ]]; then
+    else
+        # Docker can enforce AppArmor even when securityfs is not visible to
+        # this caller. "unconfined" also works when AppArmor is unavailable.
         run_args+=(--security-opt apparmor=unconfined)
     fi
     for spec in "${mounts[@]}"; do
