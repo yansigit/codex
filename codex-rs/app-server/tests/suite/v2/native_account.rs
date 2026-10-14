@@ -1,5 +1,6 @@
 use anyhow::Result;
 use app_test_support::TestAppServer;
+use app_test_support::TestAppServerBuilder;
 use codex_app_server_protocol::ThreadForkParams;
 use codex_app_server_protocol::ThreadForkResponse;
 use codex_app_server_protocol::ThreadResumeParams;
@@ -17,6 +18,19 @@ use tokio_util::sync::CancellationToken;
 
 const READ_TIMEOUT: Duration = Duration::from_secs(30);
 const API_KEY: &str = "dummyfixturetoken";
+
+// Account and selection fixtures exercise no model tools. Give this hosted
+// runtime an explicit empty ceiling instead of weakening its startup contract.
+fn account_server(codex_home: &std::path::Path) -> Result<TestAppServerBuilder> {
+    let policy = codex_home.join("account-test-host-policy.json");
+    std::fs::write(&policy, r#"{"version":2,"allowed_tools":[]}"#)?;
+    Ok(TestAppServer::builder()
+        .with_codex_home(codex_home)
+        .with_env_overrides(&[(
+            "CODEX_HOST_TOOL_POLICY",
+            Some(policy.to_string_lossy().as_ref()),
+        )]))
+}
 
 fn write_claude_config(codex_home: &std::path::Path) -> Result<()> {
     std::fs::write(
@@ -90,8 +104,7 @@ async fn native_token_login_read_and_logout_are_provider_scoped() -> Result<()> 
         )
         .await?;
 
-    let mut server = TestAppServer::builder()
-        .with_codex_home(codex_home.path())
+    let mut server = account_server(codex_home.path())?
         .without_auto_env()
         .with_env_overrides(&[("ANTHROPIC_API_KEY", None), ("OPENAI_API_KEY", None)])
         .build_initialized_with_timeout(READ_TIMEOUT)
@@ -142,8 +155,7 @@ async fn environment_token_override_rejects_logout_without_deleting_stored_accou
         )
         .await?;
 
-    let mut server = TestAppServer::builder()
-        .with_codex_home(codex_home.path())
+    let mut server = account_server(codex_home.path())?
         .without_auto_env()
         .with_env_overrides(&[
             ("ANTHROPIC_API_KEY", Some(API_KEY)),
@@ -200,8 +212,7 @@ async fn native_provider_selection_survives_fork_and_cold_resume() -> Result<()>
         )
         .await?;
 
-    let mut server = TestAppServer::builder()
-        .with_codex_home(codex_home.path())
+    let mut server = account_server(codex_home.path())?
         .with_env_overrides(&[("OPENAI_API_KEY", None)])
         .build_initialized_with_timeout(READ_TIMEOUT)
         .await?;
@@ -255,8 +266,7 @@ async fn native_provider_selection_survives_fork_and_cold_resume() -> Result<()>
     assert_eq!(forked.model, "glm-5.3");
 
     server.shutdown_gracefully().await?;
-    let mut restarted = TestAppServer::builder()
-        .with_codex_home(codex_home.path())
+    let mut restarted = account_server(codex_home.path())?
         .with_env_overrides(&[("OPENAI_API_KEY", None)])
         .build_initialized_with_timeout(READ_TIMEOUT)
         .await?;
@@ -277,8 +287,7 @@ async fn native_provider_selection_survives_fork_and_cold_resume() -> Result<()>
 async fn native_account_pool_revision_redaction_and_named_logout() -> Result<()> {
     let home = TempDir::new()?;
     write_claude_config(home.path())?;
-    let mut server = TestAppServer::builder()
-        .with_codex_home(home.path())
+    let mut server = account_server(home.path())?
         .without_auto_env()
         .with_env_overrides(&[("ANTHROPIC_API_KEY", None), ("OPENAI_API_KEY", None)])
         .build_initialized_with_timeout(READ_TIMEOUT)
