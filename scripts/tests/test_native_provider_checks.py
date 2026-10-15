@@ -120,6 +120,39 @@ class NativeProviderChecksTest(unittest.TestCase):
             summary = json.loads((root / "logs/summary.json").read_text())
             self.assertEqual(summary["result"], "failed")
 
+    def test_feature_compilation_failure_cannot_claim_compilation_passed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            manifest = root / "docs/native-providers/integration-manifest.json"
+            manifest.parent.mkdir(parents=True)
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "subsystem_packages": [],
+                        "adapter_package": "adapter",
+                        "single_provider_features": [],
+                        "focused_test_groups": [],
+                    }
+                )
+            )
+
+            def run(command, **kwargs):
+                if command[0] == "git":
+                    return subprocess.CompletedProcess(command, 0, "a" * 40)
+                kwargs["stdout"].write("test result: ok. 1 passed; 0 failed;\n")
+                return subprocess.CompletedProcess(
+                    command, 101 if command[:2] == ["cargo", "check"] else 0
+                )
+
+            with (
+                patch.object(checks.subprocess, "run", side_effect=run),
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                checks.run_checks(root, root / "logs")
+            summary = json.loads((root / "logs/summary.json").read_text())
+            self.assertEqual(summary["result"], "failed")
+            self.assertEqual(summary["gates"]["compilation"], "failed")
+
 
 if __name__ == "__main__":
     unittest.main()

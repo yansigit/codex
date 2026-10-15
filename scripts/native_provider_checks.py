@@ -343,12 +343,19 @@ def run_checks(root: Path, artifact_dir: Path) -> list[dict[str, Any]]:
     )
 
     failed = [stage["name"] for stage in stages if stage["exit_code"] != 0]
+    compilation_stages = [
+        stage
+        for stage in stages
+        if stage["command"][:2]
+        in (["cargo", "build"], ["cargo", "check"], ["cargo", "clippy"])
+    ]
     summary = {
         "result": "failed" if failed else "passed",
         "failed_stages": failed,
         "gates": {
             "compilation": "passed"
-            if any(s["name"] == "cli-build" and s["exit_code"] == 0 for s in stages)
+            if compilation_stages
+            and all(stage["exit_code"] == 0 for stage in compilation_stages)
             else "failed",
             "deterministic_tests": "failed" if failed else "passed",
             "protocol": next(
