@@ -54,6 +54,11 @@ fn ensure_model_can_access_mcp_server(
     turn: &TurnContext,
     server: &str,
 ) -> Result<(), FunctionCallError> {
+    if !turn.config.orchestrator_mcp_enabled && server == CODEX_APPS_MCP_SERVER_NAME {
+        return Err(FunctionCallError::RespondToModel(format!(
+            "MCP server '{server}' is disabled by `orchestrator.mcp.enabled`"
+        )));
+    }
     if model_can_access_mcp_server(turn, server) {
         Ok(())
     } else {
