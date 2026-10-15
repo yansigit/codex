@@ -167,8 +167,6 @@ const DEFAULT_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs
 
 #[tokio::test]
 async fn thread_resume_materializes_paginated_metadata_before_cursor_reads() -> Result<()> {
-    use sqlx::Connection;
-
     let server = create_mock_responses_server_repeating_assistant("Done").await;
     let codex_home = TempDir::new()?;
     mock_responses_config(&server.uri()).write(codex_home.path())?;
@@ -188,13 +186,8 @@ async fn thread_resume_materializes_paginated_metadata_before_cursor_reads() -> 
     // Hold back the SQLite projection while the first turn makes its canonical
     // rollout durable. Resume must wait for persistence before reading cursors.
     let sqlite = codex_state::SqliteConfig::new_for_testing(codex_home.path().abs());
-    let mut connection = sqlx::SqliteConnection::connect_with(
-        &sqlx::sqlite::SqliteConnectOptions::new().filename(sqlite.state_db_path()),
-    )
-    .await?;
-    sqlx::query("BEGIN IMMEDIATE")
-        .execute(&mut connection)
-        .await?;
+    let pool = sqlite.open_read_write_pool(&sqlite.state_db_path()).await?;
+    let transaction = pool.begin_with("BEGIN IMMEDIATE").await?;
     let turn_id = app_server
         .send_turn_start_request(TurnStartParams {
             thread_id: started.thread.id.clone(),
@@ -226,7 +219,7 @@ async fn thread_resume_materializes_paginated_metadata_before_cursor_reads() -> 
         })
         .await?;
     tokio::time::sleep(Duration::from_millis(100)).await;
-    sqlx::query("COMMIT").execute(&mut connection).await?;
+    transaction.commit().await?;
     let resumed: ThreadResumeResponse =
         timeout(DEFAULT_READ_TIMEOUT, app_server.read_response(resume_id)).await??;
     assert_eq!(resumed.thread.id, started.thread.id);
