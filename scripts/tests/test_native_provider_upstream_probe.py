@@ -4,6 +4,7 @@ import sys
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -97,6 +98,57 @@ class NativeProviderUpstreamProbeTests(unittest.TestCase):
             self.assertEqual(git("rev-parse", "HEAD"), base_sha)
             self.assertEqual(git("status", "--porcelain"), "")
             self.assertTrue((output / "artifact-sha256.json").is_file())
+
+    def test_cleanup_failure_never_prunes_unrelated_worktrees(self):
+        with tempfile.TemporaryDirectory() as temp:
+            repo = Path(temp) / "repo"
+            repo.mkdir()
+
+            def git(*args):
+                return subprocess.check_output(
+                    ["git", "-C", str(repo), *args],
+                    text=True,
+                    stderr=subprocess.DEVNULL,
+                ).strip()
+
+            git("init", "-b", "main")
+            git(
+                "-c",
+                "user.name=Fixture",
+                "-c",
+                "user.email=fixture@example.invalid",
+                "commit",
+                "--allow-empty",
+                "-m",
+                "base",
+            )
+            unrelated = Path(temp) / "occupied"
+            git("worktree", "add", "--detach", str(unrelated))
+            # A missing but registered worktree must not be pruned by this probe.
+            import shutil
+
+            shutil.rmtree(unrelated)
+            before = git("worktree", "list", "--porcelain")
+            original = probe.command
+            calls = []
+
+            def command(root, args):
+                calls.append(args)
+                if args[:2] == ["worktree", "remove"]:
+                    return subprocess.CompletedProcess(
+                        args, 1, "", "fixture removal failure"
+                    )
+                return original(root, args)
+
+            with patch.object(probe, "command", side_effect=command):
+                result = probe.run_probe(
+                    repo, str(repo), "main", Path(temp) / "artifacts"
+                )
+            self.assertEqual(result["worktree_cleanup"], "failed")
+            self.assertFalse(any(args[:2] == ["worktree", "prune"] for args in calls))
+            self.assertIn(str(unrelated), before)
+            self.assertIn(str(unrelated), git("worktree", "list", "--porcelain"))
+            self.assertIn("deployment", result["outstanding_gates"])
 
     def test_fetch_failure_still_writes_artifacts_and_leaves_checkout_clean(
         self,

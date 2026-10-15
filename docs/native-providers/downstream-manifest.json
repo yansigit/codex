@@ -132,5 +132,75 @@
       ],
       "removal_condition": "Upstream dependency and feature policies cover the supported provider matrix."
     }
-  ]
+  ],
+  "regression_groups": {
+    "host-policy": [
+      "cargo",
+      "test",
+      "--locked",
+      "--manifest-path",
+      "codex-rs/Cargo.toml",
+      "-p",
+      "codex-extension-api",
+      "--lib",
+      "host_policy"
+    ],
+    "core-child-provider-routing": [
+      "python3",
+      "scripts/native_provider_checks.py"
+    ],
+    "core-collaboration-catalog": [
+      "python3",
+      "scripts/native_provider_checks.py"
+    ],
+    "native-chatgpt": [
+      "cargo",
+      "test",
+      "--locked",
+      "--manifest-path",
+      "codex-rs/Cargo.toml",
+      "-p",
+      "codex-chatgpt-chat",
+      "--lib"
+    ],
+    "provider-packages": [
+      "python3",
+      "scripts/native_provider_checks.py"
+    ],
+    "protocol-schemas": [
+      "cargo",
+      "test",
+      "--locked",
+      "--manifest-path",
+      "codex-rs/Cargo.toml",
+      "-p",
+      "codex-app-server-protocol",
+      "--lib"
+    ],
+    "nyacode-branding": [
+      "python3",
+      "-m",
+      "unittest",
+      "discover",
+      "-s",
+      "scripts/tests",
+      "-p",
+      "test_nyacode_branding.py"
+    ],
+    "container-full": [
+      "bash",
+      "scripts/verify-container.sh",
+      "full"
+    ],
+    "cargo-manifest-policy": [
+      "python3",
+      "-m",
+      "unittest",
+      "discover",
+      "-s",
+      ".github/scripts",
+      "-p",
+      "test_verify_cargo_workspace_manifests.py"
+    ]
+  }
 }

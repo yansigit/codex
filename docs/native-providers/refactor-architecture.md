@@ -171,3 +171,44 @@ without resolving them or pushing changes. GitHub schedules workflows only
 from the repository's default branch, so the daily schedule starts only after
 this workflow is on `main`. A clean merge probe reports mergeability; it does
 not replace normal tests or generated-artifact review.
+
+## Canonical runtime ownership and host admission
+
+Nyacode `main` owns source reconciliation, native provider routing, native ChatGPT
+persistence, protocol extensions and executable host enforcement. The
+[downstream manifest](downstream-manifest.json) complements the provider manifest
+with owners, owned paths, upstream hooks, obligations, regression groups and
+removal conditions. Emergency Shinyabi runtime fixes remain pending forward
+integrations until canonical main contains their ancestry and verification passes.
+Shinyabi owns orchestration, UI, database behavior, tenant lifecycle, role-policy
+contents, deployment policy and Ubuntu 26.04 application packaging.
+
+`host_policy.rs` owns parsing and immutable startup capture; `host_inventory.rs`
+owns bounded inventories. With no host settings, ordinary app-server startup
+keeps upstream behavior. `CODEX_REQUIRE_HOST_POLICY=1`, or any `CODEX_HOST_*`
+setting, requires a valid root policy. Explicit `0` cannot disable other supplied
+host settings. Root and child ceilings are intersected with thread restrictions;
+an omitted child policy denies all tools. Child admission remains in shared
+thread construction, including the newer V2 spawn path. Provider/model
+inheritance, limits, memory admission, namespace identity and MCP restrictions
+remain enforced. Catalog-provided reserved V2 schemas remain authoritative.
+
+Canonical development source keeps workspace version `0.0.0`. Shinyabi applies
+stable compatibility version stamping only while packaging an immutable source
+revision. The stable release reference and additional upstream-main ancestry are
+separate provenance fields; a stable version is not a claim to include every
+current upstream-main commit.
+
+The architecture checker uses locked Cargo metadata and declared as well as
+resolved edges, including inactive optional, feature-gated, renamed, build and
+target-specific dependencies. Production scanning includes all app-server,
+configuration and model-metadata sources. Compatibility exemptions are limited
+to wire serialization blocks, not entire files. The focused runner builds CLI
+and companion binaries before executable startup and integration checks.
+
+Merge probes record exact inputs, merge bases, affected downstream groups,
+source/generated/dependency conflict categories, merged-tree identity, timings
+and outstanding gates. Cleanup removes only the worktree created by that probe.
+A clean merge, compilation, deterministic tests, protocol verification, complete
+container verification, live acceptance and deployment readiness are separate
+claims. Local deterministic evidence never substitutes for the latter gates.

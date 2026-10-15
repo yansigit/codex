@@ -84,7 +84,17 @@ def run_probe(
         "dependency_conflicts": [],
         "merge_bases": [],
         "affected_manifest_groups": [],
-        "gates": {name: "not-run" for name in ("mergeability", "compilation", "deterministic_tests", "protocol", "live_acceptance", "deployment")},
+        "gates": {
+            name: "not-run"
+            for name in (
+                "mergeability",
+                "compilation",
+                "deterministic_tests",
+                "protocol",
+                "live_acceptance",
+                "deployment",
+            )
+        },
         "generated_conflicts": [],
         "push_attempted": False,
     }
@@ -131,13 +141,21 @@ def run_probe(
                     result["merge_bases"] = bases.stdout.splitlines()
                     changed = command(repo, ["diff", "--name-only", base, upstream])
                     record("diff --name-only inputs", changed)
-                    manifest_path = repo / "docs/native-providers/downstream-manifest.json"
+                    manifest_path = (
+                        repo / "docs/native-providers/downstream-manifest.json"
+                    )
                     if manifest_path.exists():
                         groups = json.loads(manifest_path.read_text())["groups"]
-                        result["affected_manifest_groups"] = [g["id"] for g in groups if any(
-                            path == owned or path.startswith(owned.rstrip("/") + "/")
-                            for path in changed.stdout.splitlines()
-                            for owned in g["owned_paths"] + g["upstream_hooks"])]
+                        result["affected_manifest_groups"] = [
+                            g["id"]
+                            for g in groups
+                            if any(
+                                path == owned
+                                or path.startswith(owned.rstrip("/") + "/")
+                                for path in changed.stdout.splitlines()
+                                for owned in g["owned_paths"] + g["upstream_hooks"]
+                            )
+                        ]
                     with tempfile.TemporaryDirectory(
                         prefix="codex-native-provider-probe-"
                     ) as temp:
@@ -227,9 +245,22 @@ def run_probe(
                                 result["merge_status"] = (
                                     "conflicts" if paths else "merge-failed"
                                 )
-                                dependencies = [p for p in source if Path(p).name in {"Cargo.lock", "Cargo.toml", "deny.toml", "MODULE.bazel", "MODULE.bazel.lock"}]
+                                dependencies = [
+                                    p
+                                    for p in source
+                                    if Path(p).name
+                                    in {
+                                        "Cargo.lock",
+                                        "Cargo.toml",
+                                        "deny.toml",
+                                        "MODULE.bazel",
+                                        "MODULE.bazel.lock",
+                                    }
+                                ]
                                 result["dependency_conflicts"] = dependencies
-                                result["source_conflicts"] = [p for p in source if p not in dependencies]
+                                result["source_conflicts"] = [
+                                    p for p in source if p not in dependencies
+                                ]
                                 result["generated_conflicts"] = generated
                                 if not paths:
                                     result["error"] = (
@@ -257,22 +288,30 @@ def run_probe(
             record("merge --abort (cleanup)", abort)
             remove = command(repo, ["worktree", "remove", "--force", str(worktree)])
             record("worktree remove --force <temporary-path> (cleanup)", remove)
-            result["worktree_cleanup"] = "passed" if remove.returncode == 0 else "failed"
+            result["worktree_cleanup"] = (
+                "passed" if remove.returncode == 0 else "failed"
+            )
             if result["worktree_cleanup"] != "passed":
                 result["error"] = result.get("error") or "worktree cleanup failed"
 
     result["stage_durations_seconds"] = durations
     result["duration_seconds"] = round(time.monotonic() - started, 3)
-    result["gates"]["mergeability"] = "passed" if result["merge_status"] == "clean" else "failed"
+    result["gates"]["mergeability"] = (
+        "passed" if result["merge_status"] == "clean" else "failed"
+    )
     # A clean textual merge is not compilation, protocol or live acceptance.
     checks_summary = output_dir / "focused-checks/summary.json"
     if checks_summary.exists():
         stages = json.loads(checks_summary.read_text()).get("stages", [])
         builds = [s for s in stages if s["name"] == "cli-build"]
         if builds:
-            result["gates"]["compilation"] = "passed" if all(s["exit_code"] == 0 for s in builds) else "failed"
+            result["gates"]["compilation"] = (
+                "passed" if all(s["exit_code"] == 0 for s in builds) else "failed"
+            )
         result["gates"]["deterministic_tests"] = result["focused_checks"]
-    result["outstanding_gates"] = [k for k, v in result["gates"].items() if v != "passed"]
+    result["outstanding_gates"] = [
+        k for k, v in result["gates"].items() if v != "passed"
+    ]
     (output_dir / "probe.json").write_text(json.dumps(result, indent=2) + "\n")
     (output_dir / "source-conflicts.txt").write_text(
         "\n".join(result["source_conflicts"]) + "\n"

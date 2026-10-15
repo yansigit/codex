@@ -52,7 +52,12 @@ class NativeProviderChecksTest(unittest.TestCase):
                         self.assertIn(helper.name, command)
                         helper.parent.mkdir(parents=True, exist_ok=True)
                         helper.touch()
-                if command[0] == "cargo" and command[1] in {"test", "check", "clippy", "build"}:
+                if command[0] == "cargo" and command[1] in {
+                    "test",
+                    "check",
+                    "clippy",
+                    "build",
+                }:
                     self.assertIn("--locked", command)
                 if command[:2] == ["cargo", "test"]:
                     if "codex-core" in command and not all(

@@ -15,6 +15,7 @@ on:
       - "scripts/install/**"
       - "codex-cli/**"
       - "scripts/tests/test_native_provider_*.py"
+      - "scripts/tests/test_host_startup.py"
       - "docs/native-providers/**"
       - ".github/workflows/native-providers.yml"
   push:
@@ -27,6 +28,7 @@ on:
       - "scripts/install/**"
       - "codex-cli/**"
       - "scripts/tests/test_native_provider_*.py"
+      - "scripts/tests/test_host_startup.py"
       - "docs/native-providers/**"
       - ".github/workflows/native-providers.yml"
   workflow_dispatch:

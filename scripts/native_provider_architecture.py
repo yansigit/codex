@@ -375,11 +375,24 @@ def validate(
         source = without_inline_test_modules(path.read_text())
         if scan_path in compatibility_paths:
             if scan_path == "codex-rs/model-provider-info/src/lib.rs":
-                for declaration in (r"pub enum WireApi", r"impl WireApi", r"impl fmt::Display for WireApi", r"impl<'de> Deserialize<'de> for WireApi"):
-                    source = re.sub(r"(?ms)^" + declaration + r"[^\n]*\{.*?^}\n", "", source)
+                for declaration in (
+                    r"pub enum WireApi",
+                    r"impl WireApi",
+                    r"impl fmt::Display for WireApi",
+                    r"impl<'de> Deserialize<'de> for WireApi",
+                ):
+                    source = re.sub(
+                        r"(?ms)^" + declaration + r"[^\n]*\{.*?^}\n", "", source
+                    )
             elif scan_path == "codex-rs/config/src/thread_config/remote.rs":
-                source = re.sub(r"(?ms)^    let wire_api = match proto::WireApi::try_from\(provider.wire_api\) \{.*?^    };", "", source)
-                source = re.sub(r"(?ms)^#\[cfg\(test\)\]\nfn proto_wire_api\(.*?^}\n", "", source)
+                source = re.sub(
+                    r"(?ms)^    let wire_api = match proto::WireApi::try_from\(provider.wire_api\) \{.*?^    };",
+                    "",
+                    source,
+                )
+                source = re.sub(
+                    r"(?ms)^#\[cfg\(test\)\]\nfn proto_wire_api\(.*?^}\n", "", source
+                )
             else:
                 errors.append(f"unknown serialization compatibility path: {scan_path}")
         if any(pattern.search(source) for pattern in branch_patterns):
@@ -439,7 +452,15 @@ def validate(
     return errors
 
 
-DOWNSTREAM_GROUPS = {"host-enforcement", "chatgpt-persistence", "protocol", "branding", "packaging", "dependencies"}
+DOWNSTREAM_GROUPS = {
+    "host-enforcement",
+    "chatgpt-persistence",
+    "protocol",
+    "branding",
+    "packaging",
+    "dependencies",
+}
+
 
 def validate_downstream(root: Path) -> list[str]:
     path = root / "docs/native-providers/downstream-manifest.json"
@@ -450,19 +471,47 @@ def validate_downstream(root: Path) -> list[str]:
     errors = []
     groups = manifest.get("groups", [])
     ids = [group.get("id") for group in groups]
-    if manifest.get("schema_version") != 1 or set(ids) != DOWNSTREAM_GROUPS or len(ids) != len(set(ids)):
+    if (
+        manifest.get("schema_version") != 1
+        or set(ids) != DOWNSTREAM_GROUPS
+        or len(ids) != len(set(ids))
+    ):
         errors.append("downstream manifest must contain each owned group exactly once")
+    regressions = manifest.get("regression_groups", {})
+    for name, command in regressions.items():
+        if (
+            not isinstance(command, list)
+            or not command
+            or not all(isinstance(v, str) and v for v in command)
+        ):
+            errors.append(f"invalid downstream regression command: {name}")
+        elif command[0] == "cargo" and "--locked" not in command:
+            errors.append(f"unlocked downstream regression command: {name}")
     for group in groups:
+        for regression in group.get("regression_groups", []):
+            if regression not in regressions:
+                errors.append(f"unknown downstream regression group: {regression}")
         for key in ("owner", "purpose", "removal_condition"):
             if not isinstance(group.get(key), str) or not group[key].strip():
                 errors.append(f"downstream {group.get('id')}: missing {key}")
-        for key in ("owned_paths", "upstream_hooks", "obligations", "regression_groups"):
-            if not isinstance(group.get(key), list) or not group[key] or not all(isinstance(v, str) and v for v in group[key]):
+        for key in (
+            "owned_paths",
+            "upstream_hooks",
+            "obligations",
+            "regression_groups",
+        ):
+            if (
+                not isinstance(group.get(key), list)
+                or not group[key]
+                or not all(isinstance(v, str) and v for v in group[key])
+            ):
                 errors.append(f"downstream {group.get('id')}: missing {key}")
         for name in group.get("owned_paths", []) + group.get("upstream_hooks", []):
             path = root / name
             if not path.resolve().is_relative_to(root.resolve()) or not path.exists():
-                errors.append(f"downstream {group.get('id')}: missing or unowned path {name}")
+                errors.append(
+                    f"downstream {group.get('id')}: missing or unowned path {name}"
+                )
     return errors
 
 
