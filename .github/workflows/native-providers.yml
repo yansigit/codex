@@ -33,6 +33,11 @@ on:
       - ".github/workflows/native-providers.yml"
   workflow_dispatch:
     inputs:
+      release_validation:
+        description: Verify this exact source revision without merging upstream drift
+        required: false
+        default: false
+        type: boolean
       upstream_ref:
         description: Upstream ref to probe
         required: false

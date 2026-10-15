@@ -1698,9 +1698,9 @@ fn code_mode_namespace_name<'a>(
         .map(|namespace_description| namespace_description.name.as_str())
 }
 
+#[derive(Clone)]
+struct HostThreadIdentity(String);
+
 #[cfg(test)]
 #[path = "spec_plan_tests.rs"]
 mod tests;
-
-#[derive(Clone)]
-struct HostThreadIdentity(String);

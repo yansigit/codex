@@ -215,14 +215,13 @@ impl GoalService {
             .map_err(|err| {
                 GoalServiceError::Internal(format!("failed to read thread goal: {err}"))
             })?;
-        if let Some(expected) = expected_status {
-            if existing_goal.as_ref().map(|goal| goal.status)
+        if let Some(expected) = expected_status
+            && existing_goal.as_ref().map(|goal| goal.status)
                 != Some(state_status_from_protocol(expected))
-            {
-                return Err(GoalServiceError::InvalidRequest(
-                    "host goal activation superseded".to_string(),
-                ));
-            }
+        {
+            return Err(GoalServiceError::InvalidRequest(
+                "host goal activation superseded".to_string(),
+            ));
         }
         if objective.is_none() && existing_goal.is_none() {
             return Err(GoalServiceError::InvalidRequest(format!(

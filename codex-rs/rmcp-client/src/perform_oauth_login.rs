@@ -936,6 +936,96 @@ fn append_query_param(url: &str, key: &str, value: Option<&str>) -> String {
     format!("{url}{separator}{key}={encoded}")
 }
 
+/// Remove local credentials before attempting remote revocation. Native storage
+/// and issuer validation stay authoritative; no token crosses the host API.
+#[allow(clippy::too_many_arguments)]
+pub async fn disconnect_oauth(
+    name: &str,
+    server_url: &str,
+    store: OAuthCredentialsStoreMode,
+    keyring: AuthKeyringBackendKind,
+    http_headers: Option<HashMap<String, String>>,
+    env_http_headers: Option<HashMap<String, String>>,
+    http_client: Arc<dyn HttpClient>,
+) -> Result<(bool, String)> {
+    use oauth2::TokenResponse;
+    let credentials = crate::stored_oauth_credentials(name, server_url, store, keyring);
+    let removed = crate::delete_oauth_tokens(name, server_url, store, keyring).await?;
+    let Some(tokens) = credentials? else {
+        return Ok((removed, "no_credentials".to_string()));
+    };
+    let revocation = async {
+        let headers = build_default_headers(http_headers, env_http_headers)?;
+        let adapter = Arc::new(OAuthHttpClientAdapter::new_with_redirect_mode(
+            http_client,
+            headers,
+            server_url,
+            false,
+            StreamableHttpRedirectMode::AgentPluginV1,
+        )?);
+        let manager =
+            AuthorizationManager::new_with_oauth_http_client(server_url, adapter.clone()).await?;
+        let metadata = manager.resolve_metadata().await?.metadata;
+        validate_authorization_server_endpoints(&metadata)?;
+        if metadata.issuer.as_deref().filter(|v| !v.is_empty())
+            != tokens.issuer.as_deref().filter(|v| !v.is_empty())
+            || tokens.issuer.is_none()
+        {
+            bail!("revocation issuer changed");
+        }
+        let Some(endpoint) = metadata
+            .additional_fields
+            .get("revocation_endpoint")
+            .and_then(serde_json::Value::as_str)
+        else {
+            return Ok::<_, anyhow::Error>("unsupported".to_string());
+        };
+        let endpoint = Url::parse(endpoint)?;
+        let issuer = Url::parse(tokens.issuer.as_deref().unwrap_or_default())?;
+        if endpoint.origin() != issuer.origin() || !matches!(endpoint.scheme(), "http" | "https") {
+            bail!("untrusted revocation endpoint");
+        }
+        let mut values = vec![(
+            tokens.token_response.0.access_token().secret().clone(),
+            "access_token",
+        )];
+        if let Some(refresh) = tokens.token_response.0.refresh_token() {
+            values.push((refresh.secret().clone(), "refresh_token"));
+        }
+        let mut failed = false;
+        for (token, hint) in values {
+            let body = url::form_urlencoded::Serializer::new(String::new())
+                .append_pair("token", &token)
+                .append_pair("token_type_hint", hint)
+                .append_pair("client_id", &tokens.client_id)
+                .finish()
+                .into_bytes();
+            let request = http::Request::builder()
+                .method("POST")
+                .uri(endpoint.as_str())
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(body)?;
+            match adapter
+                .execute_request(
+                    request,
+                    rmcp::transport::auth::OAuthHttpRedirectPolicy::Stop,
+                    Some(Duration::from_secs(5)),
+                )
+                .await
+            {
+                Ok(response) if response.status().is_success() => {}
+                _ => failed = true,
+            }
+        }
+        Ok(if failed { "failed" } else { "revoked" }.to_string())
+    };
+    let status = match timeout(Duration::from_secs(12), revocation).await {
+        Ok(Ok(status)) => status,
+        _ => "failed".to_string(),
+    };
+    Ok((removed, status))
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -1585,94 +1675,4 @@ mod tests {
 
         assert_eq!(url, "not a url?resource=api%2Fresource");
     }
-}
-
-/// Remove local credentials before attempting remote revocation. Native storage
-/// and issuer validation stay authoritative; no token crosses the host API.
-#[allow(clippy::too_many_arguments)]
-pub async fn disconnect_oauth(
-    name: &str,
-    server_url: &str,
-    store: OAuthCredentialsStoreMode,
-    keyring: AuthKeyringBackendKind,
-    http_headers: Option<HashMap<String, String>>,
-    env_http_headers: Option<HashMap<String, String>>,
-    http_client: Arc<dyn HttpClient>,
-) -> Result<(bool, String)> {
-    use oauth2::TokenResponse;
-    let credentials = crate::stored_oauth_credentials(name, server_url, store, keyring);
-    let removed = crate::delete_oauth_tokens(name, server_url, store, keyring).await?;
-    let Some(tokens) = credentials? else {
-        return Ok((removed, "no_credentials".to_string()));
-    };
-    let revocation = async {
-        let headers = build_default_headers(http_headers, env_http_headers)?;
-        let adapter = Arc::new(OAuthHttpClientAdapter::new_with_redirect_mode(
-            http_client,
-            headers,
-            server_url,
-            false,
-            StreamableHttpRedirectMode::AgentPluginV1,
-        )?);
-        let manager =
-            AuthorizationManager::new_with_oauth_http_client(server_url, adapter.clone()).await?;
-        let metadata = manager.resolve_metadata().await?.metadata;
-        validate_authorization_server_endpoints(&metadata)?;
-        if metadata.issuer.as_deref().filter(|v| !v.is_empty())
-            != tokens.issuer.as_deref().filter(|v| !v.is_empty())
-            || tokens.issuer.is_none()
-        {
-            bail!("revocation issuer changed");
-        }
-        let Some(endpoint) = metadata
-            .additional_fields
-            .get("revocation_endpoint")
-            .and_then(serde_json::Value::as_str)
-        else {
-            return Ok::<_, anyhow::Error>("unsupported".to_string());
-        };
-        let endpoint = Url::parse(endpoint)?;
-        let issuer = Url::parse(tokens.issuer.as_deref().unwrap_or_default())?;
-        if endpoint.origin() != issuer.origin() || !matches!(endpoint.scheme(), "http" | "https") {
-            bail!("untrusted revocation endpoint");
-        }
-        let mut values = vec![(
-            tokens.token_response.0.access_token().secret().clone(),
-            "access_token",
-        )];
-        if let Some(refresh) = tokens.token_response.0.refresh_token() {
-            values.push((refresh.secret().clone(), "refresh_token"));
-        }
-        let mut failed = false;
-        for (token, hint) in values {
-            let body = url::form_urlencoded::Serializer::new(String::new())
-                .append_pair("token", &token)
-                .append_pair("token_type_hint", hint)
-                .append_pair("client_id", &tokens.client_id)
-                .finish()
-                .into_bytes();
-            let request = http::Request::builder()
-                .method("POST")
-                .uri(endpoint.as_str())
-                .header("content-type", "application/x-www-form-urlencoded")
-                .body(body)?;
-            match adapter
-                .execute_request(
-                    request,
-                    rmcp::transport::auth::OAuthHttpRedirectPolicy::Stop,
-                    Some(Duration::from_secs(5)),
-                )
-                .await
-            {
-                Ok(response) if response.status().is_success() => {}
-                _ => failed = true,
-            }
-        }
-        Ok(if failed { "failed" } else { "revoked" }.to_string())
-    };
-    let status = match timeout(Duration::from_secs(12), revocation).await {
-        Ok(Ok(status)) => status,
-        _ => "failed".to_string(),
-    };
-    Ok((removed, status))
 }

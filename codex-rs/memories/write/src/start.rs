@@ -108,12 +108,16 @@ static HOST_JOB: std::sync::Mutex<Option<HostMemoryStatus>> = std::sync::Mutex::
 pub fn host_status() -> HostMemoryStatus {
     HOST_JOB
         .lock()
-        .unwrap_or_else(|e| e.into_inner())
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
         .clone()
         .unwrap_or_default()
 }
 fn host_update(f: impl FnOnce(&mut HostMemoryStatus)) {
-    if let Some(state) = HOST_JOB.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
+    if let Some(state) = HOST_JOB
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .as_mut()
+    {
         f(state);
     }
 }
@@ -142,6 +146,7 @@ pub(crate) async fn host_force_stop_requested() {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn start_host_memory_task(
     thread_manager: Arc<ThreadManager>,
     auth_manager: Arc<AuthManager>,
@@ -159,7 +164,9 @@ pub fn start_host_memory_task(
         return Err("host memory maintenance requires an admitted ephemeral root".to_string());
     }
     {
-        let mut job = HOST_JOB.lock().unwrap_or_else(|e| e.into_inner());
+        let mut job = HOST_JOB
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if job.as_ref().is_some_and(|s| s.active) {
             return Err("memory maintenance is already active".to_string());
         }
