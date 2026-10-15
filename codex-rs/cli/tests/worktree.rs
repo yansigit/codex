@@ -679,7 +679,13 @@ trust_level = "trusted"
                 .flat_map(|metric| metric["sum"]["dataPoints"].as_array().into_iter().flatten())
                 .next()
                 .context("codex.tui.start data point")?;
-            assert_eq!(point["asInt"], 1);
+            // OTLP JSON may encode 64-bit integers as numbers or decimal strings.
+            assert_eq!(
+                point["asInt"]
+                    .as_i64()
+                    .or_else(|| point["asInt"].as_str().and_then(|value| value.parse().ok())),
+                Some(1)
+            );
             let tags = point["attributes"]
                 .as_array()
                 .context("codex.tui.start attributes")?
@@ -732,7 +738,14 @@ trust_level = "trusted"
                 .collect::<Vec<_>>();
             assert_eq!(observations.len(), 2);
             for observation in observations {
-                assert_eq!(observation["asInt"], 1);
+                assert_eq!(
+                    observation["asInt"]
+                        .as_i64()
+                        .or_else(|| observation["asInt"]
+                            .as_str()
+                            .and_then(|value| value.parse().ok())),
+                    Some(1)
+                );
                 let observation_tags = observation["attributes"]
                     .as_array()
                     .context("observation attributes")?
