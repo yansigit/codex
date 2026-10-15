@@ -45,6 +45,17 @@ pub(crate) struct SpawnConfigOptions<'a> {
     pub(crate) reasoning_effort: Option<ReasoningEffort>,
 }
 
+fn validate_host_spawn_overrides(
+    hosted: bool,
+    provider: Option<&str>,
+    model: Option<&str>,
+) -> Result<(), String> {
+    if hosted && (provider.is_some() || model.is_some()) {
+        return Err("host subagents must inherit the root provider and model".to_string());
+    }
+    Ok(())
+}
+
 pub(crate) struct PreparedSpawnConfig {
     pub(crate) config: Config,
     pub(crate) role_name: Option<String>,
@@ -56,6 +67,11 @@ pub(crate) async fn prepare_agent_spawn_config(
     step_context: &StepContext,
     options: SpawnConfigOptions<'_>,
 ) -> Result<PreparedSpawnConfig, String> {
+    validate_host_spawn_overrides(
+        codex_extension_api::host_tool_policy_enabled(),
+        options.model_provider,
+        options.model,
+    )?;
     let turn = step_context.turn.as_ref();
     let mut config =
         build_agent_spawn_config(&session.get_base_instructions().await, step_context)?;
@@ -457,6 +473,14 @@ mod tests {
     use codex_model_provider_info::built_in_model_providers;
     use pretty_assertions::assert_eq;
     use std::sync::Arc;
+
+    #[test]
+    fn hosted_overrides_are_rejected_without_changing_native_routing() {
+        assert!(validate_host_spawn_overrides(true, None, None).is_ok());
+        assert!(validate_host_spawn_overrides(false, Some("cursor"), Some("model")).is_ok());
+        assert!(validate_host_spawn_overrides(true, Some("openai"), None).is_err());
+        assert!(validate_host_spawn_overrides(true, None, Some("model")).is_err());
+    }
 
     #[tokio::test]
     async fn provider_change_requires_known_provider_explicit_model_and_fresh_history() {
