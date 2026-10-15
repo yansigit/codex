@@ -2824,8 +2824,8 @@ async fn multi_agent_feature_selects_one_agent_tool_family() {
     for property in ["model", "reasoning_effort"] {
         assert!(spawn_agent_properties.contains_key(property));
     }
-    // Reserved V2 schemas must remain provider-compatible. Provider selection
-    // is inherited/enforced by the host, not an extra model-facing argument.
+    // Bundled schemas expose native routing. Catalog overrides are preserved
+    // separately, and hosted calls still enforce provider inheritance at spawn.
     assert_eq!(
         spawn_agent_properties
             .keys()
@@ -2835,6 +2835,7 @@ async fn multi_agent_feature_selects_one_agent_tool_family() {
             "fork_turns",
             "message",
             "model",
+            "model_provider",
             "reasoning_effort",
             "task_name"
         ]

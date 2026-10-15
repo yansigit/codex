@@ -655,6 +655,10 @@ fn spawn_agent_common_properties_v1(agent_type_description: &str) -> BTreeMap<St
 fn spawn_agent_common_properties_v2(agent_type_description: &str) -> BTreeMap<String, JsonSchema> {
     BTreeMap::from([
         (
+            "model_provider".to_string(),
+            JsonSchema::string(Some(SPAWN_AGENT_PROVIDER_OVERRIDE_DESCRIPTION.to_string())),
+        ),
+        (
             "message".to_string(),
             JsonSchema::string(Some(
                 "Initial plain-text task for the new agent.".to_string(),
