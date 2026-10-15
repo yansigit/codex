@@ -1,15 +1,15 @@
 """Credential-free executable checks for ordinary and hosted startup."""
 
-import json
 import http.server
-import selectors
-import threading
-import time
+import json
 import os
-from pathlib import Path
+import selectors
 import subprocess
 import tempfile
+import threading
+import time
 import unittest
+from pathlib import Path
 
 BINARY = os.environ.get("NYACODE_TEST_BINARY")
 
@@ -48,14 +48,55 @@ class HostStartupTests(unittest.TestCase):
                 )
                 + "\n"
             )
-            result = subprocess.run(
-                [BINARY, "app-server", "--stdio"],
-                input=request,
-                text=True,
-                capture_output=True,
-                env=env,
-                timeout=30,
-            )
+            command = [BINARY, "app-server", "--stdio"]
+            with tempfile.TemporaryFile() as stderr:
+                process = subprocess.Popen(
+                    command,
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=stderr,
+                    env=env,
+                )
+                output = b""
+                try:
+                    try:
+                        process.stdin.write(request.encode())
+                        process.stdin.flush()
+                    except BrokenPipeError:
+                        # Invalid host settings may terminate before the write.
+                        pass
+                    # EOF requests shutdown. Keep stdin open until initialization
+                    # replies or the process rejects startup, including on busy CI.
+                    with selectors.DefaultSelector() as selector:
+                        selector.register(process.stdout, selectors.EVENT_READ)
+                        deadline = time.monotonic() + 30
+                        while time.monotonic() < deadline:
+                            if not selector.select(max(0, deadline - time.monotonic())):
+                                self.fail("app-server startup did not reply or exit")
+                            chunk = os.read(process.stdout.fileno(), 65536)
+                            if not chunk:
+                                break
+                            output += chunk
+                            replies = [
+                                json.loads(line)
+                                for line in output.split(b"\n")[:-1]
+                                if line.startswith(b"{")
+                            ]
+                            if any(reply.get("id") == 1 for reply in replies):
+                                break
+                    remaining, _ = process.communicate(timeout=30)
+                    output += remaining
+                    stderr.seek(0)
+                    result = subprocess.CompletedProcess(
+                        command,
+                        process.returncode,
+                        output.decode(),
+                        stderr.read().decode(),
+                    )
+                finally:
+                    if process.poll() is None:
+                        process.kill()
+                        process.communicate()
             messages = [
                 json.loads(line)
                 for line in result.stdout.splitlines()
