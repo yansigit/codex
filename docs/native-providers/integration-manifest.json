@@ -38,29 +38,39 @@
     },
     {
       "name": "thread-config",
-      "packages": ["codex-config"],
+      "packages": [
+        "codex-config"
+      ],
       "minimum_tests": 1
     },
     {
       "name": "model-provider-facade",
-      "packages": ["codex-model-provider"],
+      "packages": [
+        "codex-model-provider"
+      ],
       "minimum_tests": 1
     },
     {
       "name": "model-provider-metadata",
-      "packages": ["codex-model-provider-info"],
+      "packages": [
+        "codex-model-provider-info"
+      ],
       "minimum_tests": 1
     },
     {
       "name": "core-native-provider",
-      "packages": ["codex-core"],
+      "packages": [
+        "codex-core"
+      ],
       "filter": "native_provider",
       "test_target": "lib",
       "minimum_tests": 1
     },
     {
       "name": "core-responses-retry",
-      "packages": ["codex-core"],
+      "packages": [
+        "codex-core"
+      ],
       "filter": "client::tests::",
       "test_target": "lib",
       "test_threads": 1,
@@ -68,139 +78,205 @@
     },
     {
       "name": "core-child-provider-routing",
-      "packages": ["codex-core"],
+      "packages": [
+        "codex-core"
+      ],
       "filter": "agent::child_config::tests",
       "test_target": "lib",
       "minimum_tests": 4
     },
     {
       "name": "core-child-provider-reload",
-      "packages": ["codex-core"],
+      "packages": [
+        "codex-core"
+      ],
       "test_target": "lib",
       "filter": "ensure_v2_agent_loaded_reloads_registered_unloaded_agent",
       "minimum_tests": 1
     },
     {
       "name": "core-collaboration-tools",
-      "packages": ["codex-core"],
+      "packages": [
+        "codex-core"
+      ],
       "filter": "multi_agents",
       "test_target": "lib",
       "minimum_tests": 1
     },
     {
       "name": "core-collaboration-catalog",
-      "packages": ["codex-core"],
+      "packages": [
+        "codex-core"
+      ],
       "filter": "tools::multi_agent_tool::tests",
       "test_target": "lib",
       "minimum_tests": 2
     },
     {
       "name": "core-collaboration-descriptions",
-      "packages": ["codex-core"],
+      "packages": [
+        "codex-core"
+      ],
       "test_target": "all",
       "filter": "multi_agent_tool_descriptions",
       "minimum_tests": 23
     },
     {
       "name": "core-native-mailbox-boundary",
-      "packages": ["codex-core"],
+      "packages": [
+        "codex-core"
+      ],
       "test_target": "all",
       "filter": "scenarios::mailbox_preemption",
       "minimum_tests": 7
     },
     {
       "name": "core-background-terminal-lifetime",
-      "packages": ["codex-core"],
+      "packages": [
+        "codex-core"
+      ],
       "test_target": "all",
       "filter": "unified_exec_interrupt_preserves_long_running_session",
       "minimum_tests": 1
     },
     {
       "name": "app-server-account-and-fork",
-      "packages": ["codex-app-server"],
+      "packages": [
+        "codex-app-server"
+      ],
       "test_target": "all",
       "filter": "native_account",
       "minimum_tests": 4
     },
     {
       "name": "chat-saved-storage-recovery",
-      "packages": ["codex-state"],
+      "packages": [
+        "codex-state"
+      ],
       "test_target": "lib",
       "filter": "runtime::chat::tests",
       "minimum_tests": 30
     },
     {
       "name": "chat-saved-service-recovery",
-      "packages": ["codex-app-server"],
+      "packages": [
+        "codex-app-server"
+      ],
       "test_target": "lib",
       "filter": "chat::saved::tests",
       "minimum_tests": 7
     },
     {
       "name": "schema-fixtures",
-      "packages": ["codex-app-server-protocol"],
+      "packages": [
+        "codex-app-server-protocol"
+      ],
       "filter": "schema_fixtures",
       "minimum_tests": 1
     },
     {
       "name": "cli-provider-choices",
-      "packages": ["codex-cli"],
+      "packages": [
+        "codex-cli"
+      ],
       "test_target": "bin:codex",
       "filter": "provider_cli_parses_each_supported_provider_and_rejects_unknown_values",
       "minimum_tests": 1
     },
     {
       "name": "pool-selection-and-recovery",
-      "packages": ["codex-provider-runtime"],
+      "packages": [
+        "codex-provider-runtime"
+      ],
       "test_target": "pool",
       "minimum_tests": 9
     },
     {
       "name": "pool-fifth-provider-handoffs",
-      "packages": ["codex-provider-runtime"],
+      "packages": [
+        "codex-provider-runtime"
+      ],
       "test_target": "pooled_turn",
       "minimum_tests": 6
     },
     {
       "name": "pool-account-concurrency",
-      "packages": ["codex-provider-auth"],
+      "packages": [
+        "codex-provider-auth"
+      ],
       "test_target": "accounts",
       "minimum_tests": 5
     },
     {
       "name": "pool-cli-management",
-      "packages": ["codex-cli"],
+      "packages": [
+        "codex-cli"
+      ],
       "test_target": "bin:codex",
       "filter": "provider_pool_cli",
       "minimum_tests": 1
     },
     {
       "name": "pool-rpc-compatibility",
-      "packages": ["codex-app-server-protocol"],
+      "packages": [
+        "codex-app-server-protocol"
+      ],
       "test_target": "lib",
       "filter": "provider_pool",
       "minimum_tests": 2
     },
     {
       "name": "pool-tui-management",
-      "packages": ["codex-tui"],
+      "packages": [
+        "codex-tui"
+      ],
       "test_target": "lib",
       "filter": "provider_manager",
       "minimum_tests": 1
     },
     {
       "name": "pool-tui-slash-commands",
-      "packages": ["codex-tui"],
+      "packages": [
+        "codex-tui"
+      ],
       "test_target": "lib",
       "filter": "slash",
+      "minimum_tests": 1
+    },
+    {
+      "name": "host-policy",
+      "packages": [
+        "codex-extension-api"
+      ],
+      "test_target": "lib",
+      "filter": "host_policy",
+      "minimum_tests": 5
+    },
+    {
+      "name": "native-chatgpt",
+      "packages": [
+        "codex-chatgpt-chat"
+      ],
+      "test_target": "lib",
+      "minimum_tests": 1
+    },
+    {
+      "name": "protocol-schemas",
+      "packages": [
+        "codex-app-server-protocol"
+      ],
+      "test_target": "lib",
       "minimum_tests": 1
     }
   ],
   "provider_branch_scan": {
     "scan_roots": [
-      "codex-rs/core/src",
-      "codex-rs/cli/src",
+      "codex-rs/app-server/src",
       "codex-rs/app-server/src/request_processors",
+      "codex-rs/cli/src",
+      "codex-rs/config/src",
+      "codex-rs/core/src",
+      "codex-rs/model-provider-info/src",
       "codex-rs/model-provider/src",
       "codex-rs/tui/src"
     ],
@@ -221,7 +297,12 @@
       "codex-rs/config/src/thread_config/remote.rs",
       "codex-rs/model-provider-info/src/lib.rs"
     ],
-    "provider_ids": ["cursor", "opencode-go", "claude", "antigravity"],
+    "provider_ids": [
+      "cursor",
+      "opencode-go",
+      "claude",
+      "antigravity"
+    ],
     "provider_symbols": [
       "WireApi::Cursor",
       "WireApi::OpenCodeGo",

@@ -172,6 +172,7 @@ def load_metadata(metadata_path: Path | None) -> dict[str, Any]:
         [
             "cargo",
             "metadata",
+            "--locked",
             "--manifest-path",
             str(CARGO_MANIFEST),
             "--format-version",
@@ -368,12 +369,19 @@ def validate(
             source_paths.append(path)
     for path in sorted(set(source_paths)):
         scan_path = path.relative_to(root).as_posix()
-        if scan_path in compatibility_paths:
-            continue
         if not path.is_file():
             errors.append(f"provider branch scan path is missing: {scan_path}")
             continue
         source = without_inline_test_modules(path.read_text())
+        if scan_path in compatibility_paths:
+            if scan_path == "codex-rs/model-provider-info/src/lib.rs":
+                for declaration in (r"pub enum WireApi", r"impl WireApi", r"impl fmt::Display for WireApi", r"impl<'de> Deserialize<'de> for WireApi"):
+                    source = re.sub(r"(?ms)^" + declaration + r"[^\n]*\{.*?^}\n", "", source)
+            elif scan_path == "codex-rs/config/src/thread_config/remote.rs":
+                source = re.sub(r"(?ms)^    let wire_api = match proto::WireApi::try_from\(provider.wire_api\) \{.*?^    };", "", source)
+                source = re.sub(r"(?ms)^#\[cfg\(test\)\]\nfn proto_wire_api\(.*?^}\n", "", source)
+            else:
+                errors.append(f"unknown serialization compatibility path: {scan_path}")
         if any(pattern.search(source) for pattern in branch_patterns):
             errors.append(
                 f"provider-specific execution branch found outside registry: {scan_path}"
@@ -431,6 +439,33 @@ def validate(
     return errors
 
 
+DOWNSTREAM_GROUPS = {"host-enforcement", "chatgpt-persistence", "protocol", "branding", "packaging", "dependencies"}
+
+def validate_downstream(root: Path) -> list[str]:
+    path = root / "docs/native-providers/downstream-manifest.json"
+    try:
+        manifest = json.loads(path.read_text())
+    except (OSError, ValueError) as error:
+        return [f"downstream manifest unavailable: {error}"]
+    errors = []
+    groups = manifest.get("groups", [])
+    ids = [group.get("id") for group in groups]
+    if manifest.get("schema_version") != 1 or set(ids) != DOWNSTREAM_GROUPS or len(ids) != len(set(ids)):
+        errors.append("downstream manifest must contain each owned group exactly once")
+    for group in groups:
+        for key in ("owner", "purpose", "removal_condition"):
+            if not isinstance(group.get(key), str) or not group[key].strip():
+                errors.append(f"downstream {group.get('id')}: missing {key}")
+        for key in ("owned_paths", "upstream_hooks", "obligations", "regression_groups"):
+            if not isinstance(group.get(key), list) or not group[key] or not all(isinstance(v, str) and v for v in group[key]):
+                errors.append(f"downstream {group.get('id')}: missing {key}")
+        for name in group.get("owned_paths", []) + group.get("upstream_hooks", []):
+            path = root / name
+            if not path.resolve().is_relative_to(root.resolve()) or not path.exists():
+                errors.append(f"downstream {group.get('id')}: missing or unowned path {name}")
+    return errors
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--metadata-json", type=Path, help="use saved Cargo metadata")
@@ -454,6 +489,7 @@ def main() -> int:
         print(f"unable to load Cargo metadata: {error}", file=sys.stderr)
         return 2
     errors = validate(metadata, manifest, ROOT)
+    errors.extend(validate_downstream(ROOT))
     if errors:
         print("native provider architecture check failed:", file=sys.stderr)
         for error in errors:

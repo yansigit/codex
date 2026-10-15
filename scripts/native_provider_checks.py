@@ -38,7 +38,14 @@ def run_checks(root: Path, artifact_dir: Path) -> list[dict[str, Any]]:
         text=True,
         check=False,
     )
+    tree = subprocess.run(["git", "rev-parse", "HEAD^{tree}"], cwd=root, capture_output=True, text=True, check=False)
+    diff = subprocess.run(["git", "diff", "HEAD", "--binary"], cwd=root, capture_output=True, text=True, check=False)
     metadata = {
+        "repository_tree": tree.stdout.strip() if tree.returncode == 0 else None,
+        "working_diff_sha256": hashlib.sha256(diff.stdout.encode()).hexdigest() if diff.returncode == 0 else None,
+        "workflow_ref": env.get("GITHUB_WORKFLOW_REF"),
+        "run_id": env.get("GITHUB_RUN_ID"),
+        "run_attempt": env.get("GITHUB_RUN_ATTEMPT"),
         "repository_commit": revision.stdout.strip()
         if revision.returncode == 0
         else None,
@@ -51,6 +58,8 @@ def run_checks(root: Path, artifact_dir: Path) -> list[dict[str, Any]]:
     def run_stage(
         name: str, command: list[str], minimum_tests: int | None = None
     ) -> None:
+        if command[0] == "cargo" and command[1] in {"test", "check", "clippy", "build", "metadata"} and "--locked" not in command:
+            command.insert(2, "--locked")
         print(f"[native-provider-checks] starting {name}", flush=True)
         started = time.monotonic()
         log_path = artifact_dir / f"{len(stages) + 1:02d}-{name}.log"
@@ -168,6 +177,10 @@ def run_checks(root: Path, artifact_dir: Path) -> list[dict[str, Any]]:
         ],
     )
 
+    target = Path(env.get("CARGO_TARGET_DIR", str(root / "codex-rs/target")))
+    env["NYACODE_TEST_BINARY"] = str(target / "debug/nyacode")
+    run_stage("host-startup", [sys.executable, "-m", "unittest", "discover", "-s", "scripts/tests", "-p", "test_host_startup.py"])
+
     for group in manifest["focused_test_groups"]:
         command = ["cargo", "test", "--manifest-path", "codex-rs/Cargo.toml"]
         for package in group["packages"]:
@@ -249,6 +262,10 @@ def run_checks(root: Path, artifact_dir: Path) -> list[dict[str, Any]]:
     summary = {
         "result": "failed" if failed else "passed",
         "failed_stages": failed,
+        "gates": {"compilation": "passed" if any(s["name"] == "cli-build" and s["exit_code"] == 0 for s in stages) else "failed",
+                  "deterministic_tests": "failed" if failed else "passed",
+                  "protocol": next(("passed" if s["exit_code"] == 0 else "failed" for s in stages if s["name"] == "protocol-schemas"), "not-run"),
+                  "complete_container": "not-run", "live_acceptance": "not-run", "deployment": "not-run"},
         **metadata,
         "stages": stages,
     }

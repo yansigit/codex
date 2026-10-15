@@ -82,6 +82,19 @@ class NativeProviderArchitectureTests(unittest.TestCase):
             package["id"] for package in self.metadata["packages"]
         ]
 
+    def test_optional_renamed_build_and_target_edges_cannot_escape_boundary(self):
+        for attributes in ({"optional": True}, {"rename": "innocent"}, {"kind": "build"}, {"target": "cfg(windows)"}, {"optional": True, "uses_default_features": False, "features": ["hidden"]}):
+            with self.subTest(attributes=attributes):
+                self.metadata["packages"][0]["dependencies"] = [{"name": "codex-config", **attributes}]
+                self.assertTrue(any("reaches upstream" in e for e in architecture.validate(self.metadata, self.manifest, self.root)))
+
+    def test_compatibility_alias_file_cannot_hide_execution_branches(self):
+        path = "codex-rs/model-provider-info/src/lib.rs"
+        self.manifest["provider_branch_scan"]["allowed_compatibility_paths"] = [path]
+        self.manifest["provider_branch_scan"]["paths"].append(path)
+        (self.root / path).write_text('fn dispatch(provider: &str) { if provider == "cursor" { run(); } }')
+        self.assertTrue(any("execution branch" in e for e in architecture.validate(self.metadata, self.manifest, self.root)))
+
     def tearDown(self) -> None:
         self.temporary.cleanup()
 

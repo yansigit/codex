@@ -1,0 +1,136 @@
+{
+  "schema_version": 1,
+  "pending_forward_integrations": [
+    {
+      "source_revision": "897ac9048a18bcb29cf2aae882c962f87d1626df",
+      "destination": "Nyacode main",
+      "status": "pending",
+      "remove_when": "Canonical main contains this exact ancestry and passes focused and complete-container gates."
+    }
+  ],
+  "groups": [
+    {
+      "id": "host-enforcement",
+      "owner": "Nyacode maintainers",
+      "purpose": "Optional hosted process ceiling; Shinyabi owns role policy contents and deployment.",
+      "owned_paths": [
+        "codex-rs/ext/extension-api/src/host_policy.rs",
+        "codex-rs/ext/extension-api/src/host_inventory.rs"
+      ],
+      "upstream_hooks": [
+        "codex-rs/app-server/src/lib.rs",
+        "codex-rs/core/src/thread_manager.rs",
+        "codex-rs/core/src/config/mod.rs"
+      ],
+      "obligations": [
+        "Ordinary startup without host settings remains upstream compatible",
+        "Required or partial host settings fail closed",
+        "Children intersect ceilings, inherit provider/model, and cannot nest; startup capture is immutable",
+        "MCP privacy, resources, egress and memory admission remain enforced"
+      ],
+      "regression_groups": [
+        "host-policy",
+        "core-child-provider-routing",
+        "core-collaboration-catalog"
+      ],
+      "removal_condition": "Upstream provides equivalent immutable host admission and thread construction hooks."
+    },
+    {
+      "id": "chatgpt-persistence",
+      "owner": "Nyacode maintainers",
+      "purpose": "Native ChatGPT durable lifecycle and timestamp compatibility.",
+      "owned_paths": [
+        "codex-rs/chatgpt-chat"
+      ],
+      "upstream_hooks": [
+        "codex-rs/app-server/src/request_processors"
+      ],
+      "obligations": [
+        "Preserve recorded tool results and journals before continuation, uncertain side effects, cancellation, checkpoints and retained processes"
+      ],
+      "regression_groups": [
+        "native-chatgpt",
+        "provider-packages"
+      ],
+      "removal_condition": "Upstream offers equivalent native ChatGPT persistence and recovery."
+    },
+    {
+      "id": "protocol",
+      "owner": "Nyacode maintainers",
+      "purpose": "Versioned native and hosted RPC extensions.",
+      "owned_paths": [
+        "codex-rs/app-server-protocol/src/protocol"
+      ],
+      "upstream_hooks": [
+        "codex-rs/app-server-protocol/schema"
+      ],
+      "obligations": [
+        "Regenerate stable and experimental bundles from Rust; preserve catalog reserved V2 schemas"
+      ],
+      "regression_groups": [
+        "protocol-schemas"
+      ],
+      "removal_condition": "Upstream publishes equivalent protocol fields and capabilities."
+    },
+    {
+      "id": "branding",
+      "owner": "Nyacode maintainers",
+      "purpose": "Nyacode package and CLI identity.",
+      "owned_paths": [
+        "codex-cli",
+        "scripts/build_nyacode.py"
+      ],
+      "upstream_hooks": [
+        "codex-rs/cli/src"
+      ],
+      "obligations": [
+        "Preserve executable aliases and development workspace version"
+      ],
+      "regression_groups": [
+        "nyacode-branding"
+      ],
+      "removal_condition": "Project no longer distributes Nyacode."
+    },
+    {
+      "id": "packaging",
+      "owner": "Nyacode maintainers",
+      "purpose": "Reproducible complete container verification; Shinyabi owns Ubuntu application packaging.",
+      "owned_paths": [
+        "Containerfile",
+        "scripts/verify-container.sh",
+        "scripts/verify_container.py"
+      ],
+      "upstream_hooks": [
+        "codex-rs/Cargo.toml"
+      ],
+      "obligations": [
+        "Build companions before integration tests; locked resolution; no package exclusions"
+      ],
+      "regression_groups": [
+        "container-full"
+      ],
+      "removal_condition": "Upstream supplies equivalent complete reproducible verification."
+    },
+    {
+      "id": "dependencies",
+      "owner": "Nyacode maintainers",
+      "purpose": "Security pins and narrowly enumerated provider feature exceptions.",
+      "owned_paths": [
+        "codex-rs/Cargo.lock",
+        "codex-rs/deny.toml",
+        ".github/scripts/verify_cargo_workspace_manifests.py"
+      ],
+      "upstream_hooks": [
+        "codex-rs/Cargo.toml"
+      ],
+      "obligations": [
+        "Never downgrade security dependencies or broaden exemptions; exercise metadata-only and individual provider builds"
+      ],
+      "regression_groups": [
+        "cargo-manifest-policy",
+        "provider-packages"
+      ],
+      "removal_condition": "Upstream dependency and feature policies cover the supported provider matrix."
+    }
+  ]
+}

@@ -43,7 +43,7 @@ class NativeProviderChecksTest(unittest.TestCase):
             ]
 
             def run(command, **kwargs):
-                if command[:2] == ["git", "rev-parse"]:
+                if command[0] == "git":
                     return subprocess.CompletedProcess(command, 0, "a" * 40)
                 log = kwargs["stdout"]
                 if command[:2] == ["cargo", "build"]:
@@ -52,6 +52,8 @@ class NativeProviderChecksTest(unittest.TestCase):
                         self.assertIn(helper.name, command)
                         helper.parent.mkdir(parents=True, exist_ok=True)
                         helper.touch()
+                if command[0] == "cargo" and command[1] in {"test", "check", "clippy", "build"}:
+                    self.assertIn("--locked", command)
                 if command[:2] == ["cargo", "test"]:
                     if "codex-core" in command and not all(
                         helper.is_file() for helper in helpers
