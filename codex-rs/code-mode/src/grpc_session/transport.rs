@@ -24,7 +24,7 @@ pub(super) enum SharedTransport {
     Url {
         endpoint: String,
         http_client_factory: HttpClientFactory,
-        client: tokio::sync::Mutex<Option<(HttpClientFactory, GrpcClient)>>,
+        client: Box<tokio::sync::Mutex<Option<(HttpClientFactory, GrpcClient)>>>,
     },
     Connected(GrpcClient),
 }
@@ -34,7 +34,7 @@ impl SharedTransport {
         Self::Url {
             endpoint,
             http_client_factory,
-            client: tokio::sync::Mutex::new(None),
+            client: Box::new(tokio::sync::Mutex::new(None)),
         }
     }
 

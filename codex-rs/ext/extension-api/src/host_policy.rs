@@ -92,7 +92,7 @@ fn capture_host_state(settings: Settings) -> std::io::Result<Option<HostState>> 
 }
 
 fn parse_host_tool_policy(value: serde_json::Value) -> std::io::Result<ToolPolicy> {
-    if value.as_object().map(|o| o.len()) != Some(2) {
+    if value.as_object().map(serde_json::Map::len) != Some(2) {
         return Err(std::io::Error::other("invalid host tool policy fields"));
     }
     let version = value.get("version").and_then(serde_json::Value::as_u64);
@@ -118,24 +118,22 @@ fn parse_host_tool_policy(value: serde_json::Value) -> std::io::Result<ToolPolic
                     }
                     // Schema 2 makes namespace identity explicit. Dotted strings and
                     // wildcards never authorize a namespaced tool implicitly.
-                    if version == Some(2) {
-                        if let Some(object) = name.as_object() {
-                            if object.len() == 2 {
-                                if let (Some(namespace), Some(name)) = (
-                                    object.get("namespace").and_then(serde_json::Value::as_str),
-                                    object.get("name").and_then(serde_json::Value::as_str),
-                                ) {
-                                    let valid = |part: &str| {
-                                        !part.is_empty()
-                                            && part.bytes().all(|b| {
-                                                b.is_ascii_alphanumeric() || b == b'_' || b == b'-'
-                                            })
-                                    };
-                                    if valid(namespace) && valid(name) {
-                                        return Ok(ToolName::namespaced(namespace, name));
-                                    }
-                                }
-                            }
+                    if version == Some(2)
+                        && let Some(object) = name.as_object()
+                        && object.len() == 2
+                        && let (Some(namespace), Some(name)) = (
+                            object.get("namespace").and_then(serde_json::Value::as_str),
+                            object.get("name").and_then(serde_json::Value::as_str),
+                        )
+                    {
+                        let valid = |part: &str| {
+                            !part.is_empty()
+                                && part
+                                    .bytes()
+                                    .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+                        };
+                        if valid(namespace) && valid(name) {
+                            return Ok(ToolName::namespaced(namespace, name));
                         }
                     }
                     Err(std::io::Error::other("invalid tool name"))
@@ -189,6 +187,93 @@ fn apply_policy(init: &mut crate::ExtensionDataInit, child: bool, state: &HostSt
     policy.require_unified_exec |= host.require_unified_exec;
     policy.expose_additional_permissions &= host.expose_additional_permissions;
     init.insert(policy);
+}
+
+fn load_host_extensions(settings: &Settings) -> std::io::Result<serde_json::Value> {
+    let value: serde_json::Value =
+        match settings.get(std::ffi::OsStr::new("CODEX_HOST_EXTENSION_SNAPSHOT")) {
+            Some(path) => {
+                serde_json::from_slice(&std::fs::read(path)?).map_err(std::io::Error::other)?
+            }
+            None => serde_json::json!({"version": 1, "mcpServers": {}, "skills": []}),
+        };
+    if value.as_object().map(serde_json::Map::len) != Some(3)
+        || value["version"] != 1
+        || !value["mcpServers"].is_object()
+        || !value["skills"].as_array().is_some_and(|paths| {
+            paths.iter().all(|p| {
+                p.as_str()
+                    .is_some_and(|p| std::path::Path::new(p).is_absolute())
+            })
+        })
+    {
+        return Err(std::io::Error::other("invalid host extension snapshot"));
+    }
+    Ok(value)
+}
+pub fn host_mcp_servers() -> serde_json::Value {
+    host_state()
+        .map(|state| &state.extensions)
+        .map(|v| v["mcpServers"].clone())
+        .unwrap_or_else(|| serde_json::json!({}))
+}
+pub fn host_skill_roots() -> Vec<String> {
+    host_state()
+        .map(|state| &state.extensions)
+        .and_then(|v| v["skills"].as_array())
+        .map(|paths| {
+            paths
+                .iter()
+                .filter_map(|v| v.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn load_host_mcp_resources(settings: &Settings) -> std::io::Result<serde_json::Value> {
+    let value: serde_json::Value =
+        match settings.get(std::ffi::OsStr::new("CODEX_HOST_MCP_RESOURCE_POLICY")) {
+            None => serde_json::json!({"version": 1, "root": [], "helper": []}),
+            Some(path) => serde_json::from_slice(&std::fs::read(path)?)
+                .map_err(|_| std::io::Error::other("invalid MCP resource policy"))?,
+        };
+    let valid = |key: &str| {
+        value[key].as_array().is_some_and(|items| {
+            items.len() <= 30
+                && items.iter().all(|s| {
+                    s.as_str().is_some_and(|s| {
+                        !s.is_empty()
+                            && s.len() <= 200
+                            && s.bytes()
+                                .all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-')
+                    })
+                })
+        })
+    };
+    if value.as_object().map(serde_json::Map::len) != Some(3)
+        || value["version"] != 1
+        || !valid("root")
+        || !valid("helper")
+        || !value["helper"].as_array().is_some_and(|items| {
+            items.iter().all(|s| {
+                value["root"]
+                    .as_array()
+                    .is_some_and(|root| root.contains(s))
+            })
+        })
+    {
+        return Err(std::io::Error::other("invalid MCP resource policy"));
+    }
+    Ok(value)
+}
+pub fn host_mcp_resource_allowed(server: &str, helper: bool) -> bool {
+    if !host_tool_policy_enabled() {
+        return true;
+    }
+    host_state()
+        .map(|state| &state.resources)
+        .and_then(|v| v[if helper { "helper" } else { "root" }].as_array())
+        .is_some_and(|items| items.iter().any(|s| s.as_str() == Some(server)))
 }
 
 #[cfg(test)]
@@ -286,91 +371,4 @@ mod shinyabi_host_policy_tests {
             assert!(parse_host_tool_policy(value).is_err());
         }
     }
-}
-
-fn load_host_extensions(settings: &Settings) -> std::io::Result<serde_json::Value> {
-    let value: serde_json::Value =
-        match settings.get(std::ffi::OsStr::new("CODEX_HOST_EXTENSION_SNAPSHOT")) {
-            Some(path) => {
-                serde_json::from_slice(&std::fs::read(path)?).map_err(std::io::Error::other)?
-            }
-            None => serde_json::json!({"version": 1, "mcpServers": {}, "skills": []}),
-        };
-    if value.as_object().map(|v| v.len()) != Some(3)
-        || value["version"] != 1
-        || !value["mcpServers"].is_object()
-        || !value["skills"].as_array().is_some_and(|paths| {
-            paths.iter().all(|p| {
-                p.as_str()
-                    .is_some_and(|p| std::path::Path::new(p).is_absolute())
-            })
-        })
-    {
-        return Err(std::io::Error::other("invalid host extension snapshot"));
-    }
-    Ok(value)
-}
-pub fn host_mcp_servers() -> serde_json::Value {
-    host_state()
-        .map(|state| &state.extensions)
-        .map(|v| v["mcpServers"].clone())
-        .unwrap_or_else(|| serde_json::json!({}))
-}
-pub fn host_skill_roots() -> Vec<String> {
-    host_state()
-        .map(|state| &state.extensions)
-        .and_then(|v| v["skills"].as_array())
-        .map(|paths| {
-            paths
-                .iter()
-                .filter_map(|v| v.as_str().map(str::to_string))
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
-fn load_host_mcp_resources(settings: &Settings) -> std::io::Result<serde_json::Value> {
-    let value: serde_json::Value =
-        match settings.get(std::ffi::OsStr::new("CODEX_HOST_MCP_RESOURCE_POLICY")) {
-            None => serde_json::json!({"version": 1, "root": [], "helper": []}),
-            Some(path) => serde_json::from_slice(&std::fs::read(path)?)
-                .map_err(|_| std::io::Error::other("invalid MCP resource policy"))?,
-        };
-    let valid = |key: &str| {
-        value[key].as_array().is_some_and(|items| {
-            items.len() <= 30
-                && items.iter().all(|s| {
-                    s.as_str().is_some_and(|s| {
-                        !s.is_empty()
-                            && s.len() <= 200
-                            && s.bytes()
-                                .all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-')
-                    })
-                })
-        })
-    };
-    if value.as_object().map(|v| v.len()) != Some(3)
-        || value["version"] != 1
-        || !valid("root")
-        || !valid("helper")
-        || !value["helper"].as_array().is_some_and(|items| {
-            items.iter().all(|s| {
-                value["root"]
-                    .as_array()
-                    .is_some_and(|root| root.contains(s))
-            })
-        })
-    {
-        return Err(std::io::Error::other("invalid MCP resource policy"));
-    }
-    Ok(value)
-}
-pub fn host_mcp_resource_allowed(server: &str, helper: bool) -> bool {
-    if !host_tool_policy_enabled() {
-        return true;
-    }
-    host_state()
-        .map(|state| &state.resources)
-        .and_then(|v| v[if helper { "helper" } else { "root" }].as_array())
-        .is_some_and(|items| items.iter().any(|s| s.as_str() == Some(server)))
 }
