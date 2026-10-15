@@ -241,6 +241,7 @@ impl SkillToolContext {
                         include_cloud_skills: false,
                         mcp_resources: None,
                         executor_capability_discovery: None,
+                        executor_capability_discovery_v2: Vec::new(),
                     })
                     .await
             }
