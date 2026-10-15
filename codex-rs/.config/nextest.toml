@@ -42,6 +42,9 @@ max-threads = 4
 [test-groups.core_apply_patch_cli_integration]
 max-threads = 1
 
+[test-groups.core_compaction_large_metadata]
+max-threads = 1
+
 [test-groups.windows_sandbox_legacy_sessions]
 max-threads = 1
 
@@ -64,6 +67,14 @@ slow-timeout = { period = "30s", terminate-after = 4 }
 [[profile.default.overrides]]
 filter = 'test(approval_matrix_covers_all_modes)'
 slow-timeout = { period = "30s", terminate-after = 2 }
+
+[[profile.default.overrides]]
+# These cases serialize and retry more than 2 MiB of captured tool metadata.
+# A measured run took 83 seconds under build load. Keep the cases from competing
+# with each other and allow their existing assertions to finish.
+filter = 'package(codex-core) & test(local_compaction_retries_preserve_instructions_and_tool_metadata)'
+test-group = 'core_compaction_large_metadata'
+slow-timeout = { period = "30s", terminate-after = 4 }
 
 [[profile.default.overrides]]
 # This generates both experimental schema bundles. It exceeds 60 seconds on
