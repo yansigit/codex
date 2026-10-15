@@ -222,6 +222,7 @@ pub use windows_sandbox_config::windows_mxc_allowed_by_config;
 
 const DEFAULT_IGNORE_LARGE_UNTRACKED_DIRS: i64 = 200;
 const DEFAULT_IGNORE_LARGE_UNTRACKED_FILES: i64 = 10 * 1024 * 1024;
+const DEFAULT_ASYNC_COMPACTION_THRESHOLD_PERCENT: u8 = 65;
 
 /// Signals that a public config selected the retired `untrusted` approval policy.
 #[derive(Debug, thiserror::Error)]
@@ -660,6 +661,9 @@ pub struct Config {
     /// Zero disables turn-end compaction.
     pub model_post_turn_compact_threshold_percent: u8,
 
+    /// Percentage of the model's full context window at which background compaction starts.
+    pub async_compaction_threshold_percent: u8,
+
     /// Key into the model_providers map that specifies which provider to use.
     pub model_provider_id: String,
 
@@ -824,10 +828,10 @@ pub struct Config {
     /// Mouse wheel speed multiplier for transcript scrolling; defaults to one row per event.
     pub tui_mouse_scroll_speed: Option<f64>,
 
-    /// Override the terminal-specific default for copying transcript mouse selections.
+    /// Override the terminal default for copying transcript, footer, and composer selections.
     pub tui_copy_on_select: codex_config::types::CopyOnSelect,
 
-    /// Whether to deselect transcript text after a confirmed automatic copy.
+    /// Whether to deselect read-only transcript or footer text after confirmed automatic copy.
     pub tui_copy_on_select_clear_selection: bool,
 
     /// Right-click text paste fallback for the fullscreen TUI.
@@ -1377,6 +1381,7 @@ pub struct MultiAgentV2Config {
     pub hide_spawn_agent_metadata: bool,
     pub expose_spawn_agent_model_overrides: bool,
     pub wait_agent_enabled: bool,
+    pub disable_native_tools: bool,
     pub disable_direct_message: bool,
     pub message_board_in_memory: bool,
     pub message_board_remote: Option<codex_features::RemoteMessageBoardConfigToml>,
@@ -1400,6 +1405,7 @@ impl MultiAgentV2Config {
             hide_spawn_agent_metadata: true,
             expose_spawn_agent_model_overrides: true,
             wait_agent_enabled: true,
+            disable_native_tools: false,
             disable_direct_message: false,
             message_board_in_memory: false,
             message_board_remote: None,
@@ -2846,6 +2852,9 @@ fn resolve_multi_agent_v2_config(config_toml: &ConfigToml) -> MultiAgentV2Config
     let wait_agent_enabled = base
         .and_then(|config| config.wait_agent_enabled)
         .unwrap_or(default.wait_agent_enabled);
+    let disable_native_tools = base
+        .and_then(|config| config.disable_native_tools)
+        .unwrap_or(default.disable_native_tools);
     let disable_direct_message = base
         .and_then(|config| config.disable_direct_message)
         .unwrap_or(default.disable_direct_message);
@@ -2885,6 +2894,7 @@ fn resolve_multi_agent_v2_config(config_toml: &ConfigToml) -> MultiAgentV2Config
         hide_spawn_agent_metadata,
         expose_spawn_agent_model_overrides,
         wait_agent_enabled,
+        disable_native_tools,
         disable_direct_message,
         message_board_in_memory,
         message_board_remote: base.and_then(|config| config.message_board_remote.clone()),
@@ -3301,6 +3311,19 @@ impl Config {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 "model_post_turn_compact_threshold_percent must be between 0 and 100",
+            ));
+        }
+        let async_compaction_threshold_percent = cfg.features.as_ref()
+            .and_then(|features| features.async_compaction.as_ref())
+            .and_then(|feature| match feature {
+                FeatureToml::Enabled(_) => None,
+                FeatureToml::Config(config) => config.model_async_compact_threshold_percent,
+            })
+            .unwrap_or(DEFAULT_ASYNC_COMPACTION_THRESHOLD_PERCENT);
+        if !(1..=100).contains(&async_compaction_threshold_percent) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "model_async_compact_threshold_percent must be between 1 and 100",
             ));
         }
         if let Some(responses_api_metadata) = cfg.responses_api_metadata.as_ref() {
@@ -4395,6 +4418,7 @@ impl Config {
             model_post_turn_compact_threshold_percent: cfg
                 .model_post_turn_compact_threshold_percent
                 .unwrap_or_default(),
+            async_compaction_threshold_percent,
             model_provider_id,
             model_provider,
             cwd: resolved_cwd,
