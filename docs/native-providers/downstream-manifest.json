@@ -15,12 +15,24 @@
       "purpose": "Optional hosted process ceiling; Shinyabi owns role policy contents and deployment.",
       "owned_paths": [
         "codex-rs/ext/extension-api/src/host_policy.rs",
-        "codex-rs/ext/extension-api/src/host_inventory.rs"
+        "codex-rs/ext/extension-api/src/host_inventory.rs",
+        "codex-rs/ext/skills/src/host_roots.rs",
+        "codex-rs/ext/skills/src/host_service.rs"
       ],
       "upstream_hooks": [
         "codex-rs/app-server/src/lib.rs",
         "codex-rs/core/src/thread_manager.rs",
-        "codex-rs/core/src/config/mod.rs"
+        "codex-rs/core/src/config/mod.rs",
+        "codex-rs/core/src/agent/child_config.rs",
+        "codex-rs/core/src/agent/control/spawn.rs",
+        "codex-rs/core/src/tools",
+        "codex-rs/codex-mcp/src",
+        "codex-rs/rmcp-client/src",
+        "codex-rs/http-client/src/outbound_proxy.rs",
+        "codex-rs/ext/skills/src",
+        "codex-rs/ext/goal/src",
+        "codex-rs/ext/memories/src",
+        "codex-rs/memories/write/src"
       ],
       "obligations": [
         "Ordinary startup without host settings remains upstream compatible",
@@ -43,7 +55,11 @@
         "codex-rs/chatgpt-chat"
       ],
       "upstream_hooks": [
-        "codex-rs/app-server/src/request_processors"
+        "codex-rs/app-server/src/request_processors",
+        "codex-rs/app-server/src/chat",
+        "codex-rs/app-server/src/chat_rpc",
+        "codex-rs/state/src/runtime/chat",
+        "codex-rs/tui/src/app/native_chat"
       ],
       "obligations": [
         "Preserve recorded tool results and journals before continuation, uncertain side effects, cancellation, checkpoints and retained processes"

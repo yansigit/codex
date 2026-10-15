@@ -80,6 +80,46 @@ class NativeProviderChecksTest(unittest.TestCase):
             summary = json.loads((root / "logs/summary.json").read_text())
             self.assertEqual(summary["result"], "passed")
 
+    def test_source_movement_invalidates_otherwise_successful_checks(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            manifest = root / "docs/native-providers/integration-manifest.json"
+            manifest.parent.mkdir(parents=True)
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "subsystem_packages": [],
+                        "adapter_package": "adapter",
+                        "single_provider_features": [],
+                        "focused_test_groups": [],
+                    }
+                )
+            )
+            heads = 0
+
+            def run(command, **kwargs):
+                nonlocal heads
+                if command == ["git", "rev-parse", "HEAD"]:
+                    heads += 1
+                    return subprocess.CompletedProcess(
+                        command, 0, ("a" if heads == 1 else "b") * 40
+                    )
+                if command[0] == "git":
+                    return subprocess.CompletedProcess(command, 0, "")
+                kwargs["stdout"].write("test result: ok. 1 passed; 0 failed;\n")
+                return subprocess.CompletedProcess(command, 0)
+
+            with (
+                patch.object(checks.subprocess, "run", side_effect=run),
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                stages = checks.run_checks(root, root / "logs")
+            self.assertEqual(
+                [s["name"] for s in stages if s["exit_code"]], ["source-identity"]
+            )
+            summary = json.loads((root / "logs/summary.json").read_text())
+            self.assertEqual(summary["result"], "failed")
+
 
 if __name__ == "__main__":
     unittest.main()
