@@ -493,6 +493,7 @@ pub struct McpServerStatusSnapshot {
     pub server_infos: HashMap<String, McpServerInfo>,
     pub server_capabilities: HashMap<String, serde_json::Value>,
     pub tools_by_server: HashMap<String, HashMap<String, Tool>>,
+    pub tool_identities: HashMap<String, HashMap<String, (String, String)>>,
     pub tools_errors: HashMap<String, String>,
     pub resources: HashMap<String, Vec<Resource>>,
     pub resource_templates: HashMap<String, Vec<ResourceTemplate>>,
@@ -516,6 +517,7 @@ pub async fn collect_mcp_server_status_snapshot_with_detail(
             server_infos: HashMap::new(),
             server_capabilities: HashMap::new(),
             tools_by_server: HashMap::new(),
+            tool_identities: HashMap::new(),
             tools_errors: HashMap::new(),
             resources: HashMap::new(),
             resource_templates: HashMap::new(),
@@ -834,12 +836,23 @@ pub(crate) async fn collect_mcp_server_status_snapshot_from_manager(
     );
 
     let mut tools_by_server = HashMap::<String, HashMap<String, Tool>>::new();
+    let mut tool_identities = HashMap::<String, HashMap<String, (String, String)>>::new();
     for tool_info in tools {
         let raw_tool_name = tool_info.tool.name.to_string();
         let Some(tool) = protocol_tool_from_rmcp_tool(&raw_tool_name, &tool_info.tool) else {
             continue;
         };
         let tool_name = tool.name.clone();
+        tool_identities
+            .entry(tool_info.server_name.clone())
+            .or_default()
+            .insert(
+                tool_name.clone(),
+                (
+                    tool_info.callable_namespace.clone(),
+                    tool_info.callable_name.clone(),
+                ),
+            );
         tools_by_server
             .entry(tool_info.server_name)
             .or_default()
@@ -859,6 +872,7 @@ pub(crate) async fn collect_mcp_server_status_snapshot_from_manager(
         server_capabilities: mcp_connection_manager.list_available_server_capabilities(),
         server_infos,
         tools_by_server,
+        tool_identities,
         tools_errors,
         resources: convert_mcp_resources(resources),
         resource_templates: convert_mcp_resource_templates(resource_templates),

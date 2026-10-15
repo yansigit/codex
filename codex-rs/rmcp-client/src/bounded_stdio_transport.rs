@@ -87,6 +87,9 @@ impl BoundedStdioTransport {
         match serde_json::from_slice(line) {
             Ok(message) => Some(message),
             Err(error) => {
+                if crate::host_privacy::enabled() {
+                    return None;
+                }
                 debug!(
                     "Failed to parse local MCP server message ({}): {error}",
                     self.program_name

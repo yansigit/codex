@@ -6,6 +6,7 @@ import type { Resource } from "../Resource";
 import type { ResourceTemplate } from "../ResourceTemplate";
 import type { Tool } from "../Tool";
 import type { JsonValue } from "../serde_json/JsonValue";
+import type { HostToolIdentity } from "./HostToolIdentity";
 import type { McpAuthStatus } from "./McpAuthStatus";
 import type { McpServerConnectionStatus } from "./McpServerConnectionStatus";
 
@@ -23,6 +24,10 @@ httpOrigin: string | null, serverInfo: McpServerInfo | null,
  * Capabilities advertised by the initialized MCP server; null when unavailable.
  */
 serverCapabilities: JsonValue | null, tools: { [key in string]?: Tool },
+/**
+ * Native normalized identities keyed by raw MCP tool name.
+ */
+toolIdentities?: { [key in string]?: HostToolIdentity },
 /**
  * Tool discovery failed and no catalog was returned.
  * Null when a catalog is returned, including cached or empty catalogs.

@@ -113,7 +113,7 @@ impl McpRequestProcessor {
             .map_err(|err| internal_error(format!("failed to reload config: {err}")))
     }
 
-    pub(super) async fn load_thread(
+    pub(crate) async fn load_thread(
         &self,
         thread_id: &str,
     ) -> Result<(ThreadId, Arc<CodexThread>), JSONRPCErrorError> {
@@ -453,6 +453,7 @@ impl McpRequestProcessor {
             mut server_infos,
             mut server_capabilities,
             mut tools_by_server,
+            mut tool_identities,
             mut tools_errors,
             mut resources,
             mut resource_templates,
@@ -526,6 +527,20 @@ impl McpRequestProcessor {
                 server_info: server_infos.remove(name),
                 server_capabilities: server_capabilities.remove(name),
                 tools: tools_by_server.remove(name).unwrap_or_default(),
+                tool_identities: tool_identities
+                    .remove(name)
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|(raw, (namespace, name))| {
+                        (
+                            raw,
+                            codex_app_server_protocol::HostToolIdentity {
+                                namespace: Some(namespace),
+                                name,
+                            },
+                        )
+                    })
+                    .collect(),
                 tools_error: tools_errors.remove(name),
                 resources: resources.remove(name).unwrap_or_default(),
                 resource_templates: resource_templates.remove(name).unwrap_or_default(),
@@ -733,5 +748,65 @@ fn with_mcp_tool_call_thread_id_meta(
             Some(serde_json::Value::Object(map))
         }
         other => other,
+    }
+}
+
+impl McpRequestProcessor {
+    pub(crate) async fn mcp_server_oauth_disconnect(
+        &self,
+        params: codex_app_server_protocol::McpServerOauthDisconnectParams,
+    ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+        let config = self.load_global_config().await?;
+        let mcp = self
+            .thread_manager
+            .mcp_manager()
+            .runtime_config(&config)
+            .await;
+        let auth = self.auth_manager.auth().await;
+        let servers = codex_mcp::effective_mcp_servers(&mcp, auth.as_ref());
+        let server = servers
+            .get(&params.name)
+            .ok_or_else(|| invalid_request("MCP connection missing"))?
+            .config();
+        if matches!(server.auth, McpServerAuth::EmaAuth) {
+            return Err(invalid_request(
+                "enterprise logout requires account service",
+            ));
+        }
+        let (url, headers, env_headers) = match &server.transport {
+            McpServerTransportConfig::StreamableHttp {
+                url,
+                http_headers,
+                env_http_headers,
+                ..
+            } => (url, http_headers.clone(), env_http_headers.clone()),
+            _ => return Err(invalid_request("OAuth requires HTTP transport")),
+        };
+        let context = McpRuntimeContext::new(
+            self.thread_manager.environment_manager(),
+            config.cwd.to_path_buf(),
+        );
+        let client = context
+            .resolve_http_client(&params.name, server)
+            .map_err(|_| internal_error("MCP transport unavailable"))?;
+        let (removed, revocation) = codex_rmcp_client::disconnect_oauth(
+            &server.oauth_credential_name(&params.name),
+            url,
+            mcp.mcp_oauth_credentials_store_mode,
+            mcp.auth_keyring_backend_kind,
+            headers,
+            env_headers,
+            client,
+        )
+        .await
+        .map_err(|_| internal_error("MCP credential removal failed"))?;
+        self.thread_manager.invalidate_mcp_runtimes().await;
+        Ok(Some(
+            codex_app_server_protocol::McpServerOauthDisconnectResponse {
+                removed,
+                revocation,
+            }
+            .into(),
+        ))
     }
 }

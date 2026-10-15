@@ -14,7 +14,7 @@ mod phase2;
 mod prompts;
 mod rollout_input;
 mod runtime;
-mod start;
+pub mod start;
 mod storage;
 pub mod workspace;
 

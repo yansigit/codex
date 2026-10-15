@@ -477,6 +477,7 @@ pub(crate) fn save_oauth_tokens_with_lock_held(
     store_mode: OAuthCredentialsStoreMode,
     keyring_backend_kind: AuthKeyringBackendKind,
 ) -> Result<()> {
+    crate::host_privacy::register_tokens(tokens);
     invalidate_enterprise_credential_version(server_name, &tokens.url, lock)?;
     let keyring_store = DefaultKeyringStore;
     let mut observation = telemetry::policy(store_mode, keyring_backend_kind, Operation::Save);

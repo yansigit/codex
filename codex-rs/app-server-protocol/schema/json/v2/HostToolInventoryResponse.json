@@ -1,0 +1,66 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "HostRegisteredTool": {
+      "properties": {
+        "exposure": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "namespace": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "exposure",
+        "name"
+      ],
+      "type": "object"
+    },
+    "HostToolInventory": {
+      "properties": {
+        "model": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "tools": {
+          "items": {
+            "$ref": "#/definitions/HostRegisteredTool"
+          },
+          "type": "array"
+        },
+        "turnId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "model",
+        "provider",
+        "tools",
+        "turnId"
+      ],
+      "type": "object"
+    }
+  },
+  "properties": {
+    "inventory": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/HostToolInventory"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "title": "HostToolInventoryResponse",
+  "type": "object"
+}

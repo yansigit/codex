@@ -176,7 +176,41 @@ where
 
     async fn receive(&mut self) -> Option<RxJsonRpcMessage<RoleClient>> {
         loop {
-            let message = self.inner.receive().await?;
+            let mut message = self.inner.receive().await?;
+            if crate::host_privacy::contains(&message) {
+                let id_has_secret = match &message {
+                    JsonRpcMessage::Request(v) => crate::host_privacy::contains(&v.id),
+                    JsonRpcMessage::Response(v) => crate::host_privacy::contains(&v.id),
+                    JsonRpcMessage::Error(v) => crate::host_privacy::contains(&v.id),
+                    JsonRpcMessage::Notification(_) => false,
+                };
+                if id_has_secret {
+                    return None;
+                }
+                let error = rmcp::model::ErrorData::internal_error(
+                    "MCP response contained a configured credential and was withheld",
+                    None,
+                );
+                message = match message {
+                    JsonRpcMessage::Request(request) => {
+                        if self
+                            .inner
+                            .send(JsonRpcMessage::error(error, Some(request.id)))
+                            .await
+                            .is_err()
+                        {
+                            return None;
+                        }
+                        continue;
+                    }
+                    JsonRpcMessage::Response(response) => {
+                        JsonRpcMessage::error(error, Some(response.id))
+                    }
+                    JsonRpcMessage::Error(response) => JsonRpcMessage::error(error, response.id),
+                    JsonRpcMessage::Notification(_) => continue,
+                };
+            }
+
             if let Some(request_id) = response_id(&message) {
                 if let Some(route) = self
                     .routes

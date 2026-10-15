@@ -791,6 +791,18 @@ client_request_definitions! {
         serialization: thread_id(params.thread_id),
         response: v2::ThreadMemoryModeSetResponse,
     },
+    #[experimental("memory/maintenance")]
+    MemoryMaintenance => "memory/maintenance" {
+        params: v2::MemoryMaintenanceParams,
+        serialization: global("memory"),
+        response: v2::MemoryMaintenanceResponse,
+    },
+    #[experimental("memory/inspect")]
+    MemoryInspect => "memory/inspect" {
+        params: v2::MemoryInspectParams,
+        serialization: global("memory"),
+        response: v2::MemoryInspectResponse,
+    },
     #[experimental("memory/status")]
     MemoryStatus => "memory/status" {
         params: v2::MemoryStatusParams,
@@ -1327,6 +1339,16 @@ client_request_definitions! {
         response: v2::EnvironmentStatusResponse,
     },
 
+    McpServerOauthDisconnect => "mcpServer/oauth/disconnect" {
+        params: v2::McpServerOauthDisconnectParams,
+        serialization: mcp_oauth_server(params.name),
+        response: v2::McpServerOauthDisconnectResponse,
+    },
+    HostToolInventory => "host/toolInventory/read" {
+        params: v2::HostToolInventoryParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::HostToolInventoryResponse,
+    },
     McpServerOauthLogin => "mcpServer/oauth/login" {
         params: v2::McpServerOauthLoginParams,
         serialization: mcp_oauth_server(params.name),

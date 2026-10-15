@@ -1832,7 +1832,7 @@ impl Config {
         for (plugin_order, plugin) in loaded_plugins
             .plugins()
             .iter()
-            .filter(|plugin| plugin.is_active())
+            .filter(|plugin| plugin.is_active() && !codex_extension_api::host_tool_policy_enabled())
             .enumerate()
         {
             let mut plugin_mcp_servers = plugin.mcp_servers.clone();
@@ -1859,6 +1859,9 @@ impl Config {
             }
         }
         for registration in additional_plugin_registrations {
+            if codex_extension_api::host_tool_policy_enabled() {
+                continue;
+            }
             catalog.register(registration);
         }
         for (name, server) in self.mcp_servers.get() {
@@ -1886,9 +1889,8 @@ impl Config {
             mcp_oauth_callback_port: self.mcp_oauth_callback_port,
             mcp_oauth_callback_url: self.mcp_oauth_callback_url.clone(),
             optional_mcp_startup_grace: self.mcp_optional_startup_grace,
-            skill_mcp_dependency_install_enabled: self
-                .features
-                .enabled(Feature::SkillMcpDependencyInstall),
+            skill_mcp_dependency_install_enabled: !codex_extension_api::host_tool_policy_enabled()
+                && self.features.enabled(Feature::SkillMcpDependencyInstall),
             approval_policy: self.permissions.approval_policy.clone(),
             permission_profile: self.permissions.permission_profile().clone(),
             config_layer_stack: self.config_layer_stack.clone(),
@@ -1900,7 +1902,8 @@ impl Config {
             codex_self_exe: self.codex_self_exe.clone(),
             codex_linux_sandbox_exe: self.codex_linux_sandbox_exe.clone(),
             use_legacy_landlock: self.features.use_legacy_landlock(),
-            apps_enabled: self.features.enabled(Feature::Apps),
+            apps_enabled: self.features.enabled(Feature::Apps)
+                && !codex_extension_api::host_tool_policy_enabled(),
             prefix_mcp_tool_names: self.prefix_mcp_tool_names(),
             non_prefixed_mcp_tool_servers: if self
                 .features
@@ -4280,7 +4283,10 @@ impl Config {
             &mut startup_warnings,
         )?;
 
-        let mcp_servers = constrain_mcp_servers(cfg.mcp_servers.clone(), mcp_servers.as_ref())
+        let configured_mcp = if codex_extension_api::host_tool_policy_enabled() {
+            serde_json::from_value(codex_extension_api::host_mcp_servers()).map_err(std::io::Error::other)?
+        } else { cfg.mcp_servers.clone() };
+        let mcp_servers = constrain_mcp_servers(configured_mcp, mcp_servers.as_ref())
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("{e}")))?;
 
         let network_permission_profile = constrained_permission_profile.get().clone();

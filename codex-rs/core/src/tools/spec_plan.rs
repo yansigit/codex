@@ -118,6 +118,7 @@ struct CoreToolPlanContext<'a> {
 
 #[instrument(level = "trace", skip_all)]
 #[allow(clippy::too_many_arguments)]
+#[allow(dead_code)]
 pub(crate) fn build_tool_router(
     session: &Session,
     turn_context: &TurnContext,
@@ -163,6 +164,9 @@ pub(crate) fn build_tool_router(
         &registered_mcp_tools,
         &mut registry,
     );
+    if codex_extension_api::host_tool_policy_enabled() {
+        step_store.insert(turn_context.skills_snapshot().as_ref().clone());
+    }
     let standalone_web_search_tool = append_extension_tool_executors(
         turn_context,
         model_info,
@@ -176,6 +180,9 @@ pub(crate) fn build_tool_router(
         standalone_web_search_tool.as_slice(),
     );
 
+    turn_context
+        .extension_data
+        .insert(HostThreadIdentity(session.thread_id.to_string()));
     finalize_tool_router(
         turn_context,
         model_info,
@@ -528,6 +535,22 @@ pub(crate) fn finalize_tool_router(
         }
     }
 
+    let mut inventory = registry.entries().map(|tool| {
+        let name = tool.runtime.tool_name();
+        serde_json::json!({"namespace": name.namespace, "name": name.name, "exposure": format!("{:?}", tool.exposure)})
+    }).collect::<Vec<_>>();
+    inventory.extend(hosted_specs.iter().map(
+        |spec| serde_json::json!({"namespace": null, "name": spec.name(), "exposure": "Hosted"}),
+    ));
+    if let Some(thread) = turn_context.extension_data.get::<HostThreadIdentity>() {
+        codex_extension_api::record_host_tool_inventory(
+            thread.0.clone(),
+            serde_json::json!({
+                "turnId": turn_context.sub_id, "provider": turn_context.config.model_provider_id,
+                "model": model_info.slug, "tools": inventory,
+            }),
+        );
+    }
     let model_visible_specs = build_model_visible_specs(
         turn_context,
         model_info,
@@ -1678,3 +1701,6 @@ fn code_mode_namespace_name<'a>(
 #[cfg(test)]
 #[path = "spec_plan_tests.rs"]
 mod tests;
+
+#[derive(Clone)]
+struct HostThreadIdentity(String);

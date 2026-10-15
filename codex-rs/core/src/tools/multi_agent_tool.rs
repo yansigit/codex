@@ -31,17 +31,6 @@ pub(super) fn multi_agent_v2_handler(
         {
             // Argument transport requires these markers even without server encryption config.
             for (name, schema) in properties {
-                // Provider selection is owned by the host, and older model catalogs
-                // do not know this optional spawn argument. Keep it when the catalog
-                // still exposes model selection and the local settings permit it.
-                if handler.tool_name().name == "spawn_agent" && name == "model_provider" {
-                    if let Some(properties) = parameters.properties.as_mut()
-                        && properties.contains_key("model")
-                    {
-                        properties.insert(name, schema);
-                    }
-                    continue;
-                }
                 if schema.encrypted == Some(true) {
                     let property = parameters
                         .properties
@@ -149,9 +138,9 @@ mod tests {
     use crate::tools::handlers::multi_agents_spec::SpawnAgentToolOptions;
     use crate::tools::handlers::multi_agents_v2::SpawnAgentHandler;
 
-    #[test_case::test_case(true; "provider_selection_exposed")]
-    #[test_case::test_case(false; "provider_selection_hidden")]
-    fn catalog_override_retains_locally_enabled_provider_selection(expose: bool) {
+    #[test_case::test_case(true; "model_selection_exposed")]
+    #[test_case::test_case(false; "model_selection_hidden")]
+    fn catalog_override_preserves_reserved_v2_schema(expose: bool) {
         let handler = multi_agent_v2_handler(
             SpawnAgentHandler::new(
                 SpawnAgentToolOptions {
@@ -170,7 +159,9 @@ mod tests {
             panic!("function expected");
         };
         let properties = tool.parameters.properties.expect("object parameters");
-        assert_eq!(properties.contains_key("model_provider"), expose);
+        // The reserved V2 schema cannot gain host-only provider arguments,
+        // including when the catalog permits model selection.
+        assert!(!properties.contains_key("model_provider"));
         assert_eq!(properties["message"].encrypted, Some(true));
     }
 }

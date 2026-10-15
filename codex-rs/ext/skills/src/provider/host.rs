@@ -61,6 +61,64 @@ impl SkillProvider for HostSkillProvider {
                     "host skill provider requires a host skills snapshot",
                 ));
             };
+            if codex_extension_api::host_tool_policy_enabled()
+                && request.resource.as_str() != request.package.0
+            {
+                let skill = host_snapshot
+                    .outcome()
+                    .skills_with_enabled()
+                    .find(|(skill, enabled)| {
+                        *enabled
+                            && skill.path_to_skills_md.inferred_native_path_string()
+                                == request.package.0
+                    })
+                    .map(|(skill, _)| skill)
+                    .ok_or_else(|| SkillProviderError::new("skill package is not admitted"))?;
+                let main =
+                    std::path::PathBuf::from(skill.path_to_skills_md.inferred_native_path_string());
+                let root = tokio::fs::canonicalize(
+                    main.parent()
+                        .ok_or_else(|| SkillProviderError::new("invalid skill package"))?,
+                )
+                .await
+                .map_err(|_| SkillProviderError::new("skill package is unavailable"))?;
+                let path = tokio::fs::canonicalize(request.resource.as_str())
+                    .await
+                    .map_err(|_| SkillProviderError::new("skill resource is unavailable"))?;
+                if !path.starts_with(&root) || path == root {
+                    return Err(SkillProviderError::new(
+                        "skill resource is outside its admitted package",
+                    ));
+                }
+                use tokio::io::AsyncReadExt;
+                let file = tokio::fs::File::open(path)
+                    .await
+                    .map_err(|_| SkillProviderError::new("skill resource is unavailable"))?;
+                if !file
+                    .metadata()
+                    .await
+                    .map_err(|_| SkillProviderError::new("skill resource is unavailable"))?
+                    .is_file()
+                {
+                    return Err(SkillProviderError::new(
+                        "skill resource must be a regular file",
+                    ));
+                }
+                let mut bytes = Vec::new();
+                file.take((crate::provider::MAX_SKILL_RESOURCE_CONTENT_BYTES + 1) as u64)
+                    .read_to_end(&mut bytes)
+                    .await
+                    .map_err(|_| SkillProviderError::new("skill resource is unavailable"))?;
+                if bytes.len() > crate::provider::MAX_SKILL_RESOURCE_CONTENT_BYTES {
+                    return Err(SkillProviderError::new("skill resource is too large"));
+                }
+                let contents = String::from_utf8(bytes)
+                    .map_err(|_| SkillProviderError::new("skill resource is not UTF-8 text"))?;
+                return Ok(SkillReadResult {
+                    resource: request.resource,
+                    contents,
+                });
+            }
             // TODO(anp): Infer resource path conventions once foreign repository paths can reach this
             // provider. Despite its name, it also serves repository skills from the caller's environment;
             // the loader currently rejects foreign paths. Host-owned skills use the app-server's local

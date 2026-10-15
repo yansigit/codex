@@ -1,6 +1,23 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "definitions": {
+    "HostToolIdentity": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "namespace": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
     "McpAuthStatus": {
       "enum": [
         "unknown",
@@ -120,6 +137,13 @@
               "type": "null"
             }
           ]
+        },
+        "toolIdentities": {
+          "additionalProperties": {
+            "$ref": "#/definitions/HostToolIdentity"
+          },
+          "description": "Native normalized identities keyed by raw MCP tool name.",
+          "type": "object"
         },
         "tools": {
           "additionalProperties": {

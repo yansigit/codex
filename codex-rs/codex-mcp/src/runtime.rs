@@ -870,10 +870,14 @@ pub fn apply_http_headers_helper(
 
 impl McpRuntimeContext {
     pub fn new(environment_manager: Arc<EnvironmentManager>, local_process_cwd: PathBuf) -> Self {
-        let local_http_client = Arc::new(
-            RouteAwareHttpClient::new(environment_manager.http_client_factory().clone())
-                .with_tls_backend_fallback(),
-        );
+        let factory = environment_manager.http_client_factory().clone();
+        let factory = if std::env::var_os("CODEX_HOST_TOOL_POLICY").is_some() {
+            factory.with_enforced_proxy(std::env::var("CODEX_HOST_MCP_PROXY").unwrap_or_default())
+        } else {
+            factory
+        };
+        let local_http_client =
+            Arc::new(RouteAwareHttpClient::new(factory).with_tls_backend_fallback());
         Self {
             environment_manager,
             environment_selections: Arc::default(),
@@ -952,6 +956,19 @@ impl McpRuntimeContext {
         config: &codex_config::McpServerConfig,
         environment: Option<&Arc<Environment>>,
     ) -> Result<Arc<dyn HttpClient>, String> {
+        if std::env::var_os("CODEX_HOST_TOOL_POLICY").is_some() {
+            // Remote execution environments cannot replace the MCP network ceiling.
+            if matches!(
+                &config.transport,
+                codex_config::McpServerTransportConfig::StreamableHttp {
+                    http_headers_helper: Some(_),
+                    ..
+                }
+            ) {
+                return Err("host forbids local MCP header helper commands".to_string());
+            }
+            return Ok(self.local_http_client());
+        }
         let client = match environment {
             Some(environment) if environment.is_remote() => environment.get_http_client(),
             Some(_) | None => self.local_http_client(),

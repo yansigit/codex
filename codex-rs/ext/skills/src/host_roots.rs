@@ -53,6 +53,14 @@ async fn resolve_skill_roots_with_home_dir(
     plugin_skill_roots: Vec<PluginSkillRoot>,
     extra_skill_roots: Vec<AbsolutePathBuf>,
 ) -> Vec<HostSkillRoot> {
+    if codex_extension_api::host_tool_policy_enabled() {
+        // User files and plugin skill declarations cannot change the admitted
+        // immutable revision. Native discovery and progressive loading still run.
+        return extra_skill_roots
+            .into_iter()
+            .map(|path| local_root(path, SkillScope::User))
+            .collect();
+    }
     let mut roots =
         roots_from_layer_stack(config_layer_stack, home_dir, repository_file_system.clone());
     roots.extend(

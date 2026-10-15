@@ -181,7 +181,7 @@ impl ThreadGoalRequestProcessor {
 
         let outcome = self
             .goal_service
-            .set_thread_goal(
+            .set_thread_goal_conditional(
                 &state_db,
                 GoalSetRequest {
                     thread_id,
@@ -210,6 +210,14 @@ impl ThreadGoalRequestProcessor {
                     }
                     Ok(())
                 }),
+                if codex_extension_api::host_tool_policy_enabled()
+                    && params.objective.is_none()
+                    && status == Some(codex_protocol::protocol::ThreadGoalStatus::Active)
+                {
+                    Some(codex_protocol::protocol::ThreadGoalStatus::Paused)
+                } else {
+                    None
+                },
             )
             .await
             .map_err(goal_service_error)?;

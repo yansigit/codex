@@ -62,12 +62,14 @@ pub(crate) fn skill_tools(
     thread_store: &ExtensionData,
     executor_query: Option<SkillListQuery>,
     selected_plugins: Option<Arc<SelectedPluginSnapshot>>,
+    host_snapshot: Option<Arc<crate::HostSkillsSnapshot>>,
 ) -> Vec<Arc<dyn for<'call> ToolExecutor<ToolCall<'call>>>> {
     let Some(thread_state) = thread_store.get::<SkillsThreadState>() else {
         return Vec::new();
     };
     let cloud_available = providers.has_cloud_provider() && thread_state.cloud_skill_enabled();
-    if !cloud_available && executor_query.is_none() {
+    let host_snapshot = host_snapshot.filter(|_| codex_extension_api::host_tool_policy_enabled());
+    if !cloud_available && executor_query.is_none() && host_snapshot.is_none() {
         return Vec::new();
     }
     let mcp_resources = session_store
@@ -83,6 +85,7 @@ pub(crate) fn skill_tools(
         executor_query,
         selected_plugins,
         executor_catalog: Arc::new(OnceCell::new()),
+        host_snapshot,
     };
     vec![
         Arc::new(list::ListTool {
@@ -217,11 +220,30 @@ struct SkillToolContext {
     executor_query: Option<SkillListQuery>,
     selected_plugins: Option<Arc<SelectedPluginSnapshot>>,
     executor_catalog: Arc<OnceCell<SkillCatalog>>,
+    host_snapshot: Option<Arc<crate::HostSkillsSnapshot>>,
 }
 
 impl SkillToolContext {
     async fn catalog(&self, turn_id: &str, authority: SkillToolAuthoritySelector) -> SkillCatalog {
         match authority {
+            SkillToolAuthoritySelector::Host => {
+                let Some(host_snapshot) = self.host_snapshot.clone() else {
+                    return SkillCatalog::default();
+                };
+                self.providers
+                    .list_host_for_turn(SkillListQuery {
+                        turn_id: turn_id.to_string(),
+                        executor_roots: Vec::new(),
+                        resolved_executor_roots: Vec::new(),
+                        host_snapshot: Some(host_snapshot),
+                        include_host_skills: true,
+                        include_bundled_skills: false,
+                        include_cloud_skills: false,
+                        mcp_resources: None,
+                        executor_capability_discovery: None,
+                    })
+                    .await
+            }
             SkillToolAuthoritySelector::Cloud => {
                 if !self.cloud_available {
                     return SkillCatalog::default();
@@ -250,6 +272,7 @@ impl SkillToolContext {
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 enum SkillToolAuthoritySelector {
+    Host,
     Cloud,
     Executor,
 }
@@ -257,6 +280,7 @@ enum SkillToolAuthoritySelector {
 impl SkillToolAuthoritySelector {
     fn matches(self, authority: &SkillAuthority) -> bool {
         match self {
+            Self::Host => authority.kind == SkillSourceKind::Host,
             Self::Cloud => authority.kind == SkillSourceKind::Cloud,
             Self::Executor => authority.kind == SkillSourceKind::Executor,
         }
@@ -266,6 +290,7 @@ impl SkillToolAuthoritySelector {
 #[derive(Clone, Debug, Deserialize, Eq, Hash, JsonSchema, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub(crate) enum SkillToolAuthority {
+    Host,
     Cloud,
     Executor { id: String },
 }
@@ -273,6 +298,7 @@ pub(crate) enum SkillToolAuthority {
 impl SkillToolAuthority {
     fn selector(&self) -> SkillToolAuthoritySelector {
         match self {
+            Self::Host => SkillToolAuthoritySelector::Host,
             Self::Cloud => SkillToolAuthoritySelector::Cloud,
             Self::Executor { .. } => SkillToolAuthoritySelector::Executor,
         }
@@ -280,6 +306,9 @@ impl SkillToolAuthority {
 
     pub(crate) fn from_authority(authority: &SkillAuthority) -> Option<Self> {
         match &authority.kind {
+            SkillSourceKind::Host if codex_extension_api::host_tool_policy_enabled() => {
+                Some(Self::Host)
+            }
             SkillSourceKind::Cloud if authority.id == CODEX_APPS_MCP_SERVER_NAME => {
                 Some(Self::Cloud)
             }
@@ -383,5 +412,6 @@ fn skill_json_output<T: Serialize>(
     Ok(match authority {
         SkillToolAuthoritySelector::Cloud => Box::new(output.with_external_context()),
         SkillToolAuthoritySelector::Executor => Box::new(output),
+        SkillToolAuthoritySelector::Host => Box::new(output.with_external_context()),
     })
 }
