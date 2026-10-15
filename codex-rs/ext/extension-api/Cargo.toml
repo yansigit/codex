@@ -7,7 +7,7 @@ version.workspace = true
 [lib]
 name = "codex_extension_api"
 path = "src/lib.rs"
-test = false
+test = true
 doctest = false
 
 [lints]
