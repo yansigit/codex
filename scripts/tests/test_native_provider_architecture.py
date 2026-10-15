@@ -108,15 +108,23 @@ class NativeProviderArchitectureTests(unittest.TestCase):
         path = "codex-rs/model-provider-info/src/lib.rs"
         self.manifest["provider_branch_scan"]["allowed_compatibility_paths"] = [path]
         self.manifest["provider_branch_scan"]["paths"].append(path)
-        (self.root / path).write_text(
-            'fn dispatch(provider: &str) { if provider == "cursor" { run(); } }'
-        )
-        self.assertTrue(
-            any(
-                "execution branch" in e
-                for e in architecture.validate(self.metadata, self.manifest, self.root)
-            )
-        )
+        for source in (
+            'fn dispatch(provider: &str) { if provider == "cursor" { run(); } }',
+            "impl WireApi {\n"
+            "    pub fn native_provider_id(self) -> Option<&'static str> {\n"
+            '        Some("cursor")\n    }\n'
+            '    fn dispatch(provider: &str) { if provider == "cursor" { run(); } }\n}\n',
+        ):
+            with self.subTest(source=source):
+                (self.root / path).write_text(source)
+                self.assertTrue(
+                    any(
+                        "execution branch" in e
+                        for e in architecture.validate(
+                            self.metadata, self.manifest, self.root
+                        )
+                    )
+                )
 
     def test_downstream_manifest_requires_owned_paths_and_regression_commands(self):
         data = {

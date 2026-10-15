@@ -377,13 +377,19 @@ def validate(
             if scan_path == "codex-rs/model-provider-info/src/lib.rs":
                 for declaration in (
                     r"pub enum WireApi",
-                    r"impl WireApi",
                     r"impl fmt::Display for WireApi",
                     r"impl<'de> Deserialize<'de> for WireApi",
                 ):
                     source = re.sub(
                         r"(?ms)^" + declaration + r"[^\n]*\{.*?^}\n", "", source
                     )
+                # Only the compatibility conversion is exempt; additional methods
+                # on WireApi must still obey the registry execution boundary.
+                source = re.sub(
+                    r"(?ms)(^impl WireApi \{\n)    pub fn native_provider_id\(self\) -> Option<&'static str> \{.*?^    }\n",
+                    r"\1",
+                    source,
+                )
             elif scan_path == "codex-rs/config/src/thread_config/remote.rs":
                 source = re.sub(
                     r"(?ms)^    let wire_api = match proto::WireApi::try_from\(provider.wire_api\) \{.*?^    };",
