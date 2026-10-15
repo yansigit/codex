@@ -324,6 +324,7 @@ fn authoritative_exact_user_id_reconciles_a_recovered_submission() {
         id: message_id.clone(),
         parent_id: None,
         message: Some(rpc::ChatMessage {
+            created_at_ms: None,
             id: message_id,
             role: "user".into(),
             parts: vec![rpc::ChatMessagePart::Text {
@@ -360,6 +361,7 @@ fn temporary_memory_refresh_keeps_prior_turns_without_inventing_parent_links() {
             id: id.into(),
             parent_id: parent.map(str::to_owned),
             message: Some(rpc::ChatMessage {
+                created_at_ms: None,
                 id: id.into(),
                 role: role.into(),
                 parts: vec![rpc::ChatMessagePart::Text { text: id.into() }],
@@ -425,6 +427,7 @@ fn long_transcript_can_render_its_tail_beyond_u16_scroll() {
     let mut chat = NativeChat::default();
     chat.new_session(rpc::ChatPersistence::Temporary);
     chat.sessions[0].messages.push(rpc::ChatMessage {
+        created_at_ms: None,
         id: "fixture".into(),
         role: "assistant".into(),
         parts: vec![rpc::ChatMessagePart::Text {

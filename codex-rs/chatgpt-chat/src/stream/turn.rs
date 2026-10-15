@@ -39,6 +39,10 @@ pub enum MessagePart {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Message {
     pub id: String,
+    /// Creation time supplied by ChatGPT, in Unix milliseconds. Older journals
+    /// and messages without service metadata retain an unknown timestamp.
+    #[serde(default)]
+    pub created_at_ms: Option<i64>,
     pub role: String,
     pub parts: Vec<MessagePart>,
     pub model: Option<String>,
@@ -126,6 +130,8 @@ impl Message {
         }
         Ok(Self {
             id,
+            created_at_ms: crate::conversation::timestamp(value.get("create_time"))
+                .map_err(|_| StreamError::InvalidProtocol)?,
             role,
             parts,
             model,
@@ -259,7 +265,7 @@ impl TurnState {
         };
         if let Some(message) = message.filter(|m| !m.is_null()) {
             let visible = Message::is_visible(message)?;
-            let message = Message::parse(message)?;
+            let mut message = Message::parse(message)?;
             if message.role == "user" && message.id == self.expected_message_id {
                 self.acceptance = Acceptance::Accepted;
             }
@@ -273,6 +279,7 @@ impl TurnState {
                 self.resolved_model = Some(model.clone());
             }
             if let Some(old) = self.messages.iter_mut().find(|m| m.id == message.id) {
+                message.created_at_ms = message.created_at_ms.or(old.created_at_ms);
                 *old = message;
             } else {
                 if self.messages.len() >= 128 {
@@ -439,6 +446,54 @@ mod tests {
 
     fn message(id: &str, role: &str) -> Value {
         json!({"id":id,"author":{"role":role},"content":{"content_type":"text","parts":["fixture"]},"status":"finished_successfully","end_turn":true})
+    }
+
+    #[test]
+    fn service_creation_times_preserve_milliseconds_and_missing_times_stay_unknown() {
+        for (wire, expected) in [
+            (json!(1_700_000_000.123), Some(1_700_000_000_123)),
+            (json!("2023-11-14T22:13:20.123Z"), Some(1_700_000_000_123)),
+            (Value::Null, None),
+        ] {
+            let mut value = message("assistant", "assistant");
+            value["create_time"] = wire;
+            assert_eq!(Message::parse(&value).unwrap().created_at_ms, expected);
+        }
+        let parsed = Message::parse(&message("user", "user")).unwrap();
+        assert_eq!(parsed.created_at_ms, None);
+        let mut legacy = serde_json::to_value(parsed).unwrap();
+        legacy.as_object_mut().unwrap().remove("created_at_ms");
+        assert_eq!(
+            serde_json::from_value::<Message>(legacy)
+                .unwrap()
+                .created_at_ms,
+            None
+        );
+        for invalid in [json!(-1), json!(1e30), json!("invalid"), json!({})] {
+            let mut value = message("assistant", "assistant");
+            value["create_time"] = invalid;
+            assert!(matches!(
+                Message::parse(&value),
+                Err(StreamError::InvalidProtocol)
+            ));
+        }
+    }
+
+    #[test]
+    fn streamed_replacements_without_time_preserve_the_service_creation_time() {
+        let mut decoder = TurnDecoder::new("user".into());
+        let mut first = message("assistant", "assistant");
+        first["create_time"] = json!(1_700_000_000.123);
+        event(&mut decoder, json!({"message": first}));
+        event(
+            &mut decoder,
+            json!({"message": message("assistant", "assistant")}),
+        );
+        assert_eq!(decoder.state().messages.len(), 1);
+        assert_eq!(
+            decoder.state().messages[0].created_at_ms,
+            Some(1_700_000_000_123)
+        );
     }
 
     #[test]

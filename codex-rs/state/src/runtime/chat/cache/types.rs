@@ -45,6 +45,8 @@ pub struct ChatCachedNode {
 #[serde(deny_unknown_fields)]
 pub struct ChatCachedMessage {
     pub id: String,
+    #[serde(default)]
+    pub created_at_ms: Option<i64>,
     pub role: ChatCacheRole,
     pub parts: Vec<ChatCachedPart>,
     pub model: Option<String>,

@@ -36,6 +36,7 @@ fn new_request(draft: &ChatDraft) -> StartTemporaryTurn {
 }
 fn message(id: String, role: &str, text: &str, finished: bool) -> Message {
     Message {
+        created_at_ms: Some(1_700_000_000_123),
         id,
         role: role.into(),
         parts: vec![MessagePart::Text(text.into())],
