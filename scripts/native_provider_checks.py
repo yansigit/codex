@@ -288,6 +288,45 @@ def run_checks(root: Path, artifact_dir: Path) -> list[dict[str, Any]]:
             ],
         )
 
+    # Evidence must describe one source snapshot, including a probe's staged merge.
+    started = time.monotonic()
+    final_revision = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    final_diff = subprocess.run(
+        ["git", "diff", "HEAD", "--binary"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    unchanged = (
+        final_revision.returncode == 0
+        and final_diff.returncode == 0
+        and final_revision.stdout.strip() == metadata["repository_commit"]
+        and hashlib.sha256(final_diff.stdout.encode()).hexdigest()
+        == metadata["working_diff_sha256"]
+    )
+    identity_log = artifact_dir / f"{len(stages) + 1:02d}-source-identity.log"
+    identity_log.write_text(
+        "source unchanged\n"
+        if unchanged
+        else "source changed during verification; rerun required\n"
+    )
+    stages.append(
+        {
+            "name": "source-identity",
+            "command": ["git", "diff", "HEAD", "--binary"],
+            "exit_code": 0 if unchanged else 1,
+            "duration_seconds": round(time.monotonic() - started, 3),
+            "log": identity_log.name,
+        }
+    )
+
     failed = [stage["name"] for stage in stages if stage["exit_code"] != 0]
     summary = {
         "result": "failed" if failed else "passed",
