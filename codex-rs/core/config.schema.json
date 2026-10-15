@@ -351,10 +351,10 @@
           "type": "boolean"
         },
         "model_async_compact_threshold_percent": {
-          "description": "Percentage of the model's full context window that starts background compaction. Defaults to 65; valid values are 1–100, including when disabled.",
+          "description": "Percentage of the model's full context window that starts background compaction.\nDefaults to 65; valid values are 1–100, including when disabled.",
           "format": "uint8",
-          "maximum": 100.0,
-          "minimum": 1.0,
+          "maximum": 100,
+          "minimum": 1,
           "type": "integer"
         }
       },
@@ -1407,10 +1407,8 @@
           "type": "string"
         },
         {
+          "const": "always",
           "description": "Copy every nonempty transcript, footer, or composer mouse selection on release.",
-          "enum": [
-            "always"
-          ],
           "type": "string"
         },
         {
@@ -4599,11 +4597,11 @@
             }
           ],
           "default": "auto",
-          "description": "Copy selected transcript, footer, or composer text when the mouse button is released. Defaults to `auto`: enabled except in direct terminals known to forward their native copy shortcut (Ghostty 1.2+, Kitty on macOS, Windows Terminal, and VS Code on Windows). Unknown terminals, Ghostty without a recognized version, and tmux/Zellij default to copying."
+          "description": "Copy selected transcript, footer, or composer text when the mouse button is released.\nDefaults to `auto`: enabled except in direct terminals known to forward their native\ncopy shortcut (Ghostty 1.2+, Kitty on macOS, Windows Terminal, and VS Code on Windows).\nUnknown terminals, Ghostty without a recognized version, and tmux/Zellij default to copying."
         },
         "copy_on_select_clear_selection": {
           "default": false,
-          "description": "Deselect read-only transcript or footer text after Copy on select confirms delivery. Editable composer selections remain visible. Defaults to `false` and has no effect when Copy on select is off.",
+          "description": "Deselect read-only transcript or footer text after Copy on select confirms delivery.\nEditable composer selections remain visible. Defaults to `false` and has no effect when\nCopy on select is off.",
           "type": "boolean"
         },
         "disable_paste_burst": {
