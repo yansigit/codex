@@ -2395,15 +2395,17 @@ async fn check_dynamic_tool_requests(
             }),
         },
     );
+    let registration =
+        tokio::time::timeout(std::time::Duration::from_secs(/*secs*/ 5), events.recv())
+            .await?
+            .expect("follow-up task registration event");
     let AppEvent::DynamicToolThreadStarted {
         thread,
         task_tools_available,
         registered,
-    } = tokio::time::timeout(std::time::Duration::from_secs(/*secs*/ 5), events.recv())
-        .await?
-        .expect("follow-up task registration event")
+    } = registration
     else {
-        panic!("expected follow-up task registration before its next turn")
+        panic!("expected follow-up task registration before its next turn: {registration:?}")
     };
     assert_eq!(ThreadId::from_string(&thread.id)?, created_thread_id);
     assert_eq!(recorded_params(&requests, "turn/start").len(), 1);

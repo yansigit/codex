@@ -383,6 +383,13 @@ impl CodexThread {
             .await;
     }
 
+    /// Make history and its pending metadata durable before external readers use it.
+    pub async fn try_ensure_rollout_materialized(&self) -> std::io::Result<()> {
+        self.session
+            .try_ensure_rollout_materialized(PersistContext::Standard)
+            .await
+    }
+
     #[doc(hidden)]
     pub async fn flush_rollout(&self) -> std::io::Result<()> {
         self.session.flush_rollout().await

@@ -166,6 +166,77 @@ const DEFAULT_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs
 const DEFAULT_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
 #[tokio::test]
+async fn thread_resume_materializes_paginated_metadata_before_cursor_reads() -> Result<()> {
+    use sqlx::Connection;
+
+    let server = create_mock_responses_server_repeating_assistant("Done").await;
+    let codex_home = TempDir::new()?;
+    mock_responses_config(&server.uri()).write(codex_home.path())?;
+    let mut app_server = TestAppServer::builder()
+        .with_codex_home(codex_home.path())
+        .build_initialized()
+        .await?;
+    let start_id = app_server
+        .send_thread_start_request(ThreadStartParams {
+            history_mode: Some(ThreadHistoryMode::Paginated),
+            ..Default::default()
+        })
+        .await?;
+    let started: ThreadStartResponse =
+        timeout(DEFAULT_READ_TIMEOUT, app_server.read_response(start_id)).await??;
+
+    // Hold back the SQLite projection while the first turn makes its canonical
+    // rollout durable. Resume must wait for persistence before reading cursors.
+    let sqlite = codex_state::SqliteConfig::new_for_testing(codex_home.path().abs());
+    let mut connection = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new().filename(sqlite.state_db_path()),
+    )
+    .await?;
+    sqlx::query("BEGIN IMMEDIATE")
+        .execute(&mut connection)
+        .await?;
+    let turn_id = app_server
+        .send_turn_start_request(TurnStartParams {
+            thread_id: started.thread.id.clone(),
+            input: vec![UserInput::Text {
+                text: "seed history".to_string(),
+                text_elements: Vec::new(),
+            }],
+            ..Default::default()
+        })
+        .await?;
+    let _: TurnStartResponse =
+        timeout(DEFAULT_READ_TIMEOUT, app_server.read_response(turn_id)).await??;
+    let rollout = started
+        .thread
+        .path
+        .as_ref()
+        .expect("persistent rollout path");
+    timeout(DEFAULT_READ_TIMEOUT, async {
+        while !rollout.exists() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await?;
+    let resume_id = app_server
+        .send_thread_resume_request(ThreadResumeParams {
+            thread_id: started.thread.id.clone(),
+            exclude_turns: true,
+            ..Default::default()
+        })
+        .await?;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    sqlx::query("COMMIT").execute(&mut connection).await?;
+    let resumed: ThreadResumeResponse =
+        timeout(DEFAULT_READ_TIMEOUT, app_server.read_response(resume_id)).await??;
+    assert_eq!(resumed.thread.id, started.thread.id);
+    assert_eq!(resumed.thread.history_mode, ThreadHistoryMode::Paginated);
+    assert!(resumed.thread.turns.is_empty());
+    assert!(resumed.initial_turns_page.is_none());
+    Ok(())
+}
+
+#[tokio::test]
 async fn thread_resume_paginated_model_context_preserves_original_metadata() -> Result<()> {
     let server = create_mock_responses_server_repeating_assistant("Done").await;
     let codex_home = TempDir::new()?;
@@ -446,8 +517,12 @@ async fn wait_for_responses_request_count(
     Ok(())
 }
 
+#[test_case(ThreadHistoryMode::Legacy; "legacy")]
+#[test_case(ThreadHistoryMode::Paginated; "paginated")]
 #[tokio::test]
-async fn thread_resume_rejects_unmaterialized_thread() -> Result<()> {
+async fn thread_resume_rejects_unmaterialized_thread(
+    history_mode: ThreadHistoryMode,
+) -> Result<()> {
     let server = create_mock_responses_server_repeating_assistant("Done").await;
     let codex_home = TempDir::new()?;
     mock_responses_config(&server.uri()).write(codex_home.path())?;
@@ -461,6 +536,7 @@ async fn thread_resume_rejects_unmaterialized_thread() -> Result<()> {
     let start_id = mcp
         .send_thread_start_request_with_auto_env(ThreadStartParams {
             model: Some("gpt-5.4".to_string()),
+            history_mode: Some(history_mode),
             ..Default::default()
         })
         .await?;

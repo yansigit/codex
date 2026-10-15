@@ -4677,11 +4677,14 @@ impl ThreadRequestProcessor {
                     )
                     .await?;
             }
-            if paginated_resume && (include_turns || params.initial_turns_page.is_some()) {
-                self.thread_store
-                    .persist_thread(existing_thread_id, PersistContext::Standard)
+            // Even metadata-only resumes read pagination cursors below. Persist
+            // through the live thread so both history and pending metadata are
+            // visible; the raw store's persistence barrier only covers history.
+            if paginated_resume {
+                existing_thread
+                    .try_ensure_rollout_materialized()
                     .await
-                    .map_err(thread_store_resume_read_error)?;
+                    .map_err(|err| internal_error(format!("failed to persist thread: {err}")))?;
             }
             let history_items = if needs_history {
                 source_thread
