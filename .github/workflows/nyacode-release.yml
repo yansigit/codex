@@ -172,7 +172,7 @@ jobs:
           path: dist/
           if-no-files-found: error
           compression-level: 0
-          retention-days: 14
+          retention-days: 1
 
   sdk:
     name: SDKs against the packaged CLI
@@ -244,7 +244,7 @@ jobs:
           path: dist/
           if-no-files-found: error
           compression-level: 0
-          retention-days: 14
+          retention-days: 3
 
   publish:
     name: Publish versioned GitHub release
@@ -272,3 +272,31 @@ jobs:
           VERSION: ${{ needs.validate.outputs.version }}
           COMMIT: ${{ needs.validate.outputs.commit }}
         run: python3 .github/scripts/publish_nyacode_release.py --dist dist --version "$VERSION" --commit "$COMMIT"
+
+  cleanup-intermediate-artifacts:
+    name: Remove consumed package artifacts
+    needs: [verify, publish]
+    if: >-
+      always() && needs.verify.result == 'success' &&
+      (needs.publish.result == 'success' || needs.publish.result == 'skipped') &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Remove copies after every consumer succeeds
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          PUBLISHED: ${{ needs.publish.result == 'success' }}
+        run: |
+          query='.artifacts[] | select(.name | startswith("nyacode-")) | .id'
+          if [[ "$PUBLISHED" == "true" ]]; then
+            query='.artifacts[] | select((.name | startswith("nyacode-")) or .name == "verified-nyacode-release") | .id'
+          fi
+          gh api --paginate "repos/$REPOSITORY/actions/runs/$RUN_ID/artifacts?per_page=100" --jq "$query" > "$RUNNER_TEMP/consumed-artifact-ids"
+          while IFS= read -r artifact_id; do
+            gh api --method DELETE "repos/$REPOSITORY/actions/artifacts/$artifact_id"
+          done < "$RUNNER_TEMP/consumed-artifact-ids"

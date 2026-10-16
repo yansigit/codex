@@ -106,7 +106,7 @@ jobs:
           name: native-provider-ci-${{ github.run_id }}
           path: /tmp/native-provider-checks/
           if-no-files-found: warn
-          retention-days: 30
+          retention-days: 7
 
   upstream-merge-probe:
     name: Upstream merge drift probe
@@ -148,4 +148,4 @@ jobs:
           name: native-provider-upstream-probe-${{ github.run_id }}
           path: /tmp/native-provider-upstream-probe/
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 7

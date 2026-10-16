@@ -69,4 +69,4 @@ jobs:
           name: container-verification-${{ github.run_id }}
           path: ${{ runner.temp }}/container-verification.log
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 7

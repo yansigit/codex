@@ -44,7 +44,11 @@ gh run download RUN_ID --repo yansigit/nyacode --name verified-nyacode-release -
 
 A manual run builds and tests the same packages as a tagged release, including
 development version `0.0.0`, but cannot publish. Downloadable workflow artifacts
-expire after 14 days. A failed platform or check prevents the complete verified
+expire after 3 days for verified bundles and 1 day for intermediate platform
+packages. After verification and every publication consumer succeeds, CI deletes
+the intermediate packages. A successful tagged publication also removes its
+verified bundle because the durable copies are GitHub Release assets. Fork PRs
+use retention expiry because their tokens cannot delete artifacts. A failed platform or check prevents the complete verified
 artifact from being produced. Do a full dry run before the first version tag;
 local Python tests do not establish successful foreign-platform builds.
 
