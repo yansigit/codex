@@ -21,6 +21,7 @@ fn snapshot(id: &str, time: i64) -> ChatCachedConversation {
                 parent_id: Some("root".into()),
                 message: Some(ChatCachedMessage {
                     id: "user-message".into(),
+                    created_at_ms: Some(1_700_000_000_123),
                     role: ChatCacheRole::User,
                     parts: vec![
                         ChatCachedPart::Text("literal ! @ $ fixture".into()),
@@ -50,6 +51,7 @@ fn snapshot(id: &str, time: i64) -> ChatCachedConversation {
                 parent_id: Some("user".into()),
                 message: Some(ChatCachedMessage {
                     id: "assistant-message".into(),
+                    created_at_ms: Some(1_700_000_001_456),
                     role: ChatCacheRole::Assistant,
                     parts: vec![ChatCachedPart::Text("completed fixture".into())],
                     model: Some("fixture-model".into()),
@@ -70,6 +72,24 @@ fn equal(actual: &ChatCachedConversation, expected: &ChatCachedConversation) {
     assert_eq!(
         serde_json::to_value(actual).unwrap(),
         serde_json::to_value(expected).unwrap()
+    );
+}
+
+#[test]
+fn legacy_cached_messages_without_creation_times_remain_readable() {
+    let mut value = serde_json::to_value(snapshot("legacy", 100)).unwrap();
+    for node in value["nodes"].as_array_mut().unwrap() {
+        if let Some(message) = node["message"].as_object_mut() {
+            message.remove("created_at_ms");
+        }
+    }
+    let decoded: ChatCachedConversation = serde_json::from_value(value).unwrap();
+    assert!(
+        decoded
+            .nodes
+            .iter()
+            .filter_map(|node| node.message.as_ref())
+            .all(|message| message.created_at_ms.is_none())
     );
 }
 

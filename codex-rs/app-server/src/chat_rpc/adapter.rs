@@ -215,6 +215,7 @@ pub(super) fn pending(submission: state::ChatSubmission) -> rpc::ChatPendingSubm
 pub(super) fn message(message: &codex_chatgpt_chat::stream::Message) -> rpc::ChatMessage {
     rpc::ChatMessage {
         id: message.id.clone(),
+        created_at_ms: message.created_at_ms,
         role: message.role.clone(),
         parts: message
             .parts

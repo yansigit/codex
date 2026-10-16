@@ -55,6 +55,30 @@ fn authoritative_parent_chain_ignores_mapping_order_and_hides_system_content() {
 }
 
 #[test]
+fn authoritative_history_uses_each_messages_creation_time() {
+    let mut value = fixture();
+    value["mapping"]["user"]["message"]["create_time"] = json!(1_700_000_000.123);
+    value["mapping"]["assistant"]["message"]["create_time"] = json!(1_700_000_001.456);
+    let snapshot = ConversationSnapshot::parse("fixture-conversation", &value).unwrap();
+    assert_eq!(
+        snapshot.branch.nodes[2]
+            .message
+            .as_ref()
+            .unwrap()
+            .created_at_ms,
+        Some(1_700_000_000_123)
+    );
+    assert_eq!(
+        snapshot.branch.nodes[3]
+            .message
+            .as_ref()
+            .unwrap()
+            .created_at_ms,
+        Some(1_700_000_001_456)
+    );
+}
+
+#[test]
 fn missing_nodes_cycles_duplicate_messages_and_identity_changes_fail_closed() {
     for variant in 0..8 {
         let mut value = fixture();

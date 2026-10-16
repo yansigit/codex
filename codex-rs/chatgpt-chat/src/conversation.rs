@@ -380,7 +380,7 @@ fn optional_bool(value: Option<&Value>) -> Result<bool, ChatError> {
         .map(|v| v.unwrap_or(false))
 }
 
-fn timestamp(value: Option<&Value>) -> Result<Option<i64>, ChatError> {
+pub(crate) fn timestamp(value: Option<&Value>) -> Result<Option<i64>, ChatError> {
     value
         .filter(|v| !v.is_null())
         .map(|value| {
