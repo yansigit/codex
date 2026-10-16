@@ -5216,6 +5216,9 @@ impl ThreadRequestProcessor {
             })?;
             options.config.ephemeral = ephemeral;
             options
+                .thread_extension_init
+                .insert(codex_core::compact::AutoCompactionDisabled);
+            options
                 .config
                 .features
                 .enable(Feature::ReasoningEffortOverride)
