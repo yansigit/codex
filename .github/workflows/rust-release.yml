@@ -323,6 +323,7 @@ jobs:
       - name: Upload symbols archive
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
+          retention-days: 7
           name: ${{ matrix.artifact_name }}-symbols${{ env.ARTIFACT_SUFFIX }}
           path: codex-rs/symbols-dist/${{ matrix.artifact_name }}/*
           if-no-files-found: error
@@ -387,6 +388,7 @@ jobs:
         name: Upload unsigned macOS artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
+          retention-days: 7
           name: ${{ matrix.artifact_name }}-unsigned${{ env.ARTIFACT_SUFFIX }}
           path: codex-rs/unsigned-dist/${{ matrix.target }}/*
           if-no-files-found: error
@@ -515,6 +517,7 @@ jobs:
         if: ${{ matrix.build-system == 'cargo' && matrix.bundle == 'primary' && runner.os != 'macOS' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
+          retention-days: 7
           name: python-runtime-wheel-${{ matrix.target }}
           path: python-runtime-dist/${{ matrix.target }}/*.whl
           if-no-files-found: error
@@ -570,6 +573,7 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: ${{ runner.os != 'macOS' }}
         with:
+          retention-days: 7
           name: ${{ matrix.artifact_name }}${{ env.ARTIFACT_SUFFIX }}
           # Upload the per-binary .zst files, .tar.gz equivalents, and any
           # prebuilt archives staged above.
@@ -629,6 +633,7 @@ jobs:
           tar -C "voice-unsigned/${TARGET}" -czf "voice-unsigned-${TARGET}.tar.gz" runtime codex-voice-host
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
+          retention-days: 7
           name: voice-${{ matrix.target }}-unsigned
           path: voice-unsigned-${{ matrix.target }}.tar.gz
           if-no-files-found: error
@@ -853,6 +858,7 @@ jobs:
         if: ${{ matrix.bundle == 'primary' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
+          retention-days: 7
           name: voice-${{ matrix.target }}-signed${{ env.ARTIFACT_SUFFIX }}
           path: signed-voice-${{ matrix.target }}.tar.gz
           if-no-files-found: error
@@ -860,6 +866,7 @@ jobs:
       - name: Upload signed macOS binaries
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
+          retention-days: 7
           name: ${{ matrix.artifact_name }}-signed-binaries${{ env.ARTIFACT_SUFFIX }}
           path: signed-macos/${{ matrix.target }}/*
           if-no-files-found: error
@@ -868,6 +875,7 @@ jobs:
         if: ${{ matrix.bundle == 'primary' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
+          retention-days: 7
           name: ${{ matrix.target }}-signed-resources${{ env.ARTIFACT_SUFFIX }}
           path: signed-resources/${{ matrix.target }}/*
           if-no-files-found: error
@@ -876,6 +884,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
+          retention-days: 7
           name: ${{ matrix.artifact_name }}-binary-signing-verification${{ env.ARTIFACT_SUFFIX }}
           path: macos-binary-signing-verification/${{ matrix.target }}/
           if-no-files-found: warn
@@ -1079,6 +1088,7 @@ jobs:
         if: ${{ matrix.build_dmg == 'true' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
+          retention-days: 7
           name: ${{ matrix.artifact_name }}-unsigned-dmg${{ env.ARTIFACT_SUFFIX }}
           path: codex-rs/target/${{ matrix.target }}/release/codex-${{ matrix.target }}.dmg
           if-no-files-found: error
@@ -1138,6 +1148,7 @@ jobs:
         if: ${{ matrix.build-system == 'cargo' && matrix.bundle == 'primary' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
+          retention-days: 7
           name: python-runtime-wheel-${{ matrix.target }}
           path: python-runtime-dist/${{ matrix.target }}/*.whl
           if-no-files-found: error
@@ -1160,6 +1171,7 @@ jobs:
       - name: Upload packaged macOS artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
+          retention-days: 7
           name: ${{ matrix.artifact_name }}-packaged${{ env.ARTIFACT_SUFFIX }}
           path: codex-rs/dist/${{ matrix.target }}/*
           if-no-files-found: error
@@ -1255,6 +1267,7 @@ jobs:
       - name: Upload signed macOS DMG
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
+          retention-days: 7
           name: ${{ matrix.artifact_name }}-signed-dmg${{ env.ARTIFACT_SUFFIX }}
           path: ${{ runner.temp }}/unsigned-dmg/codex-${{ matrix.target }}.dmg
           if-no-files-found: error
@@ -1263,6 +1276,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
+          retention-days: 7
           name: ${{ matrix.artifact_name }}-dmg-signing-verification${{ env.ARTIFACT_SUFFIX }}
           path: macos-dmg-signing-verification/${{ matrix.target }}/
           if-no-files-found: warn
@@ -1518,6 +1532,7 @@ jobs:
       - name: Upload verified macOS artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
+          retention-days: 7
           name: ${{ matrix.artifact_name }}${{ env.ARTIFACT_SUFFIX }}
           path: codex-rs/dist/${{ matrix.target }}/*
           if-no-files-found: error
@@ -1593,6 +1608,7 @@ jobs:
       - name: Upload staged npm packages
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
+          retention-days: 7
           name: npm-packages
           path: dist/npm/*.tgz
           if-no-files-found: error

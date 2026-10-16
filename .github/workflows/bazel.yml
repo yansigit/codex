@@ -111,6 +111,7 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
+          retention-days: 7
           name: bazel-execution-logs-test-${{ matrix.target }}
           path: ${{ runner.temp }}/bazel-execution-logs
           if-no-files-found: ignore
@@ -223,6 +224,7 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
+          retention-days: 7
           name: bazel-execution-logs-test-x86_64-pc-windows-gnullvm-shard-${{ matrix.shard }}
           path: ${{ runner.temp }}/bazel-execution-logs
           if-no-files-found: ignore
@@ -312,6 +314,7 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
+          retention-days: 7
           name: bazel-execution-logs-test-windows-native-x86_64-pc-windows-msvc
           path: ${{ runner.temp }}/bazel-execution-logs
           if-no-files-found: ignore
@@ -415,6 +418,7 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
+          retention-days: 7
           name: bazel-execution-logs-clippy-${{ matrix.target }}
           path: ${{ runner.temp }}/bazel-execution-logs
           if-no-files-found: ignore
@@ -531,6 +535,7 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
+          retention-days: 7
           name: bazel-execution-logs-verify-release-build-${{ matrix.target }}
           path: ${{ runner.temp }}/bazel-execution-logs
           if-no-files-found: ignore
