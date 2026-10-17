@@ -27,7 +27,7 @@ expression: lines
     ]).fg(Color::Rgb(156, 99, 20)).bg(Color::Rgb(244, 244, 244)).bold(),
     Line::from_iter([
         Span::from("  "),
-        Span::from("━━━━━━━━  ━━━━━━━").dim(),
+        Span::from("━━━━━━━━  ━━━━━━━━━").dim(),
     ]).bg(Color::Rgb(244, 244, 244)),
     Line::from_iter([
         Span::from("  "),
@@ -36,7 +36,7 @@ expression: lines
         Span::from(" "),
         Span::from("  "),
         Span::from(" "),
-        Span::from("Codex"),
+        Span::from("Nyacode"),
     ]).bg(Color::Rgb(244, 244, 244)),
     Line::from(" ").bg(Color::Rgb(244, 244, 244)),
 ]
